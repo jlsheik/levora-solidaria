@@ -1,0 +1,32 @@
+.page { min-height: 100vh; background: var(--background); color: var(--foreground); }
+.header { display: flex; align-items: center; gap: var(--spacing-2); padding: var(--spacing-4) var(--spacing-8); border-bottom: 1px solid var(--border); background: var(--sidebar); color: var(--sidebar-foreground); }
+.brandIcon { color: var(--primary); }
+.brandName { font-family: var(--font-family-display); font-size: 1.0625rem; font-weight: 600; }
+.main { max-width: 64rem; margin: 0 auto; padding: var(--spacing-8); display: flex; flex-direction: column; gap: var(--spacing-8); }
+.section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--spacing-6); }
+.sectionHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-4); }
+.sectionTitle { display: flex; align-items: center; gap: var(--spacing-2); font-family: var(--font-family-display); font-size: 1.125rem; font-weight: 600; margin: 0; color: var(--card-foreground); }
+.listSkeleton { height: 8rem; border-radius: var(--radius); }
+.emptyText { color: var(--muted-foreground); font-size: 0.875rem; }
+.sourceList, .registryList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-3); }
+.sourceRow { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-3); padding-bottom: var(--spacing-3); border-bottom: 1px solid var(--border); }
+.sourceRow:last-child { border-bottom: none; padding-bottom: 0; }
+.sourceName { font-size: 0.875rem; font-weight: 500; color: var(--card-foreground); }
+.sourceMeta { font-size: 0.75rem; color: var(--muted-foreground); }
+.registryRow { padding-bottom: var(--spacing-3); border-bottom: 1px solid var(--border); }
+.registryRow:last-child { border-bottom: none; padding-bottom: 0; }
+.registryHeaderRow { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-2); flex-wrap: wrap; }
+.registryTitle { font-family: var(--font-family-display); font-size: 1rem; font-weight: 600; margin: 0; color: var(--card-foreground); }
+.registryMeta { font-size: 0.75rem; color: var(--muted-foreground); margin: var(--spacing-1) 0 0 0; }
+.registryActions { display: flex; align-items: center; gap: var(--spacing-2); margin-top: var(--spacing-3); flex-wrap: wrap; }
+.statusSelect { min-width: 12rem; }
+.formGrid { display: flex; flex-direction: column; gap: var(--spacing-4); }
+.formRow { display: flex; gap: var(--spacing-3); }
+.formRowItem { flex: 1; }
+.evalBox { margin-top: var(--spacing-3); padding: var(--spacing-3); background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius); }
+.evalList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-3); }
+.evalRow { padding-bottom: var(--spacing-3); border-bottom: 1px solid var(--border); }
+.evalRow:last-child { border-bottom: none; padding-bottom: 0; }
+.evalHeaderRow { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-2); font-size: 0.875rem; }
+.evalMeta { font-size: 0.75rem; color: var(--muted-foreground); margin-top: var(--spacing-1); }
+.evalCriteria { font-family: var(--font-family-monospace); font-size: 0.6875rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--spacing-2); margin-top: var(--spacing-2); overflow-x: auto; white-space: pre-wrap; word-break: break-word; }

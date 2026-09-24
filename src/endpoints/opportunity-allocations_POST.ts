@@ -1,0 +1,154 @@
+import { db } from "../helpers/db";
+import { getServerUserSession } from "../helpers/getServerUserSession";
+import { requirePlatformAdmin } from "../helpers/platformAccess";
+import { recordAuditLogEntry } from "../helpers/auditLog";
+import { schema } from "./opportunity-allocations_POST.schema";
+import { sql } from "kysely";
+import superjson from "superjson";
+
+const ALLOCATABLE_STATUSES = ["validada", "aguardando_destinacao", "reservada"];
+
+export async function handle(request: Request) {
+  try {
+    const { user } = await getServerUserSession(request);
+    await requirePlatformAdmin(user.id);
+
+    const json = superjson.parse(await request.text());
+    const input = schema.parse(json);
+
+    const result = await db.transaction().execute(async (trx) => {
+      const opportunity = await trx
+        .selectFrom("opportunityRegistry")
+        .select(["id", "status", "quantity", "title"])
+        .where("id", "=", input.opportunityId)
+        .forUpdate()
+        .executeTakeFirst();
+
+      if (!opportunity) return { type: "not_found" as const };
+
+      if (!ALLOCATABLE_STATUSES.includes(opportunity.status)) {
+        return { type: "invalid_status" as const, status: opportunity.status };
+      }
+
+      const org = await trx
+        .selectFrom("organizations")
+        .select(["id", "name"])
+        .where("id", "=", input.organizationId)
+        .executeTakeFirst();
+
+      if (!org) return { type: "org_not_found" as const };
+
+      // Nunca deixamos a soma das atribuições passar da quantidade total
+      // descoberta — isso é o que impede a Levora de "prometer" mais do que
+      // existe, e é validado aqui, travando a linha, não só sugerido na
+      // interface.
+      if (opportunity.quantity !== null) {
+        const allocatedRow = await trx
+          .selectFrom("opportunityAllocations")
+          .select((eb) => eb.fn.coalesce(eb.fn.sum("quantityAllocated"), sql<string>`0`).as("total"))
+          .where("opportunityRegistryId", "=", input.opportunityId)
+          .where("status", "!=", "recusada")
+          .where("status", "!=", "cancelada")
+          .executeTakeFirst();
+
+        const alreadyAllocated = Number(allocatedRow?.total ?? 0);
+        if (alreadyAllocated + input.quantityAllocated > Number(opportunity.quantity)) {
+          return {
+            type: "over_allocation" as const,
+            available: Number(opportunity.quantity) - alreadyAllocated,
+          };
+        }
+      }
+
+      const [allocation] = await trx
+        .insertInto("opportunityAllocations")
+        .values({
+          opportunityRegistryId: input.opportunityId,
+          organizationId: input.organizationId,
+          quantityAllocated: input.quantityAllocated,
+          notes: input.notes || null,
+          createdByUserId: user.id,
+        })
+        .returning(["id", "status"])
+        .execute();
+
+      let newOpportunityStatus = opportunity.status;
+      if (opportunity.status === "validada" || opportunity.status === "aguardando_destinacao") {
+        newOpportunityStatus = "reservada";
+        await trx
+          .updateTable("opportunityRegistry")
+          .set({ status: "reservada", updatedAt: new Date() })
+          .where("id", "=", input.opportunityId)
+          .execute();
+      }
+
+      await recordAuditLogEntry(
+        {
+          organizationId: input.organizationId,
+          actorUserId: user.id,
+          action: "atribuicao.proposta",
+          entityType: "opportunity_allocation",
+          entityId: String(allocation.id),
+          metadata: {
+            opportunityId: input.opportunityId,
+            opportunityTitle: opportunity.title,
+            organizationName: org.name,
+            quantityAllocated: input.quantityAllocated,
+          },
+        },
+        trx
+      );
+      await recordAuditLogEntry(
+        {
+          organizationId: null,
+          actorUserId: user.id,
+          action: "descoberta_central.atribuida",
+          entityType: "opportunity_registry",
+          entityId: String(input.opportunityId),
+          metadata: { organizationId: input.organizationId, organizationName: org.name, quantityAllocated: input.quantityAllocated },
+        },
+        trx
+      );
+
+      return { type: "success" as const, allocation, opportunityStatus: newOpportunityStatus };
+    });
+
+    if (result.type === "not_found") {
+      return new Response(superjson.stringify({ message: "Descoberta não encontrada" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (result.type === "org_not_found") {
+      return new Response(superjson.stringify({ message: "Organização não encontrada" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (result.type === "invalid_status") {
+      return new Response(
+        superjson.stringify({ message: `Descoberta com status "${result.status}" não pode ser atribuída agora` }),
+        { status: 409, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (result.type === "over_allocation") {
+      return new Response(
+        superjson.stringify({ message: `Quantidade excede o disponível. Restam ${result.available} para atribuir.` }),
+        { status: 409, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    return new Response(
+      superjson.stringify({ allocation: result.allocation, opportunityStatus: result.opportunityStatus }),
+      { headers: { "Content-Type": "application/json" } }
+    );
+  } catch (error: unknown) {
+    console.error("Erro ao atribuir oportunidade:", error);
+    const message = error instanceof Error ? error.message : "Não foi possível atribuir a oportunidade";
+    const status = message.includes("restrita") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
+    return new Response(superjson.stringify({ message }), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}

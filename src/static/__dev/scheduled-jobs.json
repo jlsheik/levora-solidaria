@@ -1,0 +1,17 @@
+{
+  "runMatchingSweep": {
+    "enabled": true,
+    "schedule": "*/15 * * * *",
+    "timezone": "UTC"
+  },
+  "expireReservations": {
+    "enabled": true,
+    "schedule": "*/10 * * * *",
+    "timezone": "UTC"
+  },
+  "expireOpportunities": {
+    "enabled": true,
+    "schedule": "0 * * * *",
+    "timezone": "UTC"
+  }
+}
