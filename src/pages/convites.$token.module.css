@@ -1,0 +1,111 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background);
+  padding: var(--spacing-6);
+}
+
+.card {
+  width: 100%;
+  max-width: 26rem;
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.brandIcon {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.brandName {
+  font-family: var(--font-family-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.tagline {
+  font-family: var(--font-family-base);
+  font-size: 0.9375rem;
+  color: var(--card-foreground);
+  line-height: 1.5;
+}
+
+.instructions {
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+}
+
+.message {
+  font-size: 0.9375rem;
+  color: var(--card-foreground);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.warning {
+  font-size: 0.875rem;
+  color: var(--destructive);
+  line-height: 1.5;
+  background: var(--destructive-muted, rgba(220, 38, 38, 0.08));
+  border-radius: var(--radius);
+  padding: var(--spacing-3);
+}
+
+.iconRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2);
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.successIcon {
+  color: var(--success, #16a34a);
+}
+
+.errorIcon {
+  color: var(--destructive);
+}
+
+.backLink {
+  align-self: center;
+  color: var(--primary);
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  text-decoration: underline;
+}
+
+.tabs {
+  width: 100%;
+}
+
+.tabsList {
+  width: 100%;
+  margin-bottom: var(--spacing-4);
+}
+
+.tabsContent {
+  display: flex;
+  flex-direction: column;
+}

@@ -4,6 +4,7 @@ import { requireOrganizationMembership } from "../helpers/organizationAccess";
 import { schema } from "./inventory-items_GET.schema";
 import { sql } from "kysely";
 import superjson from "superjson";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 export async function handle(request: Request) {
   try {
@@ -54,11 +55,6 @@ export async function handle(request: Request) {
     );
   } catch (error: unknown) {
     console.error("Erro ao listar inventário:", error);
-    const message = error instanceof Error ? error.message : "Falha ao carregar inventário";
-    const status = message.includes("acesso") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Falha ao carregar inventário");
   }
 }

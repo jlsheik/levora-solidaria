@@ -47,6 +47,8 @@ export type OpportunityStatus = "cancelada" | "confirmada" | "em_contato" | "rec
 
 export type OpportunityUrgency = "alta" | "baixa" | "critica" | "media";
 
+export type OrganizationInviteStatus = "aceito" | "expirado" | "pendente" | "revogado";
+
 export type OrganizationStatus = "ativa" | "em_analise" | "suspensa";
 
 export type OrganizationType = "igreja" | "organizacao_social" | "ponto_distribuicao";
@@ -81,9 +83,11 @@ export interface AuditLog {
   createdAt: Generated<Timestamp>;
   entityId: string | null;
   entityType: string;
+  eventHash: string | null;
   id: Generated<Int8>;
   metadata: Generated<Json>;
   organizationId: number | null;
+  previousEventHash: string | null;
 }
 
 export interface BackgroundTaskRuns {
@@ -120,6 +124,19 @@ export interface DonationOpportunities {
   title: string;
   unit: string | null;
   updatedAt: Generated<Timestamp>;
+}
+
+export interface Files {
+  contentType: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<number>;
+  organizationId: number;
+  originalFilename: string;
+  purpose: string;
+  sizeBytes: Int8;
+  storageKey: string;
+  storageProvider: string;
+  uploadedByUserId: number;
 }
 
 export interface InventoryItems {
@@ -234,6 +251,22 @@ export interface OpportunityRegistry {
   urgency: Generated<OpportunityUrgency>;
 }
 
+export interface OrganizationInvites {
+  acceptedAt: Timestamp | null;
+  acceptedByUserId: number | null;
+  createdAt: Generated<Timestamp>;
+  email: string;
+  expiresAt: Timestamp;
+  id: Generated<number>;
+  invitedByUserId: number;
+  organizationId: number;
+  revokedAt: Timestamp | null;
+  revokedByUserId: number | null;
+  role: MembershipRole;
+  status: Generated<OrganizationInviteStatus>;
+  tokenHash: string;
+}
+
 export interface Organizations {
   city: string;
   createdAt: Generated<Timestamp>;
@@ -313,6 +346,7 @@ export interface DB {
   auditLog: AuditLog;
   backgroundTaskRuns: BackgroundTaskRuns;
   donationOpportunities: DonationOpportunities;
+  files: Files;
   inventoryItems: InventoryItems;
   loginAttempts: LoginAttempts;
   logisticsEvents: LogisticsEvents;
@@ -321,6 +355,7 @@ export interface DB {
   needs: Needs;
   opportunityAllocations: OpportunityAllocations;
   opportunityRegistry: OpportunityRegistry;
+  organizationInvites: OrganizationInvites;
   organizations: Organizations;
   sessions: Sessions;
   sources: Sources;

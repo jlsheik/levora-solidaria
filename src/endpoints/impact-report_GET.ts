@@ -1,9 +1,10 @@
 import { db } from "../helpers/db";
 import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requireOrganizationMembership } from "../helpers/organizationAccess";
+import { requirePermissionToRead } from "../helpers/organizationAccess";
 import { schema } from "./impact-report_GET.schema";
 import { sql } from "kysely";
 import superjson from "superjson";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 export async function handle(request: Request) {
   try {
@@ -15,9 +16,10 @@ export async function handle(request: Request) {
       endDate: url.searchParams.get("endDate"),
     });
 
-    // Prestação de contas é dado sensível: só proprietário/administrador
-    // veem, não qualquer membro.
-    await requireOrganizationMembership(user.id, input.organizationId, ["proprietario", "administrador"]);
+    // Prestação de contas é dado sensível: só quem tem relatorios.leia
+    // (proprietário/administrador hoje), não qualquer membro. É leitura:
+    // não exige organização já aprovada.
+    await requirePermissionToRead(user.id, input.organizationId, "relatorios.leia");
 
     const org = await db
       .selectFrom("organizations")
@@ -138,11 +140,6 @@ export async function handle(request: Request) {
     );
   } catch (error: unknown) {
     console.error("Erro ao gerar relatório de impacto:", error);
-    const message = error instanceof Error ? error.message : "Falha ao gerar relatório";
-    const status = message.includes("acesso") || message.includes("papel") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Falha ao gerar relatório");
   }
 }

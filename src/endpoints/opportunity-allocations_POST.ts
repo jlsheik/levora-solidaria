@@ -5,6 +5,7 @@ import { recordAuditLogEntry } from "../helpers/auditLog";
 import { schema } from "./opportunity-allocations_POST.schema";
 import { sql } from "kysely";
 import superjson from "superjson";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 const ALLOCATABLE_STATUSES = ["validada", "aguardando_destinacao", "reservada"];
 
@@ -144,11 +145,6 @@ export async function handle(request: Request) {
     );
   } catch (error: unknown) {
     console.error("Erro ao atribuir oportunidade:", error);
-    const message = error instanceof Error ? error.message : "Não foi possível atribuir a oportunidade";
-    const status = message.includes("restrita") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Não foi possível atribuir a oportunidade");
   }
 }

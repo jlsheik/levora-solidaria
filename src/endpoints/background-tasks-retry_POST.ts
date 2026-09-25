@@ -2,20 +2,14 @@ import { db } from "../helpers/db";
 import { getServerUserSession } from "../helpers/getServerUserSession";
 import { requirePlatformAdmin } from "../helpers/platformAccess";
 import { schema } from "./background-tasks-retry_POST.schema";
-import { expireOpportunities } from "../helpers/expireOpportunities";
-import { expireReservations } from "../helpers/expireReservations";
-import { runMatchingSweep } from "../helpers/runMatchingSweep";
+import { TASK_HANDLERS } from "../helpers/taskHandlers";
 import superjson from "superjson";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 // Reprocessamento manual real: reexecuta a mesma função da tarefa (não
 // apenas marca a linha como "reprocessada"). Cada execução gera sua
 // própria linha nova em background_task_runs — o histórico da tentativa
 // que falhou continua lá, intacto.
-const TASK_HANDLERS: Record<string, () => Promise<void>> = {
-  expireOpportunities,
-  expireReservations,
-  runMatchingSweep,
-};
 
 export async function handle(request: Request) {
   try {
@@ -59,11 +53,6 @@ export async function handle(request: Request) {
     });
   } catch (error: unknown) {
     console.error("Erro ao reprocessar tarefa:", error);
-    const message = error instanceof Error ? error.message : "Não foi possível reprocessar a tarefa";
-    const status = message.includes("restrita") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Não foi possível reprocessar a tarefa");
   }
 }

@@ -1,9 +1,10 @@
 import { db } from "../helpers/db";
 import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requireOrganizationMembership } from "../helpers/organizationAccess";
+import { requirePermission } from "../helpers/organizationAccess";
 import { recordAuditLogEntry } from "../helpers/auditLog";
 import { schema } from "./opportunities_POST.schema";
 import superjson from "superjson";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 export async function handle(request: Request) {
   try {
@@ -11,11 +12,7 @@ export async function handle(request: Request) {
     const json = superjson.parse(await request.text());
     const input = schema.parse(json);
 
-    await requireOrganizationMembership(user.id, input.organizationId, [
-      "proprietario",
-      "administrador",
-      "operador",
-    ]);
+    await requirePermission(user.id, input.organizationId, "oportunidades.gerencie");
 
     if (input.linkedNeedId) {
       const need = await db
@@ -79,11 +76,6 @@ export async function handle(request: Request) {
     );
   } catch (error: unknown) {
     console.error("Erro ao registrar oportunidade:", error);
-    const message = error instanceof Error ? error.message : "Não foi possível registrar a oportunidade";
-    const status = message.includes("acesso") || message.includes("papel") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Não foi possível registrar a oportunidade");
   }
 }

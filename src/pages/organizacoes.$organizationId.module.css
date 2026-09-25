@@ -99,6 +99,61 @@
   color: var(--card-foreground);
 }
 
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+}
+
+.sectionHeaderRow .sectionTitle {
+  margin-bottom: 0;
+}
+
+.inviteForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.inviteFormField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.inviteFormLabel {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--card-foreground);
+}
+
+.inviteListTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: var(--spacing-5) 0 var(--spacing-3) 0;
+}
+
+.revokeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  padding: var(--spacing-1);
+}
+
+.revokeButton:hover {
+  color: var(--destructive);
+  border-color: var(--destructive);
+}
+
 .listSkeleton {
   height: 8rem;
   border-radius: var(--radius);

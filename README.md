@@ -56,9 +56,10 @@ npm run client:dev
 ```
 
 Abra `http://localhost:5173`. Todas as chamadas do cliente para `/_api/*`
-são encaminhadas pelo Vite para o Express em `http://localhost:3001` — as
-URLs usadas pelo código já portado (`src/endpoints/**/*.schema.ts`) não
-foram alteradas na migração.
+são encaminhadas pelo Vite para o Express em `http://localhost:3001` — a
+migração preservou o prefixo `/_api` que o código já portado usava; a API é
+versionada (`/_api/v1/...`, ver
+[`docs/VERSIONAMENTO_API.md`](docs/VERSIONAMENTO_API.md)).
 
 ## Build de produção
 
@@ -78,7 +79,7 @@ npm start              # node dist-server/server/index.js
 - `server/index.ts` — servidor Express real, criado nesta migração, que
   descobre automaticamente cada `src/endpoints/**/*_GET.ts` e `*_POST.ts`
   (cada um exporta `handle(request: Request): Promise<Response>`, no
-  padrão Web Fetch API) e os monta em `/_api/<rota>`.
+  padrão Web Fetch API) e os monta em `/_api/v1/<rota>`.
 - `db/schema.sql` — migração Postgres completa, reconstruindo o schema do
   banco provisionado originalmente pelo Floot.
 
@@ -96,6 +97,44 @@ explicitamente e envolvida pelos mesmos componentes de proteção
 (`src/components/ProtectedRoute.tsx`) que o `pageLayout.tsx` da página já
 declarava — nenhuma lógica de autenticação/autorização nova foi inventada.
 
+## Testes automatizados
+
+O projeto tem uma suíte de testes automatizados (vitest) cobrindo
+autenticação, isolamento multi-organização, integridade de estoque e o
+motor de correspondência. Ver [`docs/TESTING.md`](docs/TESTING.md) para como
+rodar (`npm test`) e o que já está coberto.
+
+## Documentação
+
+Documentação obrigatória do master prompt (seção 142), refletindo o estado
+real do sistema — cada uma diz explicitamente o que existe e o que ainda
+não existe, nunca finge cobertura:
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — stack, fluxo de
+  requisição, domínios implementados, isolamento multi-organização.
+- [`docs/SECURITY.md`](docs/SECURITY.md) — autenticação, autorização, rate
+  limiting, e o que a seção 5 do master prompt pede que ainda falta (MFA,
+  passkeys, detecção de anomalia).
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — build, variáveis de
+  ambiente, migração de banco, limitações em múltiplas instâncias.
+- [`docs/AI_AGENTS.md`](docs/AI_AGENTS.md) — o único uso de IA real (apoio
+  ao matching) e todos os agentes da visão do master prompt que não
+  existem ainda.
+- [`docs/WHATSAPP.md`](docs/WHATSAPP.md) — não implementado; o que precisa
+  existir desde o primeiro commit quando for construído.
+- [`docs/ACCESS_CODES.md`](docs/ACCESS_CODES.md) — o fluxo real de
+  ativação de organização (auto-cadastro + aprovação), diferente do
+  código de ativação descrito no master prompt, com a lacuna de segurança
+  correspondente.
+- [`docs/AUDIT.md`](docs/AUDIT.md) — trilha de auditoria append-only real,
+  e a lacuna real (sem hash encadeado ainda).
+- [`docs/INCIDENT_RESPONSE.md`](docs/INCIDENT_RESPONSE.md) — o que
+  investigar hoje para cada categoria de incidente.
+- [`docs/PRIVACY.md`](docs/PRIVACY.md) — dados pessoais coletados hoje,
+  RBAC como controle de privacidade, lacunas de retenção/exclusão (LGPD).
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — tarefas de fundo,
+  monitoramento, backup (não configurado), recuperação de desastre.
+
 ## Estado conhecido / lacunas
 
 Estas lacunas já eram conhecidas e documentadas no projeto original (ver
@@ -104,19 +143,30 @@ que segue sendo a referência viva do progresso e das decisões de escopo) e
 continuam existindo aqui, por design — a regra do projeto é nunca fingir
 que uma funcionalidade existe:
 
-- **Sem suíte de testes automatizados.** A validação de cada fase foi feita
-  por chamadas HTTP reais de ponta a ponta e, para regras dependentes de
-  tempo (ex.: expiração de reservas de matching), por simulação manual via
-  SQL (adiantar/atrasar timestamps diretamente no banco). Não há
-  `npm test` configurado.
-- **Sem fluxo de convite de membros.** Adicionar uma pessoa a uma
-  organização com um papel específico foi feito inserindo a membership
-  diretamente no banco durante os testes; não existe endpoint/interface de
-  convite por e-mail.
-- **Sem upload real de arquivo para prova de entrega.** `proof_url` é um
-  campo de link de texto simples (a pessoa cola um link já hospedado em
-  outro lugar) — não há bucket de armazenamento configurado, e a interface
-  não finge um "upload" que não existe.
+- ~~Sem fluxo de convite de membros~~ — resolvido. Ver
+  [`docs/CONVITE_DE_MEMBROS.md`](docs/CONVITE_DE_MEMBROS.md).
+- ~~Sem vínculo automático necessidade→baixa de estoque~~ — resolvido.
+  Marcar uma necessidade vinculada a um item como "atendida" agora gera
+  automaticamente uma saída de estoque (ou bloqueia com erro claro se o
+  saldo for insuficiente). Ver `src/endpoints/needs-status_POST.ts`.
+- ~~Sem upload real de arquivo para comprovação de entrega~~ — resolvido.
+  Ver [`docs/UPLOAD_DE_ARQUIVOS.md`](docs/UPLOAD_DE_ARQUIVOS.md).
+- ~~Tarefas agendadas (expirar reserva/oportunidade, varredura de matching)
+  sem disparo automático real fora do Floot~~ — resolvido. Ver
+  `src/helpers/scheduler.tsx`. Aproveitado para também resolver
+  ~~pedido de dupla autorização sem expiração~~ (`expireApprovalRequests`).
+- ~~Sem rate limiting~~ — resolvido nos pontos reais de abuso (login,
+  cadastro, convite, upload, consulta pública de convite). Ver
+  [`docs/RATE_LIMITING.md`](docs/RATE_LIMITING.md) — reset de senha, API
+  pública e webhooks ainda não existem, então não há o que limitar lá
+  ainda.
+- ~~RBAC só por papel, sem permissões nomeadas~~ — resolvido. 18 endpoints
+  migrados de listas de papéis soltas para um catálogo único de permissões.
+  Ver [`docs/RBAC_PERMISSOES.md`](docs/RBAC_PERMISSOES.md).
+- ~~API sem versionamento~~ — resolvido. Todos os endpoints agora em
+  `/_api/v1/...`. Ver [`docs/VERSIONAMENTO_API.md`](docs/VERSIONAMENTO_API.md).
+- ~~Sem exclusão de conta (LGPD)~~ — resolvido. Ver "Retenção e exclusão"
+  em [`docs/PRIVACY.md`](docs/PRIVACY.md).
 - **Nenhum conector de descoberta automática está ativo**, exceto o
   registro manual de oportunidades. Conectores reais (WhatsApp, e-mail,
   scraping) ainda não foram construídos — construir um fingindo que existe

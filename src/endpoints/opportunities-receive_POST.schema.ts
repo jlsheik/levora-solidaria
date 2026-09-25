@@ -20,7 +20,7 @@ export const postOpportunitiesReceive = async (
   init?: RequestInit
 ): Promise<OutputType> => {
   const validatedInput = schema.parse(body);
-  const result = await fetch(`/_api/opportunities-receive`, {
+  const result = await fetch(`/_api/v1/opportunities-receive`, {
     method: "POST",
     body: superjson.stringify(validatedInput),
     ...init,

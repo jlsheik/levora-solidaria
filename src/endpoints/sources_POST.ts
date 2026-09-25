@@ -4,6 +4,7 @@ import { requirePlatformAdmin } from "../helpers/platformAccess";
 import { recordAuditLogEntry } from "../helpers/auditLog";
 import { schema } from "./sources_POST.schema";
 import superjson from "superjson";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 export async function handle(request: Request) {
   try {
@@ -61,11 +62,6 @@ export async function handle(request: Request) {
     });
   } catch (error: unknown) {
     console.error("Erro ao cadastrar fonte:", error);
-    const message = error instanceof Error ? error.message : "Não foi possível cadastrar a fonte";
-    const status = message.includes("restrita") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Não foi possível cadastrar a fonte");
   }
 }

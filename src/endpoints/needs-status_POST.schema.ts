@@ -17,7 +17,7 @@ export const postNeedsStatus = async (
   init?: RequestInit
 ): Promise<OutputType> => {
   const validatedInput = schema.parse(body);
-  const result = await fetch(`/_api/needs-status`, {
+  const result = await fetch(`/_api/v1/needs-status`, {
     method: "POST",
     body: superjson.stringify(validatedInput),
     ...init,

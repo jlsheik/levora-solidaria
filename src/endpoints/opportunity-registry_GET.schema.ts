@@ -35,7 +35,7 @@ export const getOpportunityRegistry = async (
   const validated = schema.parse(query);
   const params = new URLSearchParams();
   if (validated.status) params.set("status", validated.status);
-  const result = await fetch(`/_api/opportunity-registry?${params.toString()}`, {
+  const result = await fetch(`/_api/v1/opportunity-registry?${params.toString()}`, {
     method: "GET",
     ...init,
     credentials: "include",

@@ -5,10 +5,17 @@
  * verbatim do Floot: cada um exporta `handle(request: Request): Promise<Response>`
  * usando a Web Fetch API padrão (não um handler específico do Express).
  * Este servidor descobre esses arquivos automaticamente e os expõe em
- * /_api/<rota>, convertendo entre Request/Response (Web API) e Express —
- * exatamente a mesma convenção de URL que o Floot usava
- * (ver src/endpoints/needs_GET.schema.ts: fetch(`/_api/needs?...`)),
- * então nenhum arquivo de cliente (páginas/schemas) precisou ser alterado.
+ * /_api/v1/<rota>, convertendo entre Request/Response (Web API) e Express.
+ *
+ * Versionamento (master prompt, seção 86: "API versionada `/api/v1/...`"):
+ * o prefixo de transporte desta API sempre foi `/_api` (convenção herdada
+ * do Floot, mantida na migração — é só o que o proxy do Vite encaminha
+ * para este servidor, ver vite.config.ts; não tem relação com o cliente
+ * sendo servido). "v1" é a versão do CONTRATO da API, adicionada como
+ * segmento de rota logo depois: `/_api/v1/<rota>`. Uma v2 no futuro
+ * conviveria lado a lado (`/_api/v2/<rota>`) sem quebrar clientes ainda
+ * presos ao contrato v1 — é essa a garantia que versionar a API existe
+ * para dar, não a string exata "/api/" vs "/_api/".
  */
 import "dotenv/config";
 import express, { type Request as ExpressRequest, type Response as ExpressResponse } from "express";
@@ -19,6 +26,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENDPOINTS_DIR = path.resolve(__dirname, "../src/endpoints");
 const PORT = Number(process.env.PORT ?? 3001);
+const API_VERSION_PREFIX = "/_api/v1";
 
 type HttpMethod = "GET" | "POST";
 
@@ -60,6 +68,14 @@ async function buildExpressHandler(absPath: string) {
         if (value === undefined) continue;
         headers.set(key, Array.isArray(value) ? value.join(", ") : value);
       }
+      // Sobrescreve qualquer x-client-ip-verified que o próprio cliente
+      // tenha mandado (não confiável) pelo IP real que o Express calculou
+      // (req.ip — respeita "trust proxy" quando configurado atrás de um
+      // proxy reverso de verdade). É este header, nunca um header
+      // client-controlado como X-Forwarded-For puro, que
+      // src/helpers/rateLimit.tsx usa para identificar quem está fazendo a
+      // requisição quando não há sessão autenticada.
+      headers.set("x-client-ip-verified", req.ip ?? req.socket.remoteAddress ?? "desconhecido");
       const init: RequestInit = {
         method: req.method,
         headers,
@@ -74,11 +90,19 @@ async function buildExpressHandler(absPath: string) {
 
       res.status(webResponse.status);
       webResponse.headers.forEach((value, key) => {
-        // Express/Node sets its own; letting the endpoint's Set-Cookie through is what matters.
+        // content-length/transfer-encoding: deixa o Express recalcular a
+        // partir do buffer que ele realmente vai enviar (ver abaixo) —
+        // repassar o valor do Response original pode não bater,
+        // especialmente para corpos binários.
+        if (key === "content-length" || key === "transfer-encoding") return;
         res.setHeader(key, value);
       });
-      const text = await webResponse.text();
-      res.send(text);
+      // arrayBuffer(), não text(): texto (JSON) sobrevive ao round-trip
+      // por Buffer normalmente, mas corpo binário (ex.: arquivo baixado em
+      // files-download_GET.ts) seria corrompido se decodificado como UTF-8
+      // via .text() e reserializado como string.
+      const bodyBuffer = Buffer.from(await webResponse.arrayBuffer());
+      res.send(bodyBuffer);
     } catch (error) {
       console.error(`Erro no endpoint ${req.method} ${req.originalUrl}:`, error);
       res.status(500).json({ message: "Erro interno do servidor" });
@@ -89,11 +113,26 @@ async function buildExpressHandler(absPath: string) {
 async function main() {
   const app = express();
 
+  // Em produção atrás de um proxy reverso/load balancer de verdade
+  // (nginx, Cloudflare, etc.), configure TRUST_PROXY=1 (ou o número de
+  // saltos de proxy confiáveis) para que req.ip leia o IP real do cliente
+  // a partir de X-Forwarded-For em vez do IP do próprio proxy — sem isso,
+  // rate limiting por IP (ver src/helpers/rateLimit.tsx) trataria todo
+  // tráfego como vindo de um único IP (o do proxy).
+  if (process.env.TRUST_PROXY) {
+    app.set("trust proxy", isNaN(Number(process.env.TRUST_PROXY)) ? process.env.TRUST_PROXY : Number(process.env.TRUST_PROXY));
+  }
+
   // Endpoints portados esperam o corpo bruto (superjson.stringify de volta em JSON
   // já serializado) — capturamos o raw body em vez de deixar o Express fazer parse,
   // porque os handlers fazem seu próprio JSON.parse/superjson.parse do corpo.
+  // 16mb: cobre o upload de arquivo em base64 dentro do corpo JSON
+  // (src/endpoints/files-upload_POST.ts) — um arquivo de até 8MB vira
+  // ~10.9MB em base64; o limite de tamanho do arquivo em si é aplicado no
+  // endpoint (FILE_MAX_SIZE_BYTES), este limite aqui é só a margem bruta
+  // do corpo da requisição.
   app.use(
-    express.raw({ type: "*/*", limit: "10mb" })
+    express.raw({ type: "*/*", limit: "16mb" })
   );
 
   const endpoints = discoverEndpoints(ENDPOINTS_DIR);
@@ -101,7 +140,7 @@ async function main() {
 
   for (const ep of endpoints) {
     const handler = await buildExpressHandler(ep.absPath);
-    const routePath = `/_api/${ep.route}`;
+    const routePath = `${API_VERSION_PREFIX}/${ep.route}`;
     if (ep.method === "GET") {
       app.get(routePath, wrapRawBody(handler));
     } else {
@@ -109,14 +148,21 @@ async function main() {
     }
   }
 
+  // Health check fica fora do versionamento de propósito — infraestrutura
+  // de monitoramento (load balancer, orquestrador de containers) não deve
+  // precisar acompanhar a versão do contrato da API só para saber se o
+  // processo está de pé.
   app.get("/_api/__health", (_req, res) => {
-    res.json({ status: "ok", endpoints: endpoints.length });
+    res.json({ status: "ok", endpoints: endpoints.length, apiVersion: "v1" });
   });
 
   app.listen(PORT, () => {
     console.log(`Levora Solidária — servidor de API rodando em http://localhost:${PORT}`);
-    console.log(`Rotas montadas: ${endpoints.map((e) => `${e.method} /_api/${e.route}`).join(", ")}`);
+    console.log(`Rotas montadas: ${endpoints.map((e) => `${e.method} ${API_VERSION_PREFIX}/${e.route}`).join(", ")}`);
   });
+
+  const { startScheduler } = await import("../src/helpers/scheduler");
+  startScheduler();
 }
 
 // express.raw() puts the Buffer on req.body; downstream handlers were written

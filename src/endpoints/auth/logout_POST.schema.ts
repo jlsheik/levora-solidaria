@@ -18,7 +18,7 @@ export const postLogout = async (
   body: z.infer<typeof schema> = {},
   init?: RequestInit
 ): Promise<OutputType> => {
-  const result = await fetch(`/_api/auth/logout`, {
+  const result = await fetch(`/_api/v1/auth/logout`, {
     method: "POST",
     body: superjson.stringify(body),
     ...init,

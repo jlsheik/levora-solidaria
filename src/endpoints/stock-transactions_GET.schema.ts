@@ -28,7 +28,7 @@ export const getStockTransactions = async (
   const params = new URLSearchParams({ organizationId: String(validated.organizationId) });
   if (validated.itemId) params.set("itemId", String(validated.itemId));
   if (validated.limit) params.set("limit", String(validated.limit));
-  const result = await fetch(`/_api/stock-transactions?${params.toString()}`, {
+  const result = await fetch(`/_api/v1/stock-transactions?${params.toString()}`, {
     method: "GET",
     ...init,
     credentials: "include",

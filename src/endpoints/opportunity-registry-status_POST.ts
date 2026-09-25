@@ -5,6 +5,7 @@ import { recordAuditLogEntry } from "../helpers/auditLog";
 import { runMatchingForOpportunity } from "../helpers/opportunityMatching";
 import { schema } from "./opportunity-registry-status_POST.schema";
 import superjson from "superjson";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 // Máquina de estados validada no servidor — a interface pode sugerir o
 // próximo passo, mas é esta tabela que decide o que é permitido.
@@ -88,11 +89,6 @@ export async function handle(request: Request) {
     });
   } catch (error: unknown) {
     console.error("Erro ao atualizar status da descoberta:", error);
-    const message = error instanceof Error ? error.message : "Não foi possível atualizar a descoberta";
-    const status = message.includes("restrita") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Não foi possível atualizar a descoberta");
   }
 }

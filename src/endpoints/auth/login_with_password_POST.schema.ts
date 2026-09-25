@@ -16,7 +16,7 @@ export const postLogin = async (
   init?: RequestInit
 ): Promise<OutputType> => {
   const validatedInput = schema.parse(body);
-  const result = await fetch(`/_api/auth/login_with_password`, {
+  const result = await fetch(`/_api/v1/auth/login_with_password`, {
     method: "POST",
     body: superjson.stringify(validatedInput),
     ...init,

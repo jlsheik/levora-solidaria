@@ -10,7 +10,8 @@ import react from "@vitejs/plugin-react";
 // O proxy de /_api abaixo encaminha para o servidor Express real
 // (server/index.ts, iniciado com `npm run dev`), preservando exatamente as
 // URLs que os arquivos *_GET.schema.ts / *_POST.schema.ts já portados usam
-// (ex: fetch("/_api/needs?...")) — nenhum código de cliente precisou mudar.
+// (ex: fetch("/_api/v1/needs?...")) — o proxy casa por prefixo, então
+// funciona igual independente da versão da API depois do "/_api/".
 export default defineConfig({
   plugins: [react()],
   server: {

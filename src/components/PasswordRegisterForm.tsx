@@ -25,11 +25,14 @@ export type RegisterFormData = z.infer<typeof schema>;
 interface PasswordRegisterFormProps {
   className?: string;
   defaultValues?: Partial<RegisterFormData>;
+  /** Para onde navegar após o cadastro. Padrão "/" (mantém o comportamento existente). */
+  redirectTo?: string;
 }
 
 export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
   className,
   defaultValues,
+  redirectTo = "/",
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +56,7 @@ export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
       const result = await postRegister(data);
       console.log("Registration successful for:", data.email);
       onLogin(result.user);
-      navigate("/");
+      navigate(redirectTo);
     } catch (err) {
       console.error("Registration error:", err);
 

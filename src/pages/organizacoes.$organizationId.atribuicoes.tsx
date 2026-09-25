@@ -8,6 +8,7 @@ import { postAllocationsReceive } from "../endpoints/allocations-receive_POST.sc
 import { postAllocationsLogistics } from "../endpoints/allocations-logistics_POST.schema";
 import { getAllocationsLogistics } from "../endpoints/allocations-logistics_GET.schema";
 import { getInventoryItems } from "../endpoints/inventory-items_GET.schema";
+import { postFilesUpload, FILE_MAX_SIZE_BYTES, ALLOWED_CONTENT_TYPES } from "../endpoints/files-upload_POST.schema";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "../components/Dialog";
@@ -17,9 +18,10 @@ import { Textarea } from "../components/Textarea";
 import { Button } from "../components/Button";
 import { Badge } from "../components/Badge";
 import { Skeleton } from "../components/Skeleton";
+import { FileDropzone } from "../components/FileDropzone";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/Select";
 import { z } from "zod";
-import { ArrowLeft, Network, PackageCheck } from "lucide-react";
+import { ArrowLeft, Network, PackageCheck, FileCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import styles from "./organizacoes.$organizationId.atribuicoes.module.css";
 
@@ -38,12 +40,26 @@ const receiveSchema = z.object({
   proofUrl: z.string().optional(),
 });
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // data:<mime>;base64,<conteúdo> — só o conteúdo interessa aqui.
+      resolve(result.split(",")[1] ?? "");
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Falha ao ler o arquivo"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function OrganizationAllocationsPage() {
   const params = useParams<{ organizationId: string }>();
   const organizationId = Number(params.organizationId);
   const queryClient = useQueryClient();
   const [receiveTarget, setReceiveTarget] = useState<{ id: number; title: string } | null>(null);
   const [expandedTimelineId, setExpandedTimelineId] = useState<number | null>(null);
+  const [uploadedProof, setUploadedProof] = useState<{ id: number; originalFilename: string } | null>(null);
 
   const orgsQuery = useQuery({ queryKey: ["organizations"], queryFn: () => getOrganizations() });
   const org = orgsQuery.data?.organizations.find((o) => o.id === organizationId);
@@ -91,15 +107,34 @@ export default function OrganizationAllocationsPage() {
   const receiveForm = useForm({ schema: receiveSchema, defaultValues: { quantityReceived: 0, notes: "" } });
   const receiveMutation = useMutation({
     mutationFn: (data: z.infer<typeof receiveSchema>) =>
-      postAllocationsReceive({ organizationId, allocationId: receiveTarget!.id, ...data }),
+      postAllocationsReceive({ organizationId, allocationId: receiveTarget!.id, proofFileId: uploadedProof?.id, ...data }),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["organization-allocations", organizationId] });
       queryClient.invalidateQueries({ queryKey: ["inventory-items", organizationId] });
       queryClient.invalidateQueries({ queryKey: ["stock-transactions", organizationId] });
       toast.success(`Recebimento registrado. Novo saldo do item: ${result.newStock}`);
       setReceiveTarget(null);
+      setUploadedProof(null);
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Falha ao registrar recebimento"),
+  });
+
+  const uploadProofMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const fileBase64 = await fileToBase64(file);
+      return postFilesUpload({
+        organizationId,
+        purpose: "comprovante_entrega",
+        fileName: file.name,
+        contentType: file.type as (typeof ALLOWED_CONTENT_TYPES)[number],
+        fileBase64,
+      });
+    },
+    onSuccess: (result) => {
+      setUploadedProof({ id: result.file.id, originalFilename: result.file.originalFilename });
+      toast.success("Comprovante enviado");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Falha ao enviar comprovante"),
   });
 
   return (
@@ -149,7 +184,7 @@ export default function OrganizationAllocationsPage() {
               {canManage && a.status === "aceita" && (
                 <div className={styles.actions}>
                   <Button size="sm" variant="secondary" onClick={() => logisticsMutation.mutate({ allocationId: a.id, eventType: "coleta_agendada" })}>Agendar coleta</Button>
-                  <Button size="sm" variant="secondary" onClick={() => { setReceiveTarget({ id: a.id, title: a.opportunityTitle }); receiveForm.setValues({ quantityReceived: 0, notes: "", proofUrl: "" } as any); }}>
+                  <Button size="sm" variant="secondary" onClick={() => { setReceiveTarget({ id: a.id, title: a.opportunityTitle }); receiveForm.setValues({ quantityReceived: 0, notes: "", proofUrl: "" } as any); setUploadedProof(null); }}>
                     <PackageCheck size={14} /> Registrar recebimento direto
                   </Button>
                 </div>
@@ -163,7 +198,7 @@ export default function OrganizationAllocationsPage() {
               {canManage && (a.status === "aceita" || a.status === "em_coleta" || a.status === "em_transporte") && (
                 <div className={styles.actions}>
                   {a.status === "em_transporte" && (
-                    <Button size="sm" onClick={() => { setReceiveTarget({ id: a.id, title: a.opportunityTitle }); receiveForm.setValues({ quantityReceived: 0, notes: "", proofUrl: "" } as any); }}>
+                    <Button size="sm" onClick={() => { setReceiveTarget({ id: a.id, title: a.opportunityTitle }); receiveForm.setValues({ quantityReceived: 0, notes: "", proofUrl: "" } as any); setUploadedProof(null); }}>
                       <PackageCheck size={14} /> Confirmar entrega
                     </Button>
                   )}
@@ -183,7 +218,14 @@ export default function OrganizationAllocationsPage() {
                           <li key={ev.id} className={styles.timelineRow}>
                             <strong>{logisticsEventLabels[ev.eventType]}</strong> — {ev.actorDisplayName ?? "sistema"} · {new Date(ev.occurredAt).toLocaleString("pt-BR")}
                             {ev.notes ? ` — ${ev.notes}` : ""}
-                            {ev.proofUrl ? ` — comprovante: ${ev.proofUrl}` : ""}
+                            {ev.proofUrl && (
+                              <>
+                                {" — "}
+                                <a href={ev.proofUrl} target="_blank" rel="noopener noreferrer" className={styles.proofLink}>
+                                  ver comprovante
+                                </a>
+                              </>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -231,10 +273,37 @@ export default function OrganizationAllocationsPage() {
                 <FormLabel>Observações (opcional)</FormLabel>
                 <FormControl><Textarea value={receiveForm.values.notes || ""} onChange={(e) => receiveForm.setValues((p: any) => ({ ...p, notes: e.target.value }))} /></FormControl>
               </FormItem>
-              <FormItem name="proofUrl">
-                <FormLabel>Link do comprovante (foto, opcional)</FormLabel>
-                <FormControl><Input placeholder="https://..." value={receiveForm.values.proofUrl || ""} onChange={(e) => receiveForm.setValues((p: any) => ({ ...p, proofUrl: e.target.value }))} /></FormControl>
-                <p className={styles.hintText}>Ainda não há upload de arquivo aqui — cole o link de uma foto já hospedada em algum lugar.</p>
+              <FormItem name="proof">
+                <FormLabel>Comprovante (foto ou PDF, opcional)</FormLabel>
+                {uploadedProof ? (
+                  <div className={styles.uploadedProof}>
+                    <FileCheck size={16} />
+                    <span>{uploadedProof.originalFilename}</span>
+                    <button type="button" className={styles.removeProofButton} onClick={() => setUploadedProof(null)} aria-label="Remover comprovante">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <FileDropzone
+                    accept={ALLOWED_CONTENT_TYPES.join(",")}
+                    maxSize={FILE_MAX_SIZE_BYTES}
+                    disabled={uploadProofMutation.isPending}
+                    title={uploadProofMutation.isPending ? "Enviando..." : "Clique ou arraste uma foto/PDF"}
+                    subtitle={`Até ${Math.round(FILE_MAX_SIZE_BYTES / 1024 / 1024)}MB`}
+                    onFilesSelected={(files) => files[0] && uploadProofMutation.mutate(files[0])}
+                  />
+                )}
+                <p className={styles.hintText}>
+                  Ou, se já tiver uma foto hospedada em outro lugar, cole o link abaixo em vez de enviar um arquivo:
+                </p>
+                <FormControl>
+                  <Input
+                    placeholder="https://..."
+                    disabled={!!uploadedProof}
+                    value={receiveForm.values.proofUrl || ""}
+                    onChange={(e) => receiveForm.setValues((p: any) => ({ ...p, proofUrl: e.target.value }))}
+                  />
+                </FormControl>
               </FormItem>
               <DialogFooter>
                 <Button type="submit" disabled={receiveMutation.isPending}>{receiveMutation.isPending ? "Registrando..." : "Confirmar recebimento"}</Button>

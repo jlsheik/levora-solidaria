@@ -22,7 +22,7 @@ export type OutputType = {
 };
 
 export const getSources = async (init?: RequestInit): Promise<OutputType> => {
-  const result = await fetch(`/_api/sources`, { method: "GET", ...init, credentials: "include" });
+  const result = await fetch(`/_api/v1/sources`, { method: "GET", ...init, credentials: "include" });
   if (!result.ok) {
     const errorData = superjson.parse<{ message: string }>(await result.text());
     throw new Error(errorData.message || "Não foi possível carregar as fontes");

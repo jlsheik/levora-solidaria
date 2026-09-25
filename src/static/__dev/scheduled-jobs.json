@@ -13,5 +13,10 @@
     "enabled": true,
     "schedule": "0 * * * *",
     "timezone": "UTC"
+  },
+  "expireApprovalRequests": {
+    "enabled": true,
+    "schedule": "0 * * * *",
+    "timezone": "UTC"
   }
 }

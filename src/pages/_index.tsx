@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getOrganizations } from "../endpoints/organizations_GET.schema";
 import { postOrganizations } from "../endpoints/organizations_POST.schema";
+import { postAccountDelete } from "../endpoints/auth/account-delete_POST.schema";
 import { OrganizationTypeArrayValues } from "../helpers/schema";
-import { useAuth } from "../helpers/useAuth";
+import { useAuth, AUTH_QUERY_KEY } from "../helpers/useAuth";
 import {
   Dialog,
   DialogContent,
@@ -33,8 +34,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/Select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/DropdownMenu";
 import { z } from "zod";
-import { HeartHandshake, Plus, Building2, LogOut, Network } from "lucide-react";
+import { HeartHandshake, Plus, Building2, LogOut, Network, MoreVertical, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import styles from "./_index.module.css";
 
@@ -57,11 +59,16 @@ const createOrgSchema = z.object({
   state: z.string().length(2, "Use a sigla do estado, ex: MG"),
 });
 
+const deleteAccountSchema = z.object({
+  password: z.string().min(1, "Informe sua senha"),
+});
+
 export default function DashboardPage() {
   const { authState, logout } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
 
   const orgsQuery = useQuery({
     queryKey: ["organizations"],
@@ -87,6 +94,23 @@ export default function DashboardPage() {
     },
   });
 
+  const deleteAccountForm = useForm({ schema: deleteAccountSchema, defaultValues: { password: "" } });
+  const deleteAccountMutation = useMutation({
+    mutationFn: (data: z.infer<typeof deleteAccountSchema>) => postAccountDelete(data),
+    onSuccess: () => {
+      // A sessão já foi encerrada pelo servidor (cookie limpo na resposta) —
+      // só precisa limpar o estado local e mandar para o login, sem chamar
+      // logout() de novo (não há mais sessão para encerrar).
+      queryClient.setQueryData(AUTH_QUERY_KEY, null);
+      queryClient.resetQueries();
+      toast.success("Conta excluída. Sentiremos sua falta.");
+      navigate("/login");
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Não foi possível excluir a conta");
+    },
+  });
+
   const userName = authState.type === "authenticated" ? authState.user.displayName : "";
 
   return (
@@ -106,8 +130,58 @@ export default function DashboardPage() {
           <Button variant="ghost" size="icon-sm" onClick={() => logout()} title="Sair">
             <LogOut size={18} />
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" title="Mais opções">
+                <MoreVertical size={18} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem className={styles.dangerMenuItem} onSelect={() => setDeleteAccountOpen(true)}>
+                <Trash2 size={14} /> Excluir minha conta
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
+
+      <Dialog open={deleteAccountOpen} onOpenChange={(open) => { setDeleteAccountOpen(open); if (!open) deleteAccountForm.setValues({ password: "" } as any); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir minha conta</DialogTitle>
+            <DialogDescription>
+              Isto encerra sua sessão em todos os dispositivos e remove seus
+              dados pessoais (e-mail, nome). Ações que você já realizou
+              continuam registradas na trilha de auditoria das organizações
+              (exigido para rastreabilidade), mas sem seu nome/e-mail
+              associado. Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...deleteAccountForm}>
+            <form
+              className={styles.formGrid}
+              onSubmit={deleteAccountForm.handleSubmit((data) => deleteAccountMutation.mutate(data))}
+            >
+              <FormItem name="password">
+                <FormLabel>Confirme sua senha</FormLabel>
+                <FormControl>
+                  <Input
+                    type="password"
+                    value={deleteAccountForm.values.password || ""}
+                    onChange={(e) => deleteAccountForm.setValues((p: any) => ({ ...p, password: e.target.value }))}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+              <DialogFooter>
+                <Button type="submit" variant="destructive" disabled={deleteAccountMutation.isPending}>
+                  {deleteAccountMutation.isPending ? "Excluindo..." : "Excluir minha conta"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
 
       <main className={styles.main}>
         <div className={styles.titleRow}>

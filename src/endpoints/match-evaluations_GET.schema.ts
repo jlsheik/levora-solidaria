@@ -29,7 +29,7 @@ export const getMatchEvaluations = async (
 ): Promise<OutputType> => {
   const validated = schema.parse(query);
   const params = new URLSearchParams({ opportunityId: String(validated.opportunityId) });
-  const result = await fetch(`/_api/match-evaluations?${params.toString()}`, {
+  const result = await fetch(`/_api/v1/match-evaluations?${params.toString()}`, {
     method: "GET",
     ...init,
     credentials: "include",

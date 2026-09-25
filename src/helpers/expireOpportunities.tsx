@@ -26,14 +26,24 @@ export async function expireOpportunities() {
       .returning(["id", "title"])
       .execute();
 
-    for (const opp of expired) {
-      await recordAuditLogEntry({
-        organizationId: null,
-        actorUserId: null,
-        action: "descoberta_central.expirada_automaticamente",
-        entityType: "opportunity_registry",
-        entityId: String(opp.id),
-        metadata: { title: opp.title },
+    // Uma única transação para toda a varredura, em vez de uma por
+    // descoberta expirada (ver o mesmo ajuste em expireApprovalRequests.tsx
+    // e expireReservations.tsx).
+    if (expired.length > 0) {
+      await db.transaction().execute(async (trx) => {
+        for (const opp of expired) {
+          await recordAuditLogEntry(
+            {
+              organizationId: null,
+              actorUserId: null,
+              action: "descoberta_central.expirada_automaticamente",
+              entityType: "opportunity_registry",
+              entityId: String(opp.id),
+              metadata: { title: opp.title },
+            },
+            trx
+          );
+        }
       });
     }
 

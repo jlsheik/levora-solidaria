@@ -2,6 +2,7 @@ import { db } from "../helpers/db";
 import { schema } from "./organizations_POST.schema";
 import { getServerUserSession } from "../helpers/getServerUserSession";
 import { recordAuditLogEntry } from "../helpers/auditLog";
+import { buildErrorResponse } from "../helpers/errorResponse";
 import superjson from "superjson";
 
 function slugify(name: string): string {
@@ -100,12 +101,6 @@ export async function handle(request: Request) {
     );
   } catch (error: unknown) {
     console.error("Erro ao criar organização:", error);
-    const message =
-      error instanceof Error ? error.message : "Não foi possível criar a organização";
-    const isAuthError = message.toLowerCase().includes("not authenticated") || message.toLowerCase().includes("authentication");
-    return new Response(superjson.stringify({ message }), {
-      status: isAuthError ? 401 : 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Não foi possível criar a organização");
   }
 }

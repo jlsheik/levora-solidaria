@@ -1,11 +1,12 @@
 import { db } from "../helpers/db";
 import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requireOrganizationMembership } from "../helpers/organizationAccess";
+import { requirePermission } from "../helpers/organizationAccess";
 import { recordAuditLogEntry } from "../helpers/auditLog";
+import { getItemStockBalance } from "../helpers/stockBalance";
 import { schema } from "./approval-requests-decide_POST.schema";
-import { sql } from "kysely";
 import superjson from "superjson";
 import type { Json } from "../helpers/schema";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 export async function handle(request: Request) {
   try {
@@ -13,7 +14,7 @@ export async function handle(request: Request) {
     const json = superjson.parse(await request.text());
     const input = schema.parse(json);
 
-    await requireOrganizationMembership(user.id, input.organizationId, ["proprietario", "administrador"]);
+    await requirePermission(user.id, input.organizationId, "aprovacoes.decida");
 
     const result = await db.transaction().execute(async (trx) => {
       const req = await trx
@@ -33,6 +34,45 @@ export async function handle(request: Request) {
         return { type: "self_approval" as const };
       }
 
+      // Pré-valida TUDO antes de tocar em approvalRequests.status — um
+      // `return` normal aqui não desfaz nada já escrito na transação (só
+      // uma exceção lançada faria rollback). Se a validação rodasse DEPOIS
+      // do update de status, uma falha de validação deixaria o pedido
+      // marcado como "aprovada" para sempre (não pode mais ser decidido de
+      // novo, já que exige status "pendente"), mas sem a ação de fato ter
+      // acontecido — um estado inconsistente silencioso.
+      let stockAdjustment: { payload: { organizationId: number; itemId: number; type: "ajuste"; quantity: number; reason: string }; itemName: string } | null = null;
+
+      if (input.decision === "aprovada" && req.actionType === "ajuste_estoque_alto_risco") {
+        const payload = req.payload as { organizationId: number; itemId: number; type: "ajuste"; quantity: number; reason: string };
+
+        const item = await trx
+          .selectFrom("inventoryItems")
+          .select(["id", "name", "organizationId"])
+          .where("id", "=", payload.itemId)
+          .forUpdate()
+          .executeTakeFirst();
+
+        if (!item || item.organizationId !== payload.organizationId) {
+          return { type: "payload_invalid" as const };
+        }
+
+        // Revalida o saldo no momento da APROVAÇÃO, não só no momento do
+        // pedido — outras movimentações podem ter acontecido no meio
+        // tempo (o pedido pode ficar dias pendente). Sem isto, aprovar um
+        // ajuste negativo antigo poderia levar o estoque a negativo,
+        // exatamente o que stock-transactions_POST.ts impede no
+        // lançamento direto.
+        const currentStock = await getItemStockBalance(trx, payload.itemId);
+        const newStock = currentStock + payload.quantity;
+
+        if (newStock < 0) {
+          return { type: "insufficient_stock" as const, currentStock, itemName: item.name };
+        }
+
+        stockAdjustment = { payload, itemName: item.name };
+      }
+
       const [updated] = await trx
         .updateTable("approvalRequests")
         .set({ status: input.decision, decidedByUserId: user.id, decisionNotes: input.notes ?? null, decidedAt: new Date() })
@@ -43,19 +83,8 @@ export async function handle(request: Request) {
       if (input.decision === "aprovada") {
         // Reexecuta a ação real — hoje só existe um tipo de ação de alto
         // risco (ajuste de estoque); novos tipos entram aqui.
-        if (req.actionType === "ajuste_estoque_alto_risco") {
-          const payload = req.payload as { organizationId: number; itemId: number; type: "ajuste"; quantity: number; reason: string };
-
-          const item = await trx
-            .selectFrom("inventoryItems")
-            .select(["id", "name", "organizationId"])
-            .where("id", "=", payload.itemId)
-            .forUpdate()
-            .executeTakeFirst();
-
-          if (!item || item.organizationId !== payload.organizationId) {
-            return { type: "payload_invalid" as const };
-          }
+        if (stockAdjustment) {
+          const { payload, itemName } = stockAdjustment;
 
           await trx
             .insertInto("stockTransactions")
@@ -76,7 +105,7 @@ export async function handle(request: Request) {
               action: "inventario.ajuste_aprovado_e_executado",
               entityType: "inventory_item",
               entityId: String(payload.itemId),
-              metadata: { approvalRequestId: req.id, delta: payload.quantity, itemName: item.name },
+              metadata: { approvalRequestId: req.id, delta: payload.quantity, itemName },
             },
             trx
           );
@@ -122,17 +151,20 @@ export async function handle(request: Request) {
         headers: { "Content-Type": "application/json" },
       });
     }
+    if (result.type === "insufficient_stock") {
+      return new Response(
+        superjson.stringify({
+          message: `Não é possível aprovar: o saldo de "${result.itemName}" mudou desde o pedido e hoje é ${result.currentStock} — aplicar este ajuste deixaria o saldo negativo. Revise a situação atual do estoque antes de decidir.`,
+        }),
+        { status: 409, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
     return new Response(superjson.stringify({ request: result.request }), {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error: unknown) {
     console.error("Erro ao decidir pedido de aprovação:", error);
-    const message = error instanceof Error ? error.message : "Não foi possível registrar a decisão";
-    const status = message.includes("acesso") || message.includes("papel") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Não foi possível registrar a decisão");
   }
 }

@@ -34,7 +34,7 @@ export const postOrganizations = async (
   init?: RequestInit
 ): Promise<OutputType> => {
   const validatedInput = schema.parse(body);
-  const result = await fetch(`/_api/organizations`, {
+  const result = await fetch(`/_api/v1/organizations`, {
     method: "POST",
     body: superjson.stringify(validatedInput),
     ...init,

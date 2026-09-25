@@ -105,7 +105,13 @@ CREATE TABLE audit_log (
   entity_type TEXT NOT NULL,
   entity_id TEXT,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Hash encadeado (master prompt, seção 12; ver docs/AUDIT.md) — cadeia
+  -- única e global, na ordem de inserção (id). Nulo é só o estado antes
+  -- de recordAuditLogEntry preencher (nunca deveria acontecer em uso
+  -- normal, já que a função sempre calcula os dois).
+  previous_event_hash TEXT,
+  event_hash TEXT
 );
 CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
 CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
@@ -367,5 +373,54 @@ CREATE TABLE approval_requests (
   decided_at TIMESTAMPTZ
 );
 CREATE INDEX idx_approval_requests_status ON approval_requests(status, organization_id);
+
+-- ============================================================
+-- Fase 9 — Convite de membros por e-mail
+-- ============================================================
+-- Tabela própria em vez de reaproveitar memberships.status='convidado':
+-- memberships.user_id é NOT NULL, então um convite só poderia ser
+-- pré-criado ali se a pessoa convidada já tivesse conta — o que reduziria
+-- o escopo do fluxo pedido (convidar qualquer e-mail, com ou sem conta
+-- ainda existente). O token nunca é armazenado em texto puro (mesmo
+-- princípio dos códigos de ativação de organização, seção 9 do master
+-- prompt), só o hash.
+CREATE TYPE organization_invite_status AS ENUM ('pendente', 'aceito', 'expirado', 'revogado');
+
+CREATE TABLE organization_invites (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  role membership_role NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  status organization_invite_status NOT NULL DEFAULT 'pendente',
+  invited_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  accepted_by_user_id INTEGER REFERENCES users(id),
+  revoked_by_user_id INTEGER REFERENCES users(id),
+  expires_at TIMESTAMPTZ NOT NULL,
+  accepted_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_organization_invites_org ON organization_invites(organization_id, status);
+-- Impede reenviar um convite pendente duplicado para o mesmo e-mail na
+-- mesma organização (o endpoint revoga o antigo antes de criar um novo).
+CREATE UNIQUE INDEX idx_organization_invites_pending_unique ON organization_invites(organization_id, lower(email)) WHERE status = 'pendente';
+
+-- ============================================================
+-- Fase 11 — Upload real de arquivo (comprovação de entrega)
+-- ============================================================
+CREATE TABLE files (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  uploaded_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  storage_provider TEXT NOT NULL,
+  storage_key TEXT NOT NULL,
+  original_filename TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size_bytes BIGINT NOT NULL,
+  purpose TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_files_org ON files(organization_id);
 
 COMMIT;

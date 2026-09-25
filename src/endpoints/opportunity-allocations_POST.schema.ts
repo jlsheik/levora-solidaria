@@ -18,7 +18,7 @@ export const postOpportunityAllocations = async (
   init?: RequestInit
 ): Promise<OutputType> => {
   const validatedInput = schema.parse(body);
-  const result = await fetch(`/_api/opportunity-allocations`, {
+  const result = await fetch(`/_api/v1/opportunity-allocations`, {
     method: "POST",
     body: superjson.stringify(validatedInput),
     ...init,

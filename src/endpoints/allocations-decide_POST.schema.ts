@@ -16,7 +16,7 @@ export const postAllocationsDecide = async (
   init?: RequestInit
 ): Promise<OutputType> => {
   const validatedInput = schema.parse(body);
-  const result = await fetch(`/_api/allocations-decide`, {
+  const result = await fetch(`/_api/v1/allocations-decide`, {
     method: "POST",
     body: superjson.stringify(validatedInput),
     ...init,

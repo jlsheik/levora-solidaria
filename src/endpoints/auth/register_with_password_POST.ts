@@ -7,10 +7,20 @@ import {
   SessionExpirationSeconds,
 } from "../../helpers/getSetServerSession";
 import { generatePasswordHash } from "../../helpers/generatePasswordHash";
+import { checkRateLimit, getClientIp, rateLimitResponse } from "../../helpers/rateLimit";
 import superjson from "superjson";
+
+// Limita criação de contas em massa (bots/spam) a partir de um mesmo IP.
+const IP_RATE_LIMIT = { limit: 10, windowMs: 60 * 60 * 1000 };
 
 export async function handle(request: Request) {
   try {
+    const ip = getClientIp(request);
+    const ipLimit = checkRateLimit({ bucket: "register", identifier: ip, ...IP_RATE_LIMIT });
+    if (!ipLimit.allowed) {
+      return rateLimitResponse(ipLimit.retryAfterSeconds, "Muitas contas criadas a partir deste dispositivo em pouco tempo. Aguarde antes de tentar de novo.");
+    }
+
     const json = superjson.parse(await request.text());
     const { email, password, displayName } = schema.parse(json);
 

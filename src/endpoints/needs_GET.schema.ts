@@ -28,7 +28,7 @@ export const getNeeds = async (
 ): Promise<OutputType> => {
   const validated = schema.parse(query);
   const params = new URLSearchParams({ organizationId: String(validated.organizationId) });
-  const result = await fetch(`/_api/needs?${params.toString()}`, {
+  const result = await fetch(`/_api/v1/needs?${params.toString()}`, {
     method: "GET",
     ...init,
     credentials: "include",

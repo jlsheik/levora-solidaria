@@ -1,12 +1,28 @@
-import React from "react";
+import React, { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getOrganizations } from "../endpoints/organizations_GET.schema";
 import { getOrganizationMembers } from "../endpoints/organization-members_GET.schema";
+import { getOrganizationInvites } from "../endpoints/organization-invites_GET.schema";
+import { postOrganizationInvites } from "../endpoints/organization-invites_POST.schema";
+import { postOrganizationInvitesRevoke } from "../endpoints/organization-invites-revoke_POST.schema";
 import { getAuditLog } from "../endpoints/audit-log_GET.schema";
 import { Badge } from "../components/Badge";
 import { Skeleton } from "../components/Skeleton";
-import { ArrowLeft, ShieldAlert, Users, ScrollText } from "lucide-react";
+import { Button } from "../components/Button";
+import { Input } from "../components/Input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogTrigger,
+} from "../components/Dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/Select";
+import { ArrowLeft, ShieldAlert, Users, ScrollText, UserPlus, X } from "lucide-react";
+import { toast } from "sonner";
 import styles from "./organizacoes.$organizationId.module.css";
 
 const membershipRoleLabels: Record<string, string> = {
@@ -22,10 +38,27 @@ const membershipStatusLabels: Record<string, string> = {
   inativo: "Inativo",
 };
 
+const inviteStatusLabels: Record<string, string> = {
+  pendente: "Pendente",
+  aceito: "Aceito",
+  expirado: "Expirado",
+  revogado: "Revogado",
+};
+
+const invitableRoles: Array<{ value: "administrador" | "operador" | "voluntario"; label: string }> = [
+  { value: "administrador", label: "Administrador" },
+  { value: "operador", label: "Operador" },
+  { value: "voluntario", label: "Voluntário" },
+];
+
 export default function OrganizationDetailPage() {
   const params = useParams<{ organizationId: string }>();
   const organizationId = Number(params.organizationId);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"administrador" | "operador" | "voluntario">("operador");
 
   const orgsQuery = useQuery({
     queryKey: ["organizations"],
@@ -40,11 +73,52 @@ export default function OrganizationDetailPage() {
   });
 
   const canSeeAuditLog = org?.myRole === "proprietario" || org?.myRole === "administrador";
+  const canManageMembers = canSeeAuditLog; // mesma regra: proprietário/administrador
 
   const auditLogQuery = useQuery({
     queryKey: ["audit-log", organizationId],
     queryFn: () => getAuditLog({ organizationId }),
     enabled: Number.isFinite(organizationId) && canSeeAuditLog,
+  });
+
+  const invitesQuery = useQuery({
+    queryKey: ["organization-invites", organizationId],
+    queryFn: () => getOrganizationInvites({ organizationId }),
+    enabled: Number.isFinite(organizationId) && canManageMembers,
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: () => postOrganizationInvites({ organizationId, email: inviteEmail, role: inviteRole }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["organization-invites", organizationId] });
+      if (data.emailSent) {
+        toast.success(`Convite enviado por e-mail para ${inviteEmail}`);
+      } else {
+        toast.success("Convite criado. E-mail não configurado no servidor — copie o link abaixo e envie manualmente.", {
+          duration: 10000,
+          action: {
+            label: "Copiar link",
+            onClick: () => {
+              navigator.clipboard.writeText(data.acceptUrl);
+              toast.success("Link copiado");
+            },
+          },
+        });
+      }
+      setInviteOpen(false);
+      setInviteEmail("");
+      setInviteRole("operador");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Falha ao criar convite"),
+  });
+
+  const revokeInviteMutation = useMutation({
+    mutationFn: (inviteId: number) => postOrganizationInvitesRevoke({ organizationId, inviteId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organization-invites", organizationId] });
+      toast.success("Convite revogado");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Falha ao revogar convite"),
   });
 
   if (orgsQuery.isFetching && !orgsQuery.data) {
@@ -111,9 +185,72 @@ export default function OrganizationDetailPage() {
 
       <div className={styles.columns}>
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>
-            <Users size={18} /> Equipe
-          </h2>
+          <div className={styles.sectionHeaderRow}>
+            <h2 className={styles.sectionTitle}>
+              <Users size={18} /> Equipe
+            </h2>
+            {canManageMembers && (
+              <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <UserPlus size={14} /> Convidar
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Convidar membro</DialogTitle>
+                    <DialogDescription>
+                      A pessoa recebe um link por e-mail (ou você compartilha
+                      manualmente, se o servidor não tiver e-mail
+                      configurado) para entrar nesta organização com o papel
+                      escolhido.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form
+                    className={styles.inviteForm}
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      inviteMutation.mutate();
+                    }}
+                  >
+                    <div className={styles.inviteFormField}>
+                      <label className={styles.inviteFormLabel} htmlFor="invite-email">
+                        E-mail
+                      </label>
+                      <Input
+                        id="invite-email"
+                        type="email"
+                        required
+                        placeholder="pessoa@exemplo.org"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.inviteFormField}>
+                      <label className={styles.inviteFormLabel}>Papel</label>
+                      <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as typeof inviteRole)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {invitableRoles.map((r) => (
+                            <SelectItem key={r.value} value={r.value}>
+                              {r.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <DialogFooter>
+                      <Button type="submit" disabled={inviteMutation.isPending || !inviteEmail}>
+                        {inviteMutation.isPending ? "Enviando..." : "Enviar convite"}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
           {membersQuery.isFetching && !membersQuery.data ? (
             <Skeleton className={styles.listSkeleton} />
           ) : membersQuery.data && membersQuery.data.members.length > 0 ? (
@@ -135,6 +272,40 @@ export default function OrganizationDetailPage() {
             </ul>
           ) : (
             <p className={styles.emptyText}>Nenhum membro encontrado.</p>
+          )}
+
+          {canManageMembers && invitesQuery.data && invitesQuery.data.invites.filter((i) => i.status === "pendente").length > 0 && (
+            <>
+              <h3 className={styles.inviteListTitle}>Convites pendentes</h3>
+              <ul className={styles.memberList}>
+                {invitesQuery.data.invites
+                  .filter((i) => i.status === "pendente")
+                  .map((invite) => (
+                    <li key={invite.id} className={styles.memberRow}>
+                      <div>
+                        <div className={styles.memberName}>{invite.email}</div>
+                        <div className={styles.memberEmail}>
+                          Convidado por {invite.invitedByDisplayName} · expira em{" "}
+                          {new Date(invite.expiresAt).toLocaleDateString("pt-BR")}
+                        </div>
+                      </div>
+                      <div className={styles.memberBadges}>
+                        <Badge variant="outline">{membershipRoleLabels[invite.role]}</Badge>
+                        <Badge variant="secondary">{inviteStatusLabels[invite.status]}</Badge>
+                        <button
+                          type="button"
+                          className={styles.revokeButton}
+                          title="Revogar convite"
+                          onClick={() => revokeInviteMutation.mutate(invite.id)}
+                          disabled={revokeInviteMutation.isPending}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            </>
           )}
         </section>
 

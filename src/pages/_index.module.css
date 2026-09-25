@@ -40,6 +40,10 @@
   color: var(--muted-foreground);
 }
 
+.dangerMenuItem {
+  color: var(--destructive);
+}
+
 .main {
   max-width: 72rem;
   margin: 0 auto;

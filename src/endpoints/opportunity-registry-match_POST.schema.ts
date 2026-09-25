@@ -17,7 +17,7 @@ export const postOpportunityRegistryMatch = async (
   init?: RequestInit
 ): Promise<OutputType> => {
   const validatedInput = schema.parse(body);
-  const result = await fetch(`/_api/opportunity-registry-match`, {
+  const result = await fetch(`/_api/v1/opportunity-registry-match`, {
     method: "POST",
     body: superjson.stringify(validatedInput),
     ...init,

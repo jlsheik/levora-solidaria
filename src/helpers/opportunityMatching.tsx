@@ -37,11 +37,14 @@ interface CandidateEvaluation {
   aiModelUsed: string | null;
 }
 
-function normalize(text: string): string {
+// Exportadas para teste unit\u00e1rio (test/opportunityMatching.test.ts) \u2014 a
+// l\u00f3gica de pontua\u00e7\u00e3o por palavra-chave \u00e9 pura e n\u00e3o deveria exigir banco
+// de dados para ser validada.
+export function normalize(text: string): string {
   return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
-function keywordScore(a: string, b: string): number {
+export function keywordScore(a: string, b: string): number {
   const wordsA = normalize(a).split(/\s+/).filter((w) => w.length > 3);
   const wordsB = normalize(b).split(/\s+/).filter((w) => w.length > 3);
   if (wordsA.length === 0 || wordsB.length === 0) return 0;

@@ -1,8 +1,9 @@
 import { db } from "../helpers/db";
 import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requireOrganizationMembership } from "../helpers/organizationAccess";
+import { requirePermissionToRead } from "../helpers/organizationAccess";
 import { schema } from "./approval-requests_GET.schema";
 import superjson from "superjson";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 export async function handle(request: Request) {
   try {
@@ -10,7 +11,8 @@ export async function handle(request: Request) {
     const url = new URL(request.url);
     const input = schema.parse({ organizationId: url.searchParams.get("organizationId") });
 
-    await requireOrganizationMembership(user.id, input.organizationId, ["proprietario", "administrador"]);
+    // É leitura: não exige organização já aprovada.
+    await requirePermissionToRead(user.id, input.organizationId, "aprovacoes.leia");
 
     const rows = await db
       .selectFrom("approvalRequests")
@@ -45,11 +47,6 @@ export async function handle(request: Request) {
     );
   } catch (error: unknown) {
     console.error("Erro ao listar pedidos de aprovação:", error);
-    const message = error instanceof Error ? error.message : "Falha ao carregar pedidos de aprovação";
-    const status = message.includes("acesso") || message.includes("papel") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Falha ao carregar pedidos de aprovação");
   }
 }

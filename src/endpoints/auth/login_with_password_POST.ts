@@ -9,6 +9,7 @@ import {
   SessionExpirationSeconds,
 } from "../../helpers/getSetServerSession";
 import { User } from "../../helpers/User";
+import { checkRateLimit, getClientIp, rateLimitResponse } from "../../helpers/rateLimit";
 import superjson from "superjson";
 
 // Configuration constants
@@ -19,12 +20,21 @@ const RATE_LIMIT_CONFIG = {
   cleanupProbability: 0.1,
 } as const;
 
+// Limite por IP, além do bloqueio por e-mail acima: o bloqueio por e-mail
+// protege uma CONTA específica sendo atacada; este protege o servidor de
+// alguém varrendo muitos e-mails diferentes a partir do mesmo IP.
+const IP_RATE_LIMIT = { limit: 20, windowMs: 15 * 60 * 1000 };
+
 // Helper function to safely convert union type to Date
 function safeToDate(
-  value: string | number | bigint | null | undefined
+  value: string | number | bigint | Date | null | undefined
 ): Date | null {
   if (value === null || value === undefined) {
     return null;
+  }
+
+  if (value instanceof Date) {
+    return value;
   }
 
   if (typeof value === "bigint") {
@@ -37,6 +47,12 @@ function safeToDate(
 
 export async function handle(request: Request) {
   try {
+    const ip = getClientIp(request);
+    const ipLimit = checkRateLimit({ bucket: "login", identifier: ip, ...IP_RATE_LIMIT });
+    if (!ipLimit.allowed) {
+      return rateLimitResponse(ipLimit.retryAfterSeconds, "Muitas tentativas de login a partir deste dispositivo. Aguarde antes de tentar de novo.");
+    }
+
     const json = superjson.parse(await request.text());
     const { email, password } = schema.parse(json);
 

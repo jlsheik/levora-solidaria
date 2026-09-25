@@ -4,6 +4,7 @@ import { requirePlatformAdmin } from "../helpers/platformAccess";
 import { schema } from "./opportunity-registry_GET.schema";
 import { sql } from "kysely";
 import superjson from "superjson";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 export async function handle(request: Request) {
   try {
@@ -86,11 +87,6 @@ export async function handle(request: Request) {
     );
   } catch (error: unknown) {
     console.error("Erro ao listar registro central:", error);
-    const message = error instanceof Error ? error.message : "Falha ao carregar registro central";
-    const status = message.includes("restrita") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Falha ao carregar registro central");
   }
 }

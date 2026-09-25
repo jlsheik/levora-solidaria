@@ -23,10 +23,13 @@ export type LoginFormData = z.infer<typeof schema>;
 
 interface PasswordLoginFormProps {
   className?: string;
+  /** Para onde navegar após o login. Padrão "/" (mantém o comportamento existente). */
+  redirectTo?: string;
 }
 
 export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
   className,
+  redirectTo = "/",
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +51,7 @@ export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
     try {
       const result = await postLogin(data);
       onLogin(result.user);
-      setTimeout(() => navigate("/"), 200);
+      setTimeout(() => navigate(redirectTo), 200);
     } catch (err) {
       console.error("Login error:", err);
       setError(

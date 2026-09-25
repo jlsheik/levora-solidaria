@@ -69,6 +69,11 @@ export async function setServerSession(
   response: Response,
   session: Session
 ): Promise<void> {
+  // Precisa bater com o Max-Age do cookie abaixo (SessionExpirationSeconds,
+  // 7 dias) — antes disso o JWT interno expirava em "1d" fixo enquanto o
+  // cookie dizia durar 7 dias, então a sessão real caía em 1 dia sem
+  // nenhum aviso (a verificação do JWT falhava antes do cookie expirar).
+  // Ver docs/SECURITY.md.
   const token = await new SignJWT({
     id: session.id,
     createdAt: session.createdAt,
@@ -77,7 +82,7 @@ export async function setServerSession(
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("1d")
+    .setExpirationTime(Math.floor(Date.now() / 1000) + SessionExpirationSeconds)
     .sign(encoder.encode(secret));
 
   const cookieValue = [

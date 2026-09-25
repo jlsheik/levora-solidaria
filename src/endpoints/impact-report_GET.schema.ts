@@ -46,7 +46,7 @@ export const getImpactReport = async (
     startDate: validated.startDate.toISOString(),
     endDate: validated.endDate.toISOString(),
   });
-  const result = await fetch(`/_api/impact-report?${params.toString()}`, {
+  const result = await fetch(`/_api/v1/impact-report?${params.toString()}`, {
     method: "GET",
     ...init,
     credentials: "include",

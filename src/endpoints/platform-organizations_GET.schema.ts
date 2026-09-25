@@ -16,7 +16,7 @@ export type OutputType = {
 };
 
 export const getPlatformOrganizations = async (init?: RequestInit): Promise<OutputType> => {
-  const result = await fetch(`/_api/platform-organizations`, { method: "GET", ...init, credentials: "include" });
+  const result = await fetch(`/_api/v1/platform-organizations`, { method: "GET", ...init, credentials: "include" });
   if (!result.ok) {
     const errorData = superjson.parse<{ message: string }>(await result.text());
     throw new Error(errorData.message || "Não foi possível carregar as organizações");

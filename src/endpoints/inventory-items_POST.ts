@@ -1,9 +1,10 @@
 import { db } from "../helpers/db";
 import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requireOrganizationMembership } from "../helpers/organizationAccess";
+import { requirePermission } from "../helpers/organizationAccess";
 import { recordAuditLogEntry } from "../helpers/auditLog";
 import { schema } from "./inventory-items_POST.schema";
 import superjson from "superjson";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 export async function handle(request: Request) {
   try {
@@ -11,13 +12,9 @@ export async function handle(request: Request) {
     const json = superjson.parse(await request.text());
     const input = schema.parse(json);
 
-    // Cadastrar itens é operação de baixo risco, mas ainda exige ser membro
-    // ativo com papel operacional — voluntário só enxerga, não cadastra.
-    await requireOrganizationMembership(user.id, input.organizationId, [
-      "proprietario",
-      "administrador",
-      "operador",
-    ]);
+    // Cadastrar itens é operação de baixo risco, mas ainda exige
+    // inventario.lance — voluntário só enxerga, não cadastra.
+    await requirePermission(user.id, input.organizationId, "inventario.lance");
 
     const item = await db.transaction().execute(async (trx) => {
       const [newItem] = await trx
@@ -91,11 +88,6 @@ export async function handle(request: Request) {
     );
   } catch (error: unknown) {
     console.error("Erro ao cadastrar item de inventário:", error);
-    const message = error instanceof Error ? error.message : "Não foi possível cadastrar o item";
-    const status = message.includes("acesso") || message.includes("papel") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Não foi possível cadastrar o item");
   }
 }

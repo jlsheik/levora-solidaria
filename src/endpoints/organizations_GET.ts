@@ -1,7 +1,7 @@
 import { db } from "../helpers/db";
 import { getServerUserSession } from "../helpers/getServerUserSession";
+import { buildErrorResponse } from "../helpers/errorResponse";
 import superjson from "superjson";
-import { sql } from "kysely";
 
 export async function handle(request: Request) {
   try {
@@ -55,11 +55,6 @@ export async function handle(request: Request) {
     );
   } catch (error: unknown) {
     console.error("Erro ao listar organizações:", error);
-    const message = error instanceof Error ? error.message : "Falha ao carregar organizações";
-    const isAuthError = message.toLowerCase().includes("not authenticated") || message.toLowerCase().includes("authentication");
-    return new Response(superjson.stringify({ message }), {
-      status: isAuthError ? 401 : 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Falha ao carregar organizações");
   }
 }

@@ -28,13 +28,26 @@ export async function expireReservations() {
     const opportunityIds = new Set<number>();
     for (const a of expired) {
       opportunityIds.add(a.opportunityRegistryId);
-      await recordAuditLogEntry({
-        organizationId: a.organizationId,
-        actorUserId: null,
-        action: "atribuicao.reserva_expirada",
-        entityType: "opportunity_allocation",
-        entityId: String(a.id),
-        metadata: { opportunityRegistryId: a.opportunityRegistryId },
+    }
+
+    // Uma única transação para toda a varredura, em vez de uma por
+    // atribuição expirada (ver o mesmo ajuste em expireApprovalRequests.tsx
+    // e expireOpportunities.tsx).
+    if (expired.length > 0) {
+      await db.transaction().execute(async (trx) => {
+        for (const a of expired) {
+          await recordAuditLogEntry(
+            {
+              organizationId: a.organizationId,
+              actorUserId: null,
+              action: "atribuicao.reserva_expirada",
+              entityType: "opportunity_allocation",
+              entityId: String(a.id),
+              metadata: { opportunityRegistryId: a.opportunityRegistryId },
+            },
+            trx
+          );
+        }
       });
     }
 

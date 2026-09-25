@@ -25,7 +25,7 @@ export const getAllocationsLogistics = async (
 ): Promise<OutputType> => {
   const validated = schema.parse(query);
   const params = new URLSearchParams({ organizationId: String(validated.organizationId), allocationId: String(validated.allocationId) });
-  const result = await fetch(`/_api/allocations-logistics?${params.toString()}`, {
+  const result = await fetch(`/_api/v1/allocations-logistics?${params.toString()}`, {
     method: "GET",
     ...init,
     credentials: "include",

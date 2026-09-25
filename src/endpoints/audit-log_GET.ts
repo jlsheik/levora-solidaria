@@ -1,8 +1,9 @@
 import { db } from "../helpers/db";
 import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requireOrganizationMembership } from "../helpers/organizationAccess";
+import { requirePermissionToRead } from "../helpers/organizationAccess";
 import { schema } from "./audit-log_GET.schema";
 import superjson from "superjson";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 export async function handle(request: Request) {
   try {
@@ -13,13 +14,13 @@ export async function handle(request: Request) {
       limit: url.searchParams.get("limit") ?? undefined,
     });
 
-    // A trilha de auditoria só pode ser lida por proprietário/administrador
-    // da organização — nunca por operador/voluntário, e nunca por quem não
-    // é membro.
-    await requireOrganizationMembership(user.id, input.organizationId, [
-      "proprietario",
-      "administrador",
-    ]);
+    // A trilha de auditoria só pode ser lida por quem tem a permissão
+    // auditoria.leia — hoje proprietário/administrador (ver
+    // src/helpers/permissions.tsx), nunca operador/voluntário nem quem não
+    // é membro. É leitura: usa requirePermissionToRead, não requirePermission
+    // — o dono de uma organização ainda "em análise" continua podendo ver
+    // a própria trilha de auditoria enquanto espera aprovação.
+    await requirePermissionToRead(user.id, input.organizationId, "auditoria.leia");
 
     const rows = await db
       .selectFrom("auditLog")
@@ -56,11 +57,6 @@ export async function handle(request: Request) {
     );
   } catch (error: unknown) {
     console.error("Erro ao carregar auditoria:", error);
-    const message = error instanceof Error ? error.message : "Falha ao carregar auditoria";
-    const status = message.includes("acesso") || message.includes("papel") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Falha ao carregar auditoria");
   }
 }

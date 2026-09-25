@@ -20,7 +20,7 @@ export type OutputType = {
 };
 
 export const getOrganizations = async (init?: RequestInit): Promise<OutputType> => {
-  const result = await fetch(`/_api/organizations`, {
+  const result = await fetch(`/_api/v1/organizations`, {
     method: "GET",
     ...init,
     credentials: "include",

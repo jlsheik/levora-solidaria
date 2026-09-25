@@ -27,7 +27,7 @@ export const getAuditLog = async (
   const validated = schema.parse(query);
   const params = new URLSearchParams({ organizationId: String(validated.organizationId) });
   if (validated.limit) params.set("limit", String(validated.limit));
-  const result = await fetch(`/_api/audit-log?${params.toString()}`, {
+  const result = await fetch(`/_api/v1/audit-log?${params.toString()}`, {
     method: "GET",
     ...init,
     credentials: "include",

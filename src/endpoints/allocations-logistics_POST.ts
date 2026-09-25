@@ -1,10 +1,11 @@
 import { db } from "../helpers/db";
 import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requireOrganizationMembership } from "../helpers/organizationAccess";
+import { requirePermission } from "../helpers/organizationAccess";
 import { recordAuditLogEntry } from "../helpers/auditLog";
 import { runMatchingForOpportunity } from "../helpers/opportunityMatching";
 import { schema } from "./allocations-logistics_POST.schema";
 import superjson from "superjson";
+import { buildErrorResponse } from "../helpers/errorResponse";
 
 // De onde para onde cada evento pode levar o status da atribuição. Registrar
 // um evento fora daqui é rejeitado — a linha do tempo de logística não é
@@ -21,11 +22,7 @@ export async function handle(request: Request) {
     const json = superjson.parse(await request.text());
     const input = schema.parse(json);
 
-    await requireOrganizationMembership(user.id, input.organizationId, [
-      "proprietario",
-      "administrador",
-      "operador",
-    ]);
+    await requirePermission(user.id, input.organizationId, "logistica.gerencie");
 
     const result = await db.transaction().execute(async (trx) => {
       const allocation = await trx
@@ -120,11 +117,6 @@ export async function handle(request: Request) {
     });
   } catch (error: unknown) {
     console.error("Erro ao registrar evento de logística:", error);
-    const message = error instanceof Error ? error.message : "Não foi possível registrar o evento";
-    const status = message.includes("acesso") || message.includes("papel") ? 403 : message.toLowerCase().includes("auth") ? 401 : 400;
-    return new Response(superjson.stringify({ message }), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    });
+    return buildErrorResponse(error, "Não foi possível registrar o evento");
   }
 }

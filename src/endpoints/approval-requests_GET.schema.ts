@@ -28,7 +28,7 @@ export const getApprovalRequests = async (
 ): Promise<OutputType> => {
   const validated = schema.parse(query);
   const params = new URLSearchParams({ organizationId: String(validated.organizationId) });
-  const result = await fetch(`/_api/approval-requests?${params.toString()}`, {
+  const result = await fetch(`/_api/v1/approval-requests?${params.toString()}`, {
     method: "GET",
     ...init,
     credentials: "include",

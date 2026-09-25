@@ -1,0 +1,56 @@
+/**
+ * Roda uma vez antes de toda a suíte (vitest globalSetup): garante que o
+ * banco de dados de teste existe e recria o schema do zero a partir de
+ * db/schema.sql, para que a suíte nunca dependa de um estado deixado por
+ * uma execução anterior.
+ *
+ * NUNCA aponte TEST_DATABASE_URL/.env.test para o banco de desenvolvimento —
+ * este setup dropa e recria o schema "public" inteiro.
+ */
+import postgres from "postgres";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../.env.test") });
+
+export default async function globalSetup() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error(
+      "DATABASE_URL não definida para os testes. Configure .env.test (veja .env.example) apontando para um banco de TESTE separado do de desenvolvimento."
+    );
+  }
+
+  const url = new URL(connectionString);
+  const targetDatabase = url.pathname.replace(/^\//, "");
+  if (!targetDatabase.endsWith("_test")) {
+    throw new Error(
+      `DATABASE_URL de teste ("${targetDatabase}") não termina em "_test" — isto é uma checagem de segurança para nunca dropar o schema do banco de desenvolvimento por engano. Aponte .env.test para um banco cujo nome termine em "_test".`
+    );
+  }
+
+  const adminUrl = new URL(connectionString);
+  adminUrl.pathname = "/postgres";
+  const admin = postgres(adminUrl.toString(), { max: 1, prepare: false, onnotice: () => {} });
+  try {
+    const existing = await admin`SELECT 1 FROM pg_database WHERE datname = ${targetDatabase}`;
+    if (existing.length === 0) {
+      const quotedName = `"${targetDatabase.replace(/"/g, '""')}"`;
+      await admin.unsafe(`CREATE DATABASE ${quotedName}`);
+    }
+  } finally {
+    await admin.end();
+  }
+
+  const sql = postgres(connectionString, { max: 1, prepare: false, onnotice: () => {} });
+  try {
+    await sql.unsafe("DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;");
+    const schemaSql = readFileSync(path.resolve(__dirname, "../db/schema.sql"), "utf-8");
+    await sql.unsafe(schemaSql);
+  } finally {
+    await sql.end();
+  }
+}

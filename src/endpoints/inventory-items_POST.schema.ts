@@ -25,7 +25,7 @@ export const postInventoryItems = async (
   init?: RequestInit
 ): Promise<OutputType> => {
   const validatedInput = schema.parse(body);
-  const result = await fetch(`/_api/inventory-items`, {
+  const result = await fetch(`/_api/v1/inventory-items`, {
     method: "POST",
     body: superjson.stringify(validatedInput),
     ...init,

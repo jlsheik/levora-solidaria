@@ -8,6 +8,9 @@ export const schema = z.object({
   quantityReceived: z.coerce.number().positive("Informe a quantidade realmente recebida"),
   notes: z.string().optional(),
   proofUrl: z.string().optional(),
+  // Preenchido quando a prova foi um upload real (ver files-upload_POST) —
+  // tem prioridade sobre proofUrl se os dois vierem preenchidos.
+  proofFileId: z.coerce.number().int().positive().optional(),
 });
 
 export type OutputType = {
@@ -21,7 +24,7 @@ export const postAllocationsReceive = async (
   init?: RequestInit
 ): Promise<OutputType> => {
   const validatedInput = schema.parse(body);
-  const result = await fetch(`/_api/allocations-receive`, {
+  const result = await fetch(`/_api/v1/allocations-receive`, {
     method: "POST",
     body: superjson.stringify(validatedInput),
     ...init,

@@ -17,7 +17,7 @@ export const getSession = async (
   body: z.infer<typeof schema> = {},
   init?: RequestInit
 ): Promise<OutputType> => {
-  const result = await fetch(`/_api/auth/session`, {
+  const result = await fetch(`/_api/v1/auth/session`, {
     method: "GET",
     ...init,
     headers: {
