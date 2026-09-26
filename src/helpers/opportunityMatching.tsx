@@ -270,8 +270,17 @@ export async function runMatchingForOpportunity(
         ? Math.max(0, Math.min(100, (Math.min(Number(opportunity.quantity), needQty) / needQty) * 100))
         : 70;
 
-      const sameCity = opportunity.locationCity && normalize(opportunity.locationCity) === normalize(c.orgCity);
-      const sameState = opportunity.locationState && normalize(opportunity.locationState) === normalize(c.orgState);
+      // Cidade E estado juntos — mesma correção já aplicada em
+      // raio_atendimento (achado de auditoria): cidades homônimas em UFs
+      // diferentes (existem de verdade no Brasil, ex. "Bom Jesus/MG" vs
+      // "Bom Jesus/PI") nunca contam como a mesma sede.
+      const sameCity = Boolean(
+        opportunity.locationCity &&
+        opportunity.locationState &&
+        normalize(opportunity.locationCity) === normalize(c.orgCity) &&
+        normalize(opportunity.locationState) === normalize(c.orgState)
+      );
+      const sameState = Boolean(opportunity.locationState && normalize(opportunity.locationState) === normalize(c.orgState));
       const localizacaoScore = !opportunity.locationCity && !opportunity.locationState
         ? 50
         : sameCity ? 100 : sameState ? 60 : 20;
@@ -388,7 +397,21 @@ export async function runMatchingForOpportunity(
       });
     }
 
-    evaluated.sort((a, b) => b.finalScore - a.finalScore);
+    // Desempate determinístico: a query de candidatos não tem ORDER BY, e o
+    // Postgres não garante nenhuma ordem de linhas sem um. Sem uma regra
+    // explícita, dois candidatos com finalScore idêntico seriam processados
+    // numa ordem incidental do banco — não reproduzível, não auditável.
+    // organizationId é o identificador técnico estável escolhido (é a
+    // própria FK persistida em match_evaluations/opportunity_allocations,
+    // não um critério de prioridade subjetiva); needId desempata o caso
+    // teórico de duas necessidades da MESMA organização empatando entre si.
+    // Aplicado só depois do finalScore já calculado — nunca influencia o
+    // score em si.
+    evaluated.sort((a, b) => {
+      if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
+      if (a.organizationId !== b.organizationId) return a.organizationId - b.organizationId;
+      return a.needId - b.needId;
+    });
 
     const allocationsCreated: MatchRunResult["allocationsCreated"] = [];
     const discarded: MatchRunResult["discarded"] = [];

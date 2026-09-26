@@ -1127,6 +1127,43 @@ alterado).
       permissão ou tabela foi criado além do estritamente necessário —
       confirmado explicitamente no relatório desta fase.
 
+## Fase 24 — Correção cirúrgica pós-auditoria final: proximidade cidade+UF e desempate determinístico (CONCLUÍDA)
+
+Auditoria final do motor (fase à parte, só leitura, sem alterar código)
+concluiu **APTO COM CORREÇÕES**, com exatamente 2 achados médios reais —
+nenhum crítico/alto. Corrigidos aqui, cirurgicamente, sem tocar em
+pesos/thresholds/fórmula/outros critérios:
+
+- [x] `proximidade` (sede) agora exige cidade **e** UF juntos para o score
+      100 — mesma correção já aplicada em `raio_atendimento` na Fase 23,
+      agora estendida ao critério irmão que ainda tinha a mesma
+      fragilidade (cidade homônima em UF diferente, ex. "Bom Jesus/MG" vs
+      "Bom Jesus/PI", pontuava 100 indevidamente).
+- [x] Desempate determinístico quando dois ou mais candidatos têm
+      `finalScore` idêntico: antes, a ordem entre empatados dependia da
+      ordem incidental do Postgres (a query de candidatos não tem
+      `ORDER BY`) — agora `organizationId` (identificador técnico
+      estável, a própria FK persistida em `match_evaluations`) desempata,
+      com `needId` como resíduo para o caso teórico de duas necessidades
+      da mesma organização empatando entre si. Aplicado só depois do
+      `finalScore` já calculado — nunca é um critério de prioridade
+      subjetiva, nunca altera o score.
+- [x] 10 testes novos (`test/opportunityMatchingProximityAndTiebreak.test.ts`,
+      164→174): os 8 cenários de proximidade pedidos (incluindo o caso
+      obrigatório de homônimo em UF diferente) e os 6 cenários de
+      desempate (scores diferentes mantêm ordem por score; empate exato
+      decidido só por `organizationId`; reprodutibilidade entre cenários
+      equivalentes; score nunca alterado pelo desempate; sem vazamento de
+      dado entre organizações empatadas; 4 organizações empatadas ao
+      mesmo tempo).
+- [x] Suíte completa (174 testes) e typecheck confirmados sem regressão.
+      Diff conferido — só as duas correções pedidas, nada mais.
+- [ ] `raio_atendimento` (área declarada) redundante com `proximidade`
+      quando a sede também é listada como área adicional (double count) —
+      **não corrigido nesta etapa, por instrução explícita**, fica
+      registrado como decisão de modelagem pendente para uma etapa
+      própria.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo
