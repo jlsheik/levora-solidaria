@@ -267,6 +267,34 @@ export interface OrganizationInvites {
   tokenHash: string;
 }
 
+export interface OrganizationCapacities {
+  category: string;
+  createdAt: Generated<Timestamp>;
+  createdByUserId: number;
+  id: Generated<number>;
+  maxCapacity: Numeric;
+  organizationId: number;
+  unit: string;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface OrganizationMatchingSettings {
+  observacoesHorarios: string | null;
+  observacoesLogisticas: string | null;
+  organizationId: number;
+  raioColetaKm: number | null;
+  realizaColeta: Generated<boolean>;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface OrganizationServiceAreas {
+  city: string;
+  createdAt: Generated<Timestamp>;
+  id: Generated<number>;
+  organizationId: number;
+  state: string;
+}
+
 export interface Organizations {
   city: string;
   createdAt: Generated<Timestamp>;
@@ -355,7 +383,10 @@ export interface DB {
   needs: Needs;
   opportunityAllocations: OpportunityAllocations;
   opportunityRegistry: OpportunityRegistry;
+  organizationCapacities: OrganizationCapacities;
   organizationInvites: OrganizationInvites;
+  organizationMatchingSettings: OrganizationMatchingSettings;
+  organizationServiceAreas: OrganizationServiceAreas;
   organizations: Organizations;
   sessions: Sessions;
   sources: Sources;

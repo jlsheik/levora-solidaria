@@ -44,6 +44,13 @@ describe("catálogo de permissões (RBAC granular)", () => {
     expect(roleHasPermission("operador", "relatorios.leia")).toBe(false);
   });
 
+  it("só proprietário/administrador têm organizacao.gerencie (capacidade/logística/área de atendimento para matching)", () => {
+    expect(roleHasPermission("proprietario", "organizacao.gerencie")).toBe(true);
+    expect(roleHasPermission("administrador", "organizacao.gerencie")).toBe(true);
+    expect(roleHasPermission("operador", "organizacao.gerencie")).toBe(false);
+    expect(roleHasPermission("voluntario", "organizacao.gerencie")).toBe(false);
+  });
+
   it("todo papel que tem uma permissão de gerência/ação também tem a leitura correspondente (nenhum papel escreve sem poder ler)", () => {
     const writeToReadPairs: Array<[string, string]> = [
       ["inventario.lance", "inventario.leia"],

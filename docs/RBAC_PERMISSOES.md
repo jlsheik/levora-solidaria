@@ -26,7 +26,15 @@ arquivos.leia         arquivos.envie
 aprovacoes.leia       aprovacoes.decida
 auditoria.leia
 relatorios.leia
+organizacao.gerencie
 ```
+
+`organizacao.gerencie` (Fase 21): edita capacidade por categoria, área de
+atendimento e configuração de logística da própria organização (dados que
+alimentam o motor de matching). Sem `organizacao.leia` correspondente —
+ler essa configuração é aberto a qualquer membro ativo via
+`requireOrganizationMembership` (é dado institucional, não sensível),
+igual à leitura de inventário/necessidades.
 
 ## Mapeamento papel → permissões
 
@@ -43,7 +51,7 @@ Definido uma vez em `ROLE_PERMISSIONS` (`src/helpers/permissions.tsx`):
 - **operador**: todas as permissões operacionais (`*.leia`, `*.lance`,
   `*.gerencie`, `atribuicoes.decida`, `arquivos.envie`) — mas nenhuma
   administrativa (`membros.gerencie`, `aprovacoes.*`, `auditoria.leia`,
-  `relatorios.leia`).
+  `relatorios.leia`, `organizacao.gerencie`).
 - **voluntario**: só `*.leia` — nunca lança, gerencia, decide ou envia
   nada. Só visualiza.
 

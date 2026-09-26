@@ -35,6 +35,7 @@ export const ALL_PERMISSIONS = [
   "aprovacoes.decida",
   "auditoria.leia",
   "relatorios.leia",
+  "organizacao.gerencie",
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];

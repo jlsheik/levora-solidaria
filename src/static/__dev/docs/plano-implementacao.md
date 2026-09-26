@@ -951,6 +951,63 @@ proprietário no chat desta sessão.
 
 
 
+## Fase 22 — Modelagem de dados para matching automático (capacidade, logística, área de atendimento) (CONCLUÍDA — camada de dados/API; algoritmo e UI ficam para depois)
+
+Decisão de arquitetura apresentada e aprovada explicitamente pelo
+proprietário antes de qualquer migration (relatório completo entregue no
+chat desta sessão) — as 6 decisões abertas foram todas aprovadas com a
+opção recomendada: capacidade por categoria (não total única); tabela
+nova `organization_matching_settings` separada em vez de alterar
+`organizations`; nova permissão `organizacao.gerencie`; área de
+atendimento como cidade/estado texto livre (sem tabela de municípios
+normalizada); "capacidade disponível" sempre calculada, nunca armazenada;
+`observacoes_horarios` incluída desde já.
+
+- [x] `db/migrations/0004_organization_matching_config.sql` (e
+      `db/schema.sql` correspondente) — 3 tabelas novas:
+      `organization_capacities` (teto declarado por categoria+unidade,
+      nunca um contador automático — "disponível" é sempre calculado como
+      `max_capacity − saldo atual em stock_transactions/inventory_items`
+      da mesma categoria, para não duplicar a fonte de verdade que já
+      existe), `organization_matching_settings` (1:1, logística +
+      horários — `realiza_coleta`, `raio_coleta_km` opcional e só
+      informativo por enquanto, `observacoes_logisticas`,
+      `observacoes_horarios`), `organization_service_areas` (municípios
+      atendidos além da sede, cidade/estado texto livre com unique
+      case-insensitive).
+- [x] Tipos Kysely adicionados a `src/helpers/schema.tsx`
+      (`OrganizationCapacities`, `OrganizationMatchingSettings`,
+      `OrganizationServiceAreas`).
+- [x] Nova permissão `organizacao.gerencie` (só
+      proprietário/administrador) em `src/helpers/permissions.tsx` — ver
+      `docs/RBAC_PERMISSOES.md`. Leitura (`organization-matching-config_GET`)
+      é aberta a qualquer membro ativo, sem permissão nomeada — dado
+      institucional, não sensível.
+- [x] 6 endpoints: `organization-matching-config_GET` (leitura
+      consolidada), `organization-capacities_POST` (upsert por
+      categoria+unidade), `organization-capacities-delete_POST`,
+      `organization-matching-settings_POST` (upsert 1:1),
+      `organization-service-areas_POST` (bloqueia duplicata
+      case-insensitive com 409), `organization-service-areas-delete_POST`.
+      Todos com auditoria (`organizacao.capacidade_alterada/removida`,
+      `organizacao.configuracao_logistica_alterada`,
+      `organizacao.area_atendimento_alterada`) e isolamento multi-tenant
+      testado explicitamente (não é possível ler/alterar/remover dado de
+      outra organização, mesmo informando o ID certo).
+- [x] 18 testes novos (`test/organizationMatchingConfig.test.ts`) + 1
+      teste de RBAC (`test/permissions.test.ts`) — 123→141 no total desta
+      sessão.
+- [ ] **Não implementado ainda, de propósito**: os 4 critérios inertes de
+      `opportunityMatching.tsx` continuam `"nao_aplicavel"` — ligar o
+      algoritmo a estes dados novos é um próximo passo separado, só depois
+      de confirmar que a camada de dados/API está correta (mesma ordem que
+      o relatório de arquitetura já registrava: "só depois que existir
+      dado real para ler").
+- [ ] **UI não construída ainda** — tela de configuração
+      (`organizacoes.$organizationId.tsx`, nova aba) fica para quando o
+      wiring do algoritmo também estiver pronto, para não entregar um
+      formulário que ainda não afeta nada de verdade.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

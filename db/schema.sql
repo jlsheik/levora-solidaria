@@ -119,6 +119,68 @@ CREATE INDEX idx_audit_log_org ON audit_log(organization_id, created_at DESC);
 CREATE INDEX idx_audit_log_entity ON audit_log(entity_type, entity_id);
 
 -- ============================================================
+-- Fase 21 — Configuração de organização para matching automático
+-- (capacidade por categoria, logística/horários, área de atendimento)
+-- Ver docs/plano-implementacao.md, Fase 21/22, e opportunityMatching.tsx
+-- (os 4 critérios que hoje ficam "nao_aplicavel" por falta destes dados).
+-- ============================================================
+
+-- Teto DECLARADO de capacidade por categoria — nunca um contador que sobe
+-- e desce sozinho. "Disponível" é sempre calculado em tempo real como
+-- max_capacity menos o saldo já existente em stock_transactions/
+-- inventory_items da mesma categoria — de propósito, para não criar um
+-- segundo sistema de estoque paralelo ao que já existe (e já é auditado).
+-- category/unit são texto livre, na mesma convenção de inventory_items —
+-- não existe uma taxonomia normalizada em nenhum lugar do sistema hoje;
+-- comparação por categoria no matching usa normalize()/keywordScore(),
+-- o mesmo mecanismo fuzzy já usado para comparar oportunidade x necessidade.
+CREATE TABLE organization_capacities (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  category TEXT NOT NULL,
+  unit TEXT NOT NULL,
+  max_capacity NUMERIC(12,3) NOT NULL CHECK (max_capacity >= 0),
+  created_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, category, unit)
+);
+CREATE TRIGGER organization_capacities_set_updated_at BEFORE UPDATE ON organization_capacities FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE INDEX idx_organization_capacities_org ON organization_capacities(organization_id);
+
+-- 1:1 com organizations — agrupa configuração de logística/horários para
+-- matching num único lugar, sem alterar a tabela organizations em si
+-- (que nunca teve um fluxo de edição pós-criação). raio_coleta_km e
+-- observacoes_horarios são guardados desde já mas ainda não entram em
+-- nenhum cálculo de distância real (sem geocodificação configurada) —
+-- só para não exigir nova migration quando isso for implementado.
+CREATE TABLE organization_matching_settings (
+  organization_id INTEGER PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+  realiza_coleta BOOLEAN NOT NULL DEFAULT false,
+  raio_coleta_km INTEGER CHECK (raio_coleta_km IS NULL OR raio_coleta_km > 0),
+  observacoes_logisticas TEXT,
+  observacoes_horarios TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TRIGGER organization_matching_settings_set_updated_at BEFORE UPDATE ON organization_matching_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Municípios atendidos ALÉM da sede (organizations.city/state, que conta
+-- implicitamente). Texto livre em pares (mesma convenção de
+-- organizations.city/state e opportunity_registry.location_city/state) —
+-- de propósito, não uma lista textual solta nem uma tabela de municípios
+-- normalizada (não existe uma em nenhum outro lugar do sistema hoje).
+CREATE TABLE organization_service_areas (
+  id SERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  city TEXT NOT NULL,
+  state TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_organization_service_areas_org ON organization_service_areas(organization_id);
+CREATE INDEX idx_organization_service_areas_location ON organization_service_areas(city, state);
+CREATE UNIQUE INDEX idx_organization_service_areas_unique ON organization_service_areas(organization_id, lower(city), state);
+
+-- ============================================================
 -- Fase 2 — Inventário e necessidades
 -- ============================================================
 CREATE TYPE stock_transaction_type AS ENUM ('entrada', 'saida', 'ajuste');
