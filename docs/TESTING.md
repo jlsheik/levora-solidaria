@@ -90,10 +90,12 @@ chamada — sem precisar mockar nada dessas camadas.
 
 ## O que ainda falta (próximos passos naturais desta suíte)
 
-- Testes de isolamento cruzado mais extensos (ex.: `opportunity_registry`,
-  `opportunity_allocations`, `logistics_events`, `approval_requests`) — hoje
-  só `stock_transactions` e `needs` têm teste de isolamento explícito.
-  Novos testes devem seguir o mesmo padrão de `stockTransactions.test.ts`.
+- ~~Testes de isolamento cruzado mais extensos~~ — resolvido:
+  `test/crossOrgIsolation.test.ts` cobre `opportunity_allocations`
+  (decidir, registrar logística, listar), `approval_requests` (listar,
+  decidir) e o isolamento de nível de plataforma do `opportunity_registry`
+  (só admin de plataforma altera status, não qualquer proprietário de
+  organização).
 - Testes de idempotência (`background_task_runs.idempotency_key`,
   `runMatchingForOpportunity` chamado duas vezes para a mesma oportunidade).
 - Testes de segurança adicionais listados no master prompt (seções 111–119):

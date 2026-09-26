@@ -111,6 +111,71 @@ export async function addMembership(organizationId: number, userId: number, role
     .execute();
 }
 
+/** Usuário com `role: "admin"` — o único papel que passa por `requirePlatformAdmin`. */
+export async function createPlatformAdmin(overrides?: { email?: string; displayName?: string }): Promise<AuthenticatedTestUser> {
+  const user = await createTestUser(overrides);
+  await db.updateTable("users").set({ role: "admin" }).where("id", "=", user.id).execute();
+  const cookie = await createSessionCookie(user.id);
+  return { userId: user.id, email: user.email, cookie };
+}
+
+/** Fonte "manual" — único connectorKey que nasce `ativa` sem configuração externa (ver connectorsManual.tsx). */
+export async function createTestSource(createdByUserId: number, overrides: { name?: string } = {}) {
+  const suffix = randomBytes(3).toString("hex");
+  const [source] = await db
+    .insertInto("sources")
+    .values({
+      name: overrides.name ?? `Fonte de teste ${suffix}`,
+      type: "outro",
+      connectorKey: "manual",
+      status: "ativa",
+      createdByUserId,
+    })
+    .returning(["id", "name", "status"])
+    .execute();
+  return source;
+}
+
+/** Descoberta no registro central (`opportunity_registry`) — sem organização dona, ver docs/ARCHITECTURE.md. */
+export async function createTestOpportunityRegistry(
+  sourceId: number,
+  discoveredByUserId: number,
+  overrides: { title?: string; status?: "descoberta" | "validada" | "aguardando_destinacao" | "reservada" } = {}
+) {
+  const [opportunity] = await db
+    .insertInto("opportunityRegistry")
+    .values({
+      sourceId,
+      title: overrides.title ?? "Doação de teste no registro central",
+      status: overrides.status ?? "validada",
+      quantity: "10",
+      unit: "unidade",
+      discoveredByUserId,
+    })
+    .returning(["id", "title", "status"])
+    .execute();
+  return opportunity;
+}
+
+/** Atribuição de uma descoberta central a uma organização (`opportunity_allocations`). */
+export async function createTestAllocation(
+  opportunityRegistryId: number,
+  organizationId: number,
+  overrides: { status?: "proposta" | "aceita" | "recusada" | "em_coleta" | "em_transporte"; quantityAllocated?: number } = {}
+) {
+  const [allocation] = await db
+    .insertInto("opportunityAllocations")
+    .values({
+      opportunityRegistryId,
+      organizationId,
+      status: overrides.status ?? "proposta",
+      quantityAllocated: String(overrides.quantityAllocated ?? 5),
+    })
+    .returning(["id", "status", "organizationId"])
+    .execute();
+  return allocation;
+}
+
 /** Constrói um Request (Web Fetch API) igual ao que server/index.ts monta a partir do Express. */
 export function buildRequest(
   path: string,
