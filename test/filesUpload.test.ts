@@ -106,6 +106,52 @@ describe("upload e download de arquivo (comprovação de entrega)", () => {
     expect(response.status).toBe(404);
   });
 
+  it("rejeita nome de arquivo com caractere de controle (CRLF) — proteção contra injeção de cabeçalho HTTP no download", async () => {
+    const response = await postFilesUpload(
+      buildRequest("files-upload", {
+        method: "POST",
+        cookie: owner.cookie,
+        body: {
+          organizationId: orgId,
+          purpose: "comprovante_entrega",
+          fileName: "entrega.png\r\nSet-Cookie: adulterado=1",
+          contentType: "image/png",
+          fileBase64: TINY_PNG_BASE64,
+        },
+      })
+    );
+    expect(response.status).toBe(400);
+
+    const rows = await db.selectFrom("files").select(["id"]).where("organizationId", "=", orgId).execute();
+    expect(rows).toHaveLength(0); // nada foi gravado
+  });
+
+  it("defesa em profundidade: mesmo se um nome de arquivo malicioso já existisse no banco, o download nunca gera um Content-Disposition adulterado", async () => {
+    // Simula uma linha gravada antes da validação existir (ou por qualquer
+    // outro caminho futuro) — grava direto no banco, sem passar pelo schema.
+    const uploadResponse = await postFilesUpload(
+      buildRequest("files-upload", {
+        method: "POST",
+        cookie: owner.cookie,
+        body: { organizationId: orgId, purpose: "comprovante_entrega", fileName: "entrega.png", contentType: "image/png", fileBase64: TINY_PNG_BASE64 },
+      })
+    );
+    const { file } = await parseJson<{ file: { id: number } }>(uploadResponse);
+    await db
+      .updateTable("files")
+      .set({ originalFilename: 'entrega.png"\r\nX-Injetado: sim' })
+      .where("id", "=", file.id)
+      .execute();
+
+    const downloadResponse = await getFilesDownload(buildRequest(`files-download?fileId=${file.id}`, { cookie: owner.cookie }));
+    expect(downloadResponse.status).toBe(200);
+    const disposition = downloadResponse.headers.get("Content-Disposition") ?? "";
+    expect(disposition).not.toContain("\r");
+    expect(disposition).not.toContain("\n");
+    expect(disposition).not.toContain('"sim');
+    expect(downloadResponse.headers.get("X-Injetado")).toBeNull();
+  });
+
   it("bloqueia (429) muitos uploads em pouco tempo, por usuário", async () => {
     for (let i = 0; i < 30; i++) {
       const response = await postFilesUpload(

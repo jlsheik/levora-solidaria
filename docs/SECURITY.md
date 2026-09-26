@@ -65,6 +65,35 @@ tocar no banco — nunca confia em tipo declarado no TypeScript sozinho
 automaticamente) — nunca concatenação de string SQL, o que já elimina a
 classe de vulnerabilidade de SQL injection por constução.
 
+## CSRF — por que este app não usa um token explícito
+
+Auditado de propósito (não por omissão) antes de decidir se um token CSRF
+seria necessário. Três propriedades independentes da arquitetura atual já
+tornam CSRF clássico não explorável, sem precisar de um mecanismo dedicado:
+
+1. **Cookie de sessão `SameSite=Lax`** ([`getSetServerSession.tsx`](../src/helpers/getSetServerSession.tsx)) —
+   não é enviado em requisições POST/fetch cross-site (só em navegação
+   GET de topo), que é exatamente o vetor que CSRF explora.
+2. **Sem CORS configurado** (`server/index.ts`) — nenhuma origem externa
+   recebe `Access-Control-Allow-Credentials`, então nem um `fetch`
+   JavaScript cross-origin com credenciais é possível.
+3. **Corpo obrigatoriamente serializado em `superjson`** — todo endpoint
+   que muda estado faz `superjson.parse(await request.text())`. Um
+   `<form>` HTML simples não consegue gerar esse payload (produz
+   `application/x-www-form-urlencoded` ou `multipart/form-data`, que
+   falha o parse antes de qualquer efeito colateral) — testado
+   explicitamente em `test/securityHardening.test.ts`.
+4. **Autenticação é 100% via cookie**, sem token/header alternativo — não
+   existe um caminho de autenticação secundário que pudesse contornar o
+   `SameSite=Lax` acima.
+
+Isso deixaria de valer se, no futuro, alguém: adicionar CORS com
+credenciais para uma origem não confiável; rebaixar `SameSite` para
+`None`; ou criar um caminho de autenticação via token/query-string.
+`test/auth.test.ts` trava os atributos do cookie
+(`HttpOnly`/`Secure`/`SameSite=Lax`) como teste de regressão para o
+primeiro caso.
+
 ## Armazenamento de arquivos
 
 Ver [`docs/UPLOAD_DE_ARQUIVOS.md`](UPLOAD_DE_ARQUIVOS.md). Privado por

@@ -17,6 +17,14 @@ export interface ClaimResult {
   runId: string;
 }
 
+// SQLSTATE de "unique_violation" no Postgres — usado para reconhecer a
+// corrida abaixo independentemente da mensagem de erro (que pode variar).
+const POSTGRES_UNIQUE_VIOLATION = "23505";
+
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === POSTGRES_UNIQUE_VIOLATION;
+}
+
 export async function claimTaskRun(params: {
   taskName: string;
   idempotencyKey?: string;
@@ -24,47 +32,68 @@ export async function claimTaskRun(params: {
   triggeredByUserId?: number | null;
   maxAttempts?: number;
 }): Promise<ClaimResult> {
-  return db.transaction().execute(async (trx) => {
-    if (params.idempotencyKey) {
-      const existing = await trx
-        .selectFrom("backgroundTaskRuns")
-        .select(["id", "status", "attemptCount", "maxAttempts"])
-        .where("idempotencyKey", "=", params.idempotencyKey)
-        .executeTakeFirst();
+  try {
+    return await db.transaction().execute(async (trx) => {
+      if (params.idempotencyKey) {
+        const existing = await trx
+          .selectFrom("backgroundTaskRuns")
+          .select(["id", "status", "attemptCount", "maxAttempts"])
+          .where("idempotencyKey", "=", params.idempotencyKey)
+          .executeTakeFirst();
 
-      if (existing) {
-        // Já existe execução com esta chave: só reprocessa se a anterior
-        // falhou e ainda há tentativas disponíveis. Caso contrário, é
-        // idempotência de verdade — não roda de novo.
-        if (existing.status === "falhou" && existing.attemptCount < existing.maxAttempts) {
-          await trx
-            .updateTable("backgroundTaskRuns")
-            .set({ status: "executando", startedAt: new Date(), attemptCount: existing.attemptCount + 1, updatedAt: new Date() })
-            .where("id", "=", existing.id)
-            .execute();
-          return { claimed: true, runId: existing.id };
+        if (existing) {
+          // Já existe execução com esta chave: só reprocessa se a anterior
+          // falhou e ainda há tentativas disponíveis. Caso contrário, é
+          // idempotência de verdade — não roda de novo.
+          if (existing.status === "falhou" && existing.attemptCount < existing.maxAttempts) {
+            await trx
+              .updateTable("backgroundTaskRuns")
+              .set({ status: "executando", startedAt: new Date(), attemptCount: existing.attemptCount + 1, updatedAt: new Date() })
+              .where("id", "=", existing.id)
+              .execute();
+            return { claimed: true, runId: existing.id };
+          }
+          return { claimed: false, runId: existing.id };
         }
-        return { claimed: false, runId: existing.id };
       }
+
+      const [run] = await trx
+        .insertInto("backgroundTaskRuns")
+        .values({
+          taskName: params.taskName,
+          idempotencyKey: params.idempotencyKey ?? null,
+          status: "executando",
+          payload: params.payload ?? {},
+          attemptCount: 1,
+          maxAttempts: params.maxAttempts ?? 3,
+          startedAt: new Date(),
+          triggeredByUserId: params.triggeredByUserId ?? null,
+        })
+        .returning(["id"])
+        .execute();
+
+      return { claimed: true, runId: run.id };
+    });
+  } catch (error) {
+    // Corrida real sob concorrência: duas chamadas com a MESMA
+    // idempotencyKey podem ambas fazer o SELECT acima e verem "não existe"
+    // antes de qualquer uma inserir (READ COMMITTED não impede isso). A
+    // constraint UNIQUE em background_task_runs.idempotency_key garante que
+    // só uma linha é criada, mas sem este catch a chamada perdedora da
+    // corrida recebia uma exceção de violação de unicidade não tratada, em
+    // vez do mesmo `claimed: false` que o ramo "já existe" acima devolve
+    // quando a corrida não acontece. Trata os dois casos como idênticos
+    // para quem chama.
+    if (params.idempotencyKey && isUniqueViolation(error)) {
+      const existing = await db
+        .selectFrom("backgroundTaskRuns")
+        .select(["id"])
+        .where("idempotencyKey", "=", params.idempotencyKey)
+        .executeTakeFirstOrThrow();
+      return { claimed: false, runId: existing.id };
     }
-
-    const [run] = await trx
-      .insertInto("backgroundTaskRuns")
-      .values({
-        taskName: params.taskName,
-        idempotencyKey: params.idempotencyKey ?? null,
-        status: "executando",
-        payload: params.payload ?? {},
-        attemptCount: 1,
-        maxAttempts: params.maxAttempts ?? 3,
-        startedAt: new Date(),
-        triggeredByUserId: params.triggeredByUserId ?? null,
-      })
-      .returning(["id"])
-      .execute();
-
-    return { claimed: true, runId: run.id };
-  });
+    throw error;
+  }
 }
 
 export async function finishTaskRun(runId: string, result: Json = {}): Promise<void> {

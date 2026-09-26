@@ -44,10 +44,17 @@ export async function handle(request: Request) {
       metadata: { originalFilename: file.originalFilename },
     });
 
+    // Defesa em profundidade: o schema de upload já rejeita caractere de
+    // controle no nome do arquivo (ver files-upload_POST.schema.ts), mas um
+    // arquivo gravado antes dessa validação existir (ou por qualquer outro
+    // caminho futuro que escreva `files.original_filename`) não pode virar
+    // injeção de cabeçalho HTTP aqui.
+    const safeFilename = file.originalFilename.replace(/["\r\n]/g, "");
+
     return new Response(new Uint8Array(buffer), {
       headers: {
         "Content-Type": file.contentType,
-        "Content-Disposition": `inline; filename="${file.originalFilename.replace(/"/g, "")}"`,
+        "Content-Disposition": `inline; filename="${safeFilename}"`,
         "Cache-Control": "private, no-store",
       },
     });

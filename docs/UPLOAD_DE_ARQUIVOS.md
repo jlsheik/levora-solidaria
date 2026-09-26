@@ -59,6 +59,22 @@ paramos de repassar os cabeçalhos `content-length`/`transfer-encoding` do
 `Response` original, deixando o Express recalculá-los a partir do buffer
 que ele de fato envia.
 
+## Injeção de cabeçalho HTTP via nome de arquivo (RESOLVIDO)
+
+Achado numa auditoria de segurança: `fileName` era validado só por
+tamanho (`z.string().min(1).max(255)`), sem restringir caracteres. O nome
+gravado (`files.original_filename`) é usado literalmente no header
+`Content-Disposition` do download (`files-download_GET.ts`). Um nome como
+`"a\r\nSet-Cookie: adulterado=1"` injetaria cabeçalhos HTTP arbitrários na
+resposta do download — só a aspa dupla era removida antes, não CR/LF.
+
+Corrigido em duas camadas: (1) `files-upload_POST.schema.ts` agora rejeita
+qualquer caractere de controle no nome do arquivo (400, nada é gravado);
+(2) `files-download_GET.ts` também remove `"`/`\r`/`\n` defensivamente ao
+montar o header, para que uma linha gravada antes desta validação existir
+(ou por qualquer caminho futuro) nunca vire injeção. Testado em
+`test/filesUpload.test.ts`.
+
 ## Configuração (opcional)
 
 Sem nenhuma variável de storage configurada, tudo funciona via disco local

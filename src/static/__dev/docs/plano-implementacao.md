@@ -871,6 +871,86 @@ correção de verdade:
 
 
 
+## Fase 21 — Auditoria de segurança/integridade dirigida (idempotência, SQLi, CSRF, XSS, códigos de acesso) (CONCLUÍDA — escopo desta etapa)
+
+Pedido explícito: investigar antes de alterar, fechar testes de
+segurança/integridade descobertos, preparar a modelagem de matching sem
+implementá-la ainda. Auditoria feita com 4 investigações paralelas
+(sessão/CSRF, idempotência/matching, convites+SQLi, XSS+schema) antes de
+qualquer mudança de código — ver relatório completo entregue ao
+proprietário no chat desta sessão.
+
+### Achados e correções reais (bugs, não apenas testes)
+- [x] **Corrida em `claimTaskRun`**: chamadas concorrentes com a mesma
+      `idempotencyKey` podiam gerar uma exceção de violação de unicidade
+      não tratada em vez de `claimed: false`. Corrigido em
+      `src/helpers/backgroundTasks.tsx` — ver `docs/OPERATIONS.md`.
+- [x] **Injeção de cabeçalho HTTP via nome de arquivo**: `fileName` não
+      restringia caracteres de controle, e só a aspa dupla era removida no
+      `Content-Disposition` do download. Corrigido nas duas camadas
+      (schema de upload + defesa em profundidade no download) — ver
+      `docs/UPLOAD_DE_ARQUIVOS.md`.
+- [x] **`idempotencyKey` é capacidade não usada** por nenhum chamador real
+      (as 4 tarefas agendadas não passam essa chave) — documentado, não
+      "corrigido" silenciosamente, porque decidir a granularidade de
+      deduplicação por chave de negócio é uma escolha de produto, não um
+      bug. A proteção real contra duplicação hoje vem das cláusulas
+      `WHERE status = ...` de cada tarefa, já testada.
+
+### Testes novos (35 testes, de 87 para 122 no total desta sessão)
+- [x] `test/idempotency.test.ts` (10 testes): `claimTaskRun` sequencial,
+      concorrente (prova da correção da corrida), reprocessamento de
+      falha respeitando `maxAttempts`, chaves isoladas entre si;
+      `runMatchingForOpportunity` chamado duas vezes (alta confiança →
+      2ª chamada ignorada por status; confiança média com quantidade
+      restante → 2ª chamada não duplica alocação para a mesma
+      organização via `existingOrgIds`; quantidade já totalmente
+      atribuída → ignorada); `expireOpportunities` e `expireReservations`
+      chamados duas vezes sem duplicar auditoria (mesma cobertura que já
+      existia só para `expireApprovalRequests`).
+- [x] `test/securityHardening.test.ts` (13 testes): SQL injection (bypass
+      de login por tautologia — rejeitado por validação e por não
+      encontrar sessão; nome de organização com metacaracteres gravado
+      como dado literal, sem afetar outras organizações), XSS armazenado
+      (título/descrição de necessidade, motivo de estoque, nome de
+      organização — payloads gravados e devolvidos literalmente, nunca
+      executados ou mangled pela API), CSRF (corpo não-superjson,
+      equivalente ao que um `<form>` cross-site produziria, rejeitado
+      antes de qualquer efeito), ciclo de vida de convites (reaceitar
+      convite já aceito → 410, sem segunda membership; convite revogado
+      não reativa mesmo com tentativas repetidas), e status de
+      organização (só admin de plataforma altera; proprietário da própria
+      organização e outsider são bloqueados; sem sessão é 401) — este
+      último endpoint (`platform-organizations-status_POST`) não tinha
+      NENHUM teste antes desta fase.
+- [x] `test/filesUpload.test.ts` (+2 testes): rejeita nome de arquivo com
+      CRLF; defesa em profundidade confirma que mesmo uma linha já gravada
+      com nome malicioso nunca produz um `Content-Disposition` adulterado.
+- [x] `test/auth.test.ts` (+1 teste): trava os atributos do cookie de
+      sessão (`HttpOnly`/`Secure`/`SameSite=Lax`) como regressão da base
+      da análise de CSRF.
+
+### Não coberto nesta fase (por decisão, não por esquecimento)
+- [ ] CSRF/XSS "de verdade" via navegador real (Playwright/Cypress) — os
+      testes aqui provam as propriedades do backend que tornam o ataque
+      inviável (parsing de corpo, escaping do React confirmado por leitura
+      de código), não simulam um navegador de verdade fazendo a requisição
+      cross-site. Ver relatório entregue ao proprietário para a
+      justificativa completa.
+- [ ] Modelagem de capacidade/raio de atendimento para o matching (Fase 7
+      do pedido) — investigada (ver achado abaixo), mas **não
+      implementada**: é uma decisão de arquitetura que exige escolha
+      humana (unidade de capacidade, granularidade de localização),
+      apresentada ao proprietário sem decisão silenciosa.
+- [x] **Achado importante para quando a Fase 7 for decidida**:
+      `src/helpers/opportunityMatching.tsx` já tem 4 critérios placeholder
+      inertes (`capacidade_armazenamento`, `capacidade_logistica`,
+      `raio_atendimento`, `horarios_restricoes`, todos com `weight: 0`) —
+      o algoritmo já foi desenhado esperando exatamente esses campos, só
+      faltam existir no schema de `organizations` e serem preenchidos.
+
+
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

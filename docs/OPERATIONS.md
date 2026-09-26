@@ -25,6 +25,31 @@ quando falha.
 `docs/DEPLOYMENT.md`, "Múltiplas instâncias" — cada instância roda o
 agendador de forma independente hoje.
 
+### Idempotência de `background_task_runs` — achado de auditoria (RESOLVIDO parcialmente)
+
+Auditoria de segurança encontrou dois pontos:
+
+1. **`idempotencyKey` nunca é usado por nenhum chamador real** — as 4
+   tarefas agendadas chamam `claimTaskRun({ taskName })` sem essa chave.
+   A proteção real contra duplicação hoje vem das cláusulas
+   `WHERE status = ...` de cada tarefa (cada uma naturalmente idempotente
+   por conta própria — ver testes em `test/idempotency.test.ts`), não do
+   mecanismo de idempotência dedicado. Isso é suficiente para o padrão
+   atual (nenhuma tarefa hoje precisa de deduplicação por uma chave de
+   negócio específica), mas o mecanismo de `idempotencyKey` continua sendo
+   "capacidade não usada" — decisão registrada aqui, não corrigida
+   silenciosamente: usar essa chave nas tarefas agendadas exigiria decidir
+   a granularidade de deduplicação (por tick de cron? por dia?), o que é
+   uma escolha de produto, não um bug.
+2. **Corrida real corrigida**: `claimTaskRun` fazia SELECT-then-INSERT
+   dentro de uma transação; sob concorrência genuína com a MESMA
+   `idempotencyKey`, duas chamadas podiam ambas ver "não existe" (READ
+   COMMITTED não impede isso) e uma delas recebia uma exceção de violação
+   de unicidade não tratada, em vez do mesmo `claimed: false` que o
+   caminho normal devolve. Corrigido capturando a violação e reconsultando
+   a linha vencedora — `src/helpers/backgroundTasks.tsx`. Testado com
+   chamadas concorrentes reais em `test/idempotency.test.ts`.
+
 ## Monitoramento
 
 - `GET /_api/__health` — status do processo e contagem de endpoints

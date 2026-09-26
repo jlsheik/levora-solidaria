@@ -9,7 +9,12 @@ export const ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp", "
 export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),
   purpose: z.enum(["comprovante_entrega"]),
-  fileName: z.string().min(1).max(255),
+  // Sem caracteres de controle (\r, \n, etc.) — este valor é gravado como
+  // `originalFilename` e depois usado literalmente no header
+  // `Content-Disposition` do download (files-download_GET.ts). Sem esta
+  // restrição, um nome de arquivo como "a\r\nSet-Cookie: ..." injetaria
+  // cabeçalhos HTTP arbitrários na resposta do download.
+  fileName: z.string().min(1).max(255).regex(/^[^\x00-\x1F\x7F]+$/, "Nome de arquivo não pode conter caracteres de controle"),
   contentType: z.enum(ALLOWED_CONTENT_TYPES),
   fileBase64: z.string().min(1),
 });

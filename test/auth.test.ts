@@ -184,4 +184,22 @@ describe("cadastro e login por senha", () => {
     expect(secondsAteExpirar).toBeGreaterThan(604800 - 5);
     expect(secondsAteExpirar).toBeLessThanOrEqual(604800 + 5);
   });
+
+  // Fase 4 (CSRF) do relatório de auditoria: este app não usa token CSRF
+  // explícito porque a arquitetura já é resistente por design — ver
+  // docs/SECURITY.md ("Por que CSRF não precisa de token aqui"). Este teste
+  // trava a propriedade que sustenta essa análise (SameSite=Lax) para que
+  // uma mudança futura não a rebaixe silenciosamente sem que ninguém perceba.
+  it("cookie de sessão é HttpOnly + Secure + SameSite=Lax — a base da resistência a CSRF deste app", async () => {
+    const response = await postRegister(
+      buildRequest("auth/register_with_password", {
+        method: "POST",
+        body: { email: "csrf-cookie@example.com", password: "senha-valida-123", displayName: "Pessoa" },
+      })
+    );
+    const setCookie = response.headers.get("Set-Cookie")!;
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("Secure");
+    expect(setCookie).toContain("SameSite=Lax");
+  });
 });
