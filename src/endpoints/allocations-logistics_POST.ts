@@ -4,6 +4,7 @@ import { requirePermission } from "../helpers/organizationAccess";
 import { recordAuditLogEntry } from "../helpers/auditLog";
 import { runMatchingForOpportunity } from "../helpers/opportunityMatching";
 import { reopenOpportunityIfNoActiveAllocations } from "../helpers/reopenOpportunity";
+import { concludeOpportunityIfAllTerminalAndReceived } from "../helpers/concludeOpportunity";
 import { schema } from "./allocations-logistics_POST.schema";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse";
@@ -81,10 +82,22 @@ export async function handle(request: Request) {
       // auditoria pediu para evitar. Travar recursos "próprios" primeiro e
       // deixar o audit log sempre por último é o mesmo padrão já usado em
       // needs-status_POST.ts e em todo o resto do código.
+      // Cancelar pode CONCLUIR a oportunidade (se já existir uma allocation
+      // irmã "recebida" e este cancelamento fizer todas ficarem terminais —
+      // achado de auditoria: antes, só allocations-receive_POST checava
+      // essa condição) ou REABRIR (se nenhuma foi recebida ainda). Tenta
+      // concluir primeiro; só tenta reabrir se não concluiu — ver o mesmo
+      // padrão em allocations-decide_POST.ts.
       let reopenOpportunityId: number | null = null;
+      let concludedOpportunityId: number | null = null;
       if (input.eventType === "cancelado") {
-        const didReopen = await reopenOpportunityIfNoActiveAllocations(trx, allocation.opportunityRegistryId);
-        if (didReopen) reopenOpportunityId = allocation.opportunityRegistryId;
+        const concluded = await concludeOpportunityIfAllTerminalAndReceived(trx, allocation.opportunityRegistryId);
+        if (concluded) {
+          concludedOpportunityId = allocation.opportunityRegistryId;
+        } else {
+          const didReopen = await reopenOpportunityIfNoActiveAllocations(trx, allocation.opportunityRegistryId);
+          if (didReopen) reopenOpportunityId = allocation.opportunityRegistryId;
+        }
       }
 
       await recordAuditLogEntry(
@@ -98,6 +111,20 @@ export async function handle(request: Request) {
         },
         trx
       );
+
+      if (concludedOpportunityId) {
+        await recordAuditLogEntry(
+          {
+            organizationId: null,
+            actorUserId: user.id,
+            action: "descoberta_central.concluida",
+            entityType: "opportunity_registry",
+            entityId: String(concludedOpportunityId),
+            metadata: {},
+          },
+          trx
+        );
+      }
 
       return { type: "success" as const, status: nextStatus, reopenOpportunityId };
     });

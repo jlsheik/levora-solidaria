@@ -1406,6 +1406,77 @@ peso/fórmula/threshold/critério/`ALGORITHM_VERSION`/schema:
       reabertura), registrado aqui como achado conhecido para decisão
       futura.
 
+## Fase 28 — Correção do bug crítico de conclusão da oportunidade (CONCLUÍDA — motor de matching 1.3 intocado)
+
+Auditoria read-only do fechamento por recebimento (seguindo a observação
+registrada ao final da Fase 27) encontrou um achado **CRÍTICO**,
+determinístico (nem precisa de concorrência): a condição de conclusão
+("todas as atribuições da oportunidade em `recebida`/`cancelada`/
+`recusada`, com pelo menos uma `recebida`") só era verificada dentro de
+`allocations-receive_POST.ts`. Cancelar/recusar/expirar a **última**
+atribuição ainda ativa, quando uma irmã já havia sido `"recebida"`,
+deixava a oportunidade presa em `"atribuida"` para sempre — reproduzido
+sequencialmente, sem nenhuma corrida de tempo envolvida. Corrigido aqui,
+sem tocar em pesos/fórmula/threshold/critério/`ALGORITHM_VERSION`/scheduler/
+`reopenOpportunityIfNoActiveAllocations`/schema:
+
+- [x] `src/helpers/concludeOpportunity.tsx` (novo):
+      `concludeOpportunityIfAllTerminalAndReceived(trx, opportunityRegistryId)`
+      — centraliza a regra (antes duplicada implicitamente só em um
+      lugar). Trava a linha da OPORTUNIDADE (`FOR UPDATE`) antes de
+      contar atribuições, exatamente como `reopenOpportunityIfNoActiveAllocations`
+      — mas é uma regra **deliberadamente separada**: para reabertura,
+      `"recebida"` conta como ativa (nunca reabrir uma doação já
+      entregue); para conclusão, `"recebida"` é o próprio estado que
+      precisa existir. A escrita para `"concluida"` é condicional e
+      atômica (`WHERE status='atribuida'` — o único status legítimo
+      nesse ponto, confirmado por análise: uma atribuição só chega a
+      `"recebida"` depois de `"aceita"`, e aceitar sempre leva a
+      oportunidade a `"atribuida"`; enquanto existir uma `"recebida"`,
+      `reopenOpportunityIfNoActiveAllocations` nunca a move dali). Não
+      grava nenhuma entrada de auditoria — decisão deliberada de ordem
+      de locks (ver abaixo).
+- [x] Integrado nos 4 caminhos reais que terminam uma atribuição:
+      `allocations-receive_POST.ts` (recebida — regra migrada para o
+      helper, comportamento idêntico), `allocations-decide_POST.ts`
+      (recusada — tenta concluir primeiro, só tenta reabrir se não
+      concluiu), `allocations-logistics_POST.ts` (cancelado — mesmo
+      padrão), `expireReservations.tsx` (expiração — mesmo padrão,
+      dentro da transação curta por oportunidade já existente da Fase
+      27). As duas condições (concluir vs. reabrir) são mutuamente
+      exclusivas pelos mesmos dados — a ordem entre elas nunca produz
+      resultado incorreto.
+- [x] **Ordem de locks mantida consistente com a correção da Fase 27**
+      (que encontrou um deadlock real, `PostgresError 40P01`, por ordem
+      inconsistente entre o advisory lock global da auditoria e a
+      trava da linha da oportunidade): o helper de conclusão nunca
+      grava auditoria internamente; cada um dos 4 chamadores só grava
+      `recordAuditLogEntry` **depois** de chamar o helper (concluir ou
+      reabrir), nunca antes — inclusive `allocations-receive_POST.ts`,
+      que precisou ser reordenado (a chamada a
+      `concludeOpportunityIfAllTerminalAndReceived` foi movida para
+      antes do `recordAuditLogEntry("atribuicao.recebida")`, que antes
+      vinha primeiro). Testado com concorrência real (`Promise.all`,
+      handlers reais, não simulação) entre todas as combinações de
+      caminhos — nenhum `40P01` reproduzido.
+- [x] `test/opportunityConclusion.test.ts` (16 testes novos): os 9
+      cenários obrigatórios (allocation única; A recebida+B ativa não
+      conclui; B recebida depois conclui; B cancelada depois conclui —
+      o bug crítico original; B recusada depois conclui; 3 allocations
+      mistas conclui; nenhuma recebida não conclui por esta regra; 2
+      terminações concorrentes con uma única conclusão; recebimento
+      concorrente em 2 allocations) + 5 cenários de concorrência real
+      entre caminhos diferentes (A: receive+cancel; B: receive+refuse;
+      C: receive+expiração; D: cancel+refuse sem nenhuma recebida; E:
+      3 terminações simultâneas) + 2 de multi-tenancy/idempotência do
+      helper.
+- [x] Suíte completa (198→214 testes) e typecheck confirmados sem
+      regressão. Diff conferido — só o helper novo, sua integração nos
+      4 caminhos, os testes novos, e esta entrada de documentação.
+      `opportunityMatching.tsx`, `db/schema.sql`,
+      `scheduledTaskLock.tsx` e `reopenOpportunity.tsx` com diff zero
+      confirmado (`git diff --stat`).
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

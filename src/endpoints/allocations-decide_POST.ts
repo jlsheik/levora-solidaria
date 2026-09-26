@@ -4,6 +4,7 @@ import { requirePermission } from "../helpers/organizationAccess";
 import { recordAuditLogEntry } from "../helpers/auditLog";
 import { runMatchingForOpportunity } from "../helpers/opportunityMatching";
 import { reopenOpportunityIfNoActiveAllocations } from "../helpers/reopenOpportunity";
+import { concludeOpportunityIfAllTerminalAndReceived } from "../helpers/concludeOpportunity";
 import { schema } from "./allocations-decide_POST.schema";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse";
@@ -46,16 +47,24 @@ export async function handle(request: Request) {
           .execute();
       }
 
-      // reopenOpportunityIfNoActiveAllocations trava a linha da oportunidade
-      // ANTES de contar atribuições-irmãs ainda ativas — serializa essa
-      // decisão contra qualquer outra transação concorrente terminando uma
-      // atribuição diferente da mesma oportunidade (achado de auditoria:
-      // sem essa travação, duas transações concorrentes podiam cada uma ver
-      // a outra ainda "ativa" e nenhuma reabrir a oportunidade).
-      const reopenedForRematch =
-        input.decision === "recusada"
-          ? await reopenOpportunityIfNoActiveAllocations(trx, allocation.opportunityRegistryId)
-          : false;
+      // Recusar pode CONCLUIR a oportunidade (se já existir uma allocation
+      // irmã "recebida" e esta recusa fizer todas ficarem terminais —
+      // achado de auditoria: antes, só allocations-receive_POST checava
+      // essa condição) ou REABRIR (se nenhuma foi recebida ainda). As duas
+      // condições são mutuamente exclusivas pelos mesmos dados — tenta
+      // concluir primeiro; só tenta reabrir se não concluiu. Ambos os
+      // helpers travam a linha da oportunidade ANTES de qualquer
+      // recordAuditLogEntry desta transação (que trava o advisory lock
+      // GLOBAL da auditoria) — mesma ordem em toda a transação, evitando o
+      // deadlock que a Fase 27 encontrou.
+      let concluded = false;
+      let reopenedForRematch = false;
+      if (input.decision === "recusada") {
+        concluded = await concludeOpportunityIfAllTerminalAndReceived(trx, allocation.opportunityRegistryId);
+        if (!concluded) {
+          reopenedForRematch = await reopenOpportunityIfNoActiveAllocations(trx, allocation.opportunityRegistryId);
+        }
+      }
 
       await recordAuditLogEntry(
         {
@@ -68,6 +77,20 @@ export async function handle(request: Request) {
         },
         trx
       );
+
+      if (concluded) {
+        await recordAuditLogEntry(
+          {
+            organizationId: null,
+            actorUserId: user.id,
+            action: "descoberta_central.concluida",
+            entityType: "opportunity_registry",
+            entityId: String(allocation.opportunityRegistryId),
+            metadata: {},
+          },
+          trx
+        );
+      }
 
       return { type: "success" as const, allocation: updated, opportunityRegistryId: allocation.opportunityRegistryId, reopenedForRematch };
     });

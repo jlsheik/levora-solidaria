@@ -4,6 +4,7 @@ import { recordAuditLogEntry } from "./auditLog";
 import { runMatchingForOpportunity } from "./opportunityMatching";
 import { withScheduledTaskLock } from "./scheduledTaskLock";
 import { reopenOpportunityIfNoActiveAllocations } from "./reopenOpportunity";
+import { concludeOpportunityIfAllTerminalAndReceived } from "./concludeOpportunity";
 
 /**
  * Tarefa agendada: libera atribuições propostas automaticamente (confiança
@@ -66,16 +67,39 @@ async function runExpireReservations() {
     }
 
     // Reabrir a oportunidade para novo matching quando não sobrou nenhuma
-    // atribuição ativa. reopenOpportunityIfNoActiveAllocations trava a
-    // linha da oportunidade ANTES de contar atribuições-irmãs (achado de
-    // auditoria: sem essa travação, esta varredura e uma decisão humana
-    // concorrente — ou outra varredura — terminando uma atribuição
-    // diferente da mesma oportunidade podiam cada uma ver a outra ainda
-    // "ativa", e nenhuma reabrir). Cada oportunidade numa transação própria
-    // — mantém o padrão de transações curtas já usado no resto do arquivo.
+    // atribuição ativa — OU concluí-la, se a expiração desta for a última
+    // atribuição pendente e uma irmã já tiver sido "recebida" (achado de
+    // auditoria: antes, só allocations-receive_POST checava a condição de
+    // conclusão; expirar a última atribuição não recebida deixava a
+    // oportunidade presa em "atribuida" para sempre nesse caso). Tenta
+    // concluir primeiro; só tenta reabrir se não concluiu — mesmo padrão
+    // dos outros 3 caminhos. Os dois helpers travam a linha da oportunidade
+    // ANTES de contar atribuições-irmãs, serializando a decisão contra
+    // qualquer outra transação concorrente terminando uma atribuição
+    // diferente da mesma oportunidade. Cada oportunidade numa transação
+    // própria — mantém o padrão de transações curtas já usado no resto do
+    // arquivo.
     for (const oppId of opportunityIds) {
-      const didReopen = await db.transaction().execute((trx) => reopenOpportunityIfNoActiveAllocations(trx, oppId));
-      if (didReopen) {
+      const { reopened } = await db.transaction().execute(async (trx) => {
+        const concluded = await concludeOpportunityIfAllTerminalAndReceived(trx, oppId);
+        if (concluded) {
+          await recordAuditLogEntry(
+            {
+              organizationId: null,
+              actorUserId: null,
+              action: "descoberta_central.concluida",
+              entityType: "opportunity_registry",
+              entityId: String(oppId),
+              metadata: {},
+            },
+            trx
+          );
+          return { concluded: true, reopened: false };
+        }
+        const reopened = await reopenOpportunityIfNoActiveAllocations(trx, oppId);
+        return { concluded: false, reopened };
+      });
+      if (reopened) {
         await runMatchingForOpportunity(oppId, null);
       }
     }

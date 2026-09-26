@@ -3,6 +3,7 @@ import { getServerUserSession } from "../helpers/getServerUserSession";
 import { requirePermission } from "../helpers/organizationAccess";
 import { recordAuditLogEntry } from "../helpers/auditLog";
 import { getItemStockBalance } from "../helpers/stockBalance";
+import { concludeOpportunityIfAllTerminalAndReceived } from "../helpers/concludeOpportunity";
 import { schema } from "./allocations-receive_POST.schema";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse";
@@ -89,6 +90,15 @@ export async function handle(request: Request) {
         })
         .execute();
 
+      // Achado de auditoria corrigido: chamado ANTES de qualquer
+      // recordAuditLogEntry desta transação (que trava o advisory lock
+      // GLOBAL da cadeia de auditoria até o commit) — travar a linha da
+      // oportunidade primeiro e o audit log por último é a mesma ordem
+      // usada nos outros 3 caminhos que também podem concluir a
+      // oportunidade, evitando o deadlock que a Fase 27 encontrou quando
+      // essa ordem ficou invertida em algum caminho.
+      const concluded = await concludeOpportunityIfAllTerminalAndReceived(trx, allocation.opportunityRegistryId);
+
       await recordAuditLogEntry(
         {
           organizationId: input.organizationId,
@@ -101,26 +111,7 @@ export async function handle(request: Request) {
         trx
       );
 
-      // Se todas as atribuições desta descoberta central já estão em um
-      // estado terminal e pelo menos uma foi de fato recebida, a
-      // descoberta como um todo está concluída.
-      const siblingAllocations = await trx
-        .selectFrom("opportunityAllocations")
-        .select(["status"])
-        .where("opportunityRegistryId", "=", allocation.opportunityRegistryId)
-        .execute();
-
-      const terminal = ["recebida", "cancelada", "recusada"];
-      const nowAllTerminal = siblingAllocations.every((a) => terminal.includes(a.status));
-      const hasReceived = siblingAllocations.some((a) => a.status === "recebida");
-
-      if (nowAllTerminal && hasReceived) {
-        await trx
-          .updateTable("opportunityRegistry")
-          .set({ status: "concluida", updatedAt: new Date() })
-          .where("id", "=", allocation.opportunityRegistryId)
-          .execute();
-
+      if (concluded) {
         await recordAuditLogEntry(
           {
             organizationId: null,
