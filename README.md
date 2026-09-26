@@ -1,5 +1,7 @@
 # Levora Solidária
 
+[![CI](https://github.com/jlsheik/levora-solidaria/actions/workflows/ci.yml/badge.svg)](https://github.com/jlsheik/levora-solidaria/actions/workflows/ci.yml)
+
 Levora Solidária é uma infraestrutura de solidariedade que conecta
 automaticamente recursos disponíveis (doações) a necessidades reais de
 pessoas em situação de vulnerabilidade, com rastreabilidade de ponta a

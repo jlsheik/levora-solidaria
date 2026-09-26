@@ -101,5 +101,8 @@ chamada — sem precisar mockar nada dessas camadas.
   parametrizado, mas vale um teste que documente isso), CSRF/XSS na camada
   de API (o projeto retorna JSON puro, risco é baixo, mas não testado
   ainda), tentativa de reativar um código de acesso expirado/revogado.
-- Rodar a suíte em CI a cada push (ainda não configurado — não há pipeline
-  de CI neste repositório).
+- ~~Rodar a suíte em CI a cada push~~ — resolvido:
+  `.github/workflows/ci.yml` roda `npm run typecheck` e `npm test` a cada
+  push/PR na `master`, contra um Postgres real (serviço do próprio job, não
+  mock), com `DATABASE_URL`/`JWT_SECRET` só de CI (nunca os valores reais de
+  desenvolvimento/produção).

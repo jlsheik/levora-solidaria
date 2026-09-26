@@ -40,10 +40,11 @@ aqui para o proprietário confirmar antes de prosseguirmos além da fase 1.
       → ver equipe e auditoria da organização.
 - [x] Todo texto de interface em português brasileiro (menus, formulários,
       mensagens de erro, estados vazios).
-- [ ] Convite de membros por e-mail (adicionar usuário existente/novo a uma
-      organização com um papel). Ainda não implementado.
-- [ ] Painel de administração da plataforma (Levora como operadora,
-      aprovação de organizações em "em_analise").
+- [x] ~~Convite de membros por e-mail~~ — resolvido na Fase 9.
+- [x] ~~Painel de administração da plataforma (Levora como operadora,
+      aprovação de organizações em "em_analise")~~ — já existe desde a Fase 4
+      (`/plataforma`, `platform-organizations_GET`/`-status_POST`); este
+      checkbox só não tinha sido atualizado quando a fase foi concluída.
 
 ## Fase 2 — Necessidades e inventário (CONCLUÍDA)
 
@@ -811,6 +812,61 @@ Ver [`docs/PRIVACY.md`](../../../../docs/PRIVACY.md) ("Retenção e exclusão").
       senha errada não altera nada, bloqueio por organização órfã,
       liberação com outro proprietário ativo, proprietário inativo não
       conta como "outro proprietário".
+
+
+
+## Fase 20 — Revisão de código completa da sessão + CI (CONCLUÍDA)
+
+Depois da Fase 19, uma revisão de código de ponta a ponta de tudo o que foi
+implementado nesta sessão (linha a linha, comportamento removido,
+rastreamento entre arquivos, reuso, simplificação, eficiência e
+convenções) encontrou 10 problemas reais, dos quais 2 eram bugs de
+correção de verdade:
+
+- [x] **Bug de correção 1**: `approval-requests-decide_POST.ts` aplicava a
+      revalidação de saldo (para aprovação de ajuste de estoque de alto
+      risco) DEPOIS de já ter atualizado `approval_requests.status` para
+      "aprovada" dentro da mesma transação — como um `return` comum não
+      desfaz nada já escrito (só uma exceção lançada faz rollback), um
+      saldo insuficiente detectado nesse ponto deixaria o pedido preso em
+      "aprovada" para sempre, sem a ação real ter acontecido. Corrigido
+      validando tudo antes de qualquer mutação.
+- [x] **Bug de correção 2**: `needs-status_POST.ts` exigia só
+      `necessidades.gerencie` para marcar uma necessidade como "atendida",
+      mesmo quando isso dispara baixa automática de estoque — uma mutação
+      de estoque de verdade sem exigir `inventario.lance`. Corrigido
+      exigindo as duas permissões explicitamente nesse caso.
+- [x] Os outros 8 achados (reuso/simplificação/eficiência/altitude), todos
+      corrigidos: `TASK_HANDLERS` duplicado (unificado em
+      `src/helpers/taskHandlers.tsx`), cálculo de saldo de estoque
+      duplicado em 6 endpoints (unificado em
+      `src/helpers/stockBalance.tsx`), expiração de convite duplicada e
+      sem auditoria (unificada em `src/helpers/organizationInvites.tsx`,
+      agora com evento `organizacao.convite_expirado_automaticamente`),
+      uma transação por item nas 3 varreduras de expiração agendadas
+      (agora uma transação por varredura), mapeamento erro→HTTP duplicado
+      em ~41 endpoints por comparação frágil de texto (unificado em
+      `src/helpers/errorResponse.tsx`, usando `instanceof`), e N+1 de
+      consulta em `account-delete_POST.ts` (substituído por uma única
+      query com `NOT EXISTS` correlacionado).
+- [x] Avaliada e **descartada** a sugestão de encurtar o escopo do
+      advisory lock global da cadeia de hash de auditoria
+      (`src/helpers/auditLog.tsx`) trocando para lock de sessão com
+      unlock explícito antes do commit — isso quebraria a garantia de
+      ordenação da cadeia sob concorrência (duas transações poderiam
+      commitar apontando para o mesmo "hash anterior", uma bifurcação
+      silenciosa). Documentado em código o motivo, e aplicada só a
+      redução de escopo genuinamente segura (reordenar as duas gravações
+      de auditoria de `needs-status_POST.ts` para o fim da transação).
+- [x] Repositório publicado no GitHub como privado
+      (`jlsheik/levora-solidaria`) — primeiro push do histórico do
+      projeto para um remoto.
+- [x] ~~Sem pipeline de CI~~ — resolvido: `.github/workflows/ci.yml` roda
+      `npm run typecheck` e `npm test` a cada push/PR na `master`, com
+      Postgres real como serviço do job (nunca mock) e segredos só de CI.
+      Simulado localmente antes do push (mesmos comandos, só variáveis de
+      ambiente, sem `.env.test`) para confirmar que passaria antes de
+      depender do primeiro run real no GitHub.
 
 
 
