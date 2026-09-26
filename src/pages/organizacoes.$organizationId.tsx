@@ -181,6 +181,9 @@ export default function OrganizationDetailPage() {
         <Link to={`/organizacoes/${organizationId}/prestacao-contas`} className={styles.tabNavItem}>
           Prestação de contas
         </Link>
+        <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>
+          Configurações de Matching
+        </Link>
       </nav>
 
       <div className={styles.columns}>

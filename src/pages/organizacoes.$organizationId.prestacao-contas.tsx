@@ -50,6 +50,7 @@ export default function ImpactReportPage() {
         <Link to={`/organizacoes/${organizationId}/oportunidades`} className={styles.tabNavItem}>Oportunidades</Link>
         <Link to={`/organizacoes/${organizationId}/atribuicoes`} className={styles.tabNavItem}>Rede Levora</Link>
         <span className={styles.tabNavItemActive}>Prestação de contas</span>
+        <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>Configurações de Matching</Link>
       </nav>
 
       <div className={styles.titleRow}>

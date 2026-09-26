@@ -306,7 +306,13 @@ CREATE TABLE opportunity_registry (
   title TEXT NOT NULL,
   description TEXT,
   category TEXT,
-  quantity NUMERIC(12,3),
+  -- Mesma proteção que quantity_needed (needs) e quantity_allocated
+  -- (opportunity_allocations) já têm — nula (quantidade desconhecida) é
+  -- permitida, mas zero/negativa nunca é uma quantidade real de doação.
+  -- Fecha uma lacuna estrutural: antes só a validação do Zod em
+  -- opportunity-registry_POST.schema.ts impedia isso, sem constraint no
+  -- banco (achado de auditoria do motor de matching, fase 22).
+  quantity NUMERIC(12,3) CONSTRAINT opportunity_registry_quantity_positive_chk CHECK (quantity IS NULL OR quantity > 0),
   unit TEXT,
   condition TEXT,
   location_city TEXT,

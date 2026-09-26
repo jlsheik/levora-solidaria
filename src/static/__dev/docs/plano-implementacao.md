@@ -1043,6 +1043,90 @@ normalizada); "capacidade disponível" sempre calculada, nunca armazenada;
       de atendimento/logística fica para uma próxima etapa; hoje só é
       possível configurar via API diretamente.
 
+## Fase 23 — Auditoria adversarial do motor de matching + correção dos achados + UI de Configurações de Matching (CONCLUÍDA)
+
+Auditoria técnica completa da Fase 22 pedida explicitamente antes de
+construir a UI (relatório entregue no chat) — encontrou 2 achados reais
+(🔴 unidade nunca verificada em `capacidade_armazenamento`, incluindo
+agregação de estoque misturando unidades incompatíveis; 🟡 `raio_atendimento`
+comparava só cidade, sem exigir o mesmo estado) e 2 achados menores
+(`normalize()` sem `.trim()`; cobertura de teste insuficiente). Todos os 5
+corrigidos com aprovação explícita, escopo mantido (nenhum peso/threshold
+alterado).
+
+### Correções no motor
+- [x] `capacidade_armazenamento` agora exige categoria **e** unidade
+      compatíveis (`normalize(cap.unit) === normalize(opportunity.unit)`)
+      antes de comparar números — categoria batendo com unidade diferente
+      vira `"não aplicável"`, nunca um score inventado.
+- [x] Agregação de uso de estoque agora agrupa por
+      `(organizationId, category, unit)`, não só `(organizationId, category)`
+      — "Alimentos/kg" e "Alimentos/unidade" da mesma organização nunca se
+      somam.
+- [x] `raio_atendimento` agora exige cidade **e** estado juntos para o
+      score 100 — cidades homônimas em UFs diferentes (existem de verdade
+      no Brasil) nunca contam como a mesma localidade.
+- [x] `normalize()` ganhou `.trim()` — espaços extras não quebram mais a
+      comparação de categoria/cidade/estado.
+- [x] `opportunity_registry.quantity` — achado residual da auditoria
+      anterior, investigado e fechado: nenhum caminho hoje conseguia
+      gravar zero (Zod `.positive()` já protegia), mas faltava a mesma
+      constraint de banco que `needs.quantity_needed` e
+      `opportunity_allocations.quantity_allocated` já tinham.
+      `db/migrations/0005_opportunity_registry_quantity_check.sql`
+      adiciona `CHECK (quantity IS NULL OR quantity > 0)`. Testado
+      diretamente contra o banco (INSERT bypassando a validação da
+      aplicação).
+- [x] 23 testes novos em `test/opportunityMatchingCapacity.test.ts`
+      (reescrito, 20→23 com os testes de `quantity`) cobrindo os 9
+      cenários de capacidade pedidos (suficiente, exata, insuficiente,
+      consumo parcial usando disponível real — não o bruto, categoria
+      diferente, unidade diferente [teste bloqueador], capacidade zero,
+      mistura de unidades bloqueada, parcialmente insuficiente), 7 de área
+      de atendimento (cidade+UF, homônimo bloqueado, mesmo estado,
+      capitalização/acento, espaços extras, sem área, cidade/estado sem
+      relação), e um teste de isolamento multi-tenant do MOTOR de matching
+      (não só dos endpoints CRUD) com duas organizações reais.
+- [x] Suíte completa: 146→164 testes, todos passando, nenhuma regressão.
+
+### UI — Configurações de Matching
+- [x] Nova aba `/organizacoes/:id/matching`
+      (`organizacoes.$organizationId.matching.tsx` +
+      `.module.css` + `.pageLayout.tsx`), seguindo exatamente o padrão
+      visual/arquitetural já existente (mesmo layout de nav por link
+      duplicado em cada página, `Form`/`Dialog`/`Switch`/`Skeleton` já
+      existentes, React Query com a mesma convenção de
+      `queryKey`/`invalidateQueries`, `sonner` para toast) — link
+      adicionado nas 6 páginas de aba existentes.
+- [x] 3 blocos: capacidade de armazenamento (criar/editar/excluir, com
+      categoria+unidade travadas na edição — só o teto é editável, nunca
+      estoque/disponível), capacidade logística (`Switch` sim/não,
+      "ainda não configurado" tratado como estado distinto de "não",
+      nunca enviando `false` sozinho), áreas de atendimento
+      (adicionar/remover cidade+UF, com texto explicando que a sede já é
+      considerada à parte).
+- [x] RBAC: reaproveita `organizacao.gerencie` (nenhuma permissão nova) —
+      leitura aberta a qualquer membro, botões de mutação escondidos
+      (não só desabilitados) para quem não tem o papel, com banner
+      explicando por quê. Testado ao vivo no navegador com um segundo
+      usuário `voluntario` real.
+- [x] Multi-tenancy: `organizationId` vem exclusivamente da URL
+      (`useParams`), nunca de um campo editável — mesmo padrão de toda
+      página de organização existente.
+- [x] Responsivo: testado ao vivo em viewport mobile (375×812) — nav
+      quebra em linhas, cards empilham, nenhum conteúdo cortado (um
+      placeholder longo demais foi encontrado cortado no teste ao vivo e
+      movido para texto de ajuda abaixo do campo).
+- [x] Testado ao vivo, ponta a ponta, no navegador: criar organização →
+      aprovada por admin de plataforma → criar capacidade → editar
+      capacidade → adicionar área de atendimento → configurar logística →
+      confirmar exclusão → conferir os 4 eventos de auditoria gerados
+      (nenhuma auditoria paralela no frontend, tudo passou pelos
+      endpoints já existentes).
+- [ ] Nenhum novo endpoint, migration (além do CHECK de `quantity`),
+      permissão ou tabela foi criado além do estritamente necessário —
+      confirmado explicitamente no relatório desta fase.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

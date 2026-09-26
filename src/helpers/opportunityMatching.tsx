@@ -53,7 +53,7 @@ interface CandidateEvaluation {
 // l\u00f3gica de pontua\u00e7\u00e3o por palavra-chave \u00e9 pura e n\u00e3o deveria exigir banco
 // de dados para ser validada.
 export function normalize(text: string): string {
-  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return text.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 export function keywordScore(a: string, b: string): number {
@@ -187,20 +187,23 @@ export async function runMatchingForOpportunity(
             .select(["organizationId", "city", "state"])
             .where("organizationId", "in", candidateOrgIds)
             .execute(),
-          // Uso atual de estoque por (organização, categoria) — mesma fonte
-          // de verdade de sempre (stock_transactions), nunca um contador
-          // paralelo. Agrupado no banco, não calculado item a item aqui.
+          // Uso atual de estoque por (organização, categoria, UNIDADE) —
+          // mesma fonte de verdade de sempre (stock_transactions), nunca um
+          // contador paralelo. Agrupado por unidade também: somar "5 kg" +
+          // "100 unidade" sob a mesma categoria produziria um número sem
+          // sentido (achado de auditoria, corrigido aqui).
           trx
             .selectFrom("inventoryItems")
             .leftJoin("stockTransactions", "stockTransactions.itemId", "inventoryItems.id")
             .select([
               "inventoryItems.organizationId",
               "inventoryItems.category",
+              "inventoryItems.unit",
               (eb) => eb.fn.coalesce(eb.fn.sum("stockTransactions.delta"), sql<string>`0`).as("total"),
             ])
             .where("inventoryItems.organizationId", "in", candidateOrgIds)
             .where("inventoryItems.category", "is not", null)
-            .groupBy(["inventoryItems.organizationId", "inventoryItems.category"])
+            .groupBy(["inventoryItems.organizationId", "inventoryItems.category", "inventoryItems.unit"])
             .execute(),
         ]);
 
@@ -221,10 +224,13 @@ export async function runMatchingForOpportunity(
       serviceAreasByOrg.set(row.organizationId, list);
     }
 
-    const stockUsageByOrgCategory = new Map<string, number>();
+    // Chave inclui a unidade de propósito — ver comentário na query acima.
+    // "Alimentos/kg" e "Alimentos/unidade" da mesma organização nunca se
+    // misturam num único saldo.
+    const stockUsageByOrgCategoryUnit = new Map<string, number>();
     for (const row of stockUsageRows) {
       if (!row.category) continue;
-      stockUsageByOrgCategory.set(`${row.organizationId}::${normalize(row.category)}`, Number(row.total));
+      stockUsageByOrgCategoryUnit.set(`${row.organizationId}::${normalize(row.category)}::${normalize(row.unit)}`, Number(row.total));
     }
 
     const opportunityText = [opportunity.title, opportunity.category, opportunity.description].filter(Boolean).join(" — ");
@@ -271,25 +277,32 @@ export async function runMatchingForOpportunity(
         : sameCity ? 100 : sameState ? 60 : 20;
 
       // Capacidade de armazenamento: só aplicável se a organização declarou
-      // um teto para a MESMA categoria da oportunidade (comparação fuzzy,
-      // igual ao resto do sistema — não existe taxonomia normalizada de
-      // categoria). "Disponível" é sempre calculado contra o uso real de
-      // estoque já existente, nunca um número guardado à parte.
+      // um teto para a MESMA categoria E MESMA UNIDADE da oportunidade
+      // (comparação fuzzy de texto, igual ao resto do sistema — não existe
+      // taxonomia normalizada de categoria/unidade). Categoria batendo mas
+      // unidade diferente NUNCA compara os números (achado de auditoria:
+      // "500 kg" não pode ser tratado como comparável a "300 unidade") —
+      // sem conversão automática entre unidades, que não existe no
+      // projeto. "Disponível" é sempre calculado contra o uso real de
+      // estoque já existente NA MESMA categoria+unidade, nunca um número
+      // guardado à parte.
       const orgCapacities = capacitiesByOrg.get(c.organizationId) ?? [];
-      const matchingCapacity = opportunity.category
-        ? orgCapacities.find((cap) => normalize(cap.category) === normalize(opportunity.category!))
+      const matchingCapacity = opportunity.category && opportunity.unit
+        ? orgCapacities.find(
+            (cap) => normalize(cap.category) === normalize(opportunity.category!) && normalize(cap.unit) === normalize(opportunity.unit!)
+          )
         : undefined;
       const capacidadeArmazenamento: CriterionResult =
         !matchingCapacity || opportunity.quantity === null
-          ? { score: null, weight: 0.15, detail: "nao_aplicavel: capacidade nao declarada para esta categoria" }
+          ? { score: null, weight: 0.15, detail: "nao_aplicavel: sem capacidade declarada para esta categoria+unidade, ou oportunidade sem quantidade/unidade" }
           : (() => {
-              const used = stockUsageByOrgCategory.get(`${c.organizationId}::${normalize(matchingCapacity.category)}`) ?? 0;
+              const used = stockUsageByOrgCategoryUnit.get(`${c.organizationId}::${normalize(matchingCapacity.category)}::${normalize(matchingCapacity.unit)}`) ?? 0;
               const available = matchingCapacity.maxCapacity - used;
               const rawScore = available <= 0 ? 0 : Math.min(100, (available / Number(opportunity.quantity)) * 100);
               return {
                 score: Math.round(rawScore * 100) / 100,
                 weight: 0.15,
-                detail: `capacidade declarada ${matchingCapacity.maxCapacity}${matchingCapacity.unit}, uso atual ${used}, disponivel ${available}`,
+                detail: `capacidade declarada ${matchingCapacity.maxCapacity}${matchingCapacity.unit}, uso atual ${used}${matchingCapacity.unit}, disponivel ${available}${matchingCapacity.unit}`,
               };
             })();
 
@@ -314,12 +327,24 @@ export async function runMatchingForOpportunity(
           : orgServiceAreas.length === 0
             ? { score: null, weight: 0.15, detail: "nao_aplicavel: organizacao nao declarou areas de atendimento" }
             : (() => {
-                const cityMatch = opportunity.locationCity && orgServiceAreas.some((a) => normalize(a.city) === normalize(opportunity.locationCity!));
-                const stateMatch = opportunity.locationState && orgServiceAreas.some((a) => normalize(a.state) === normalize(opportunity.locationState!));
+                // Cidade E estado juntos — cidades homônimas em UFs
+                // diferentes (existem de verdade no Brasil, ex. "Bom
+                // Jesus/MG" vs "Bom Jesus/BA") nunca contam como a mesma
+                // localidade (achado de auditoria).
+                const cityMatch = Boolean(
+                  opportunity.locationCity &&
+                  opportunity.locationState &&
+                  orgServiceAreas.some(
+                    (a) => normalize(a.city) === normalize(opportunity.locationCity!) && normalize(a.state) === normalize(opportunity.locationState!)
+                  )
+                );
+                const stateMatch = Boolean(
+                  opportunity.locationState && orgServiceAreas.some((a) => normalize(a.state) === normalize(opportunity.locationState!))
+                );
                 return {
                   score: cityMatch ? 100 : stateMatch ? 60 : 20,
                   weight: 0.15,
-                  detail: "baseado em areas de atendimento declaradas, nao e distancia em km",
+                  detail: "baseado em areas de atendimento declaradas (cidade+UF), nao e distancia em km",
                 };
               })();
 

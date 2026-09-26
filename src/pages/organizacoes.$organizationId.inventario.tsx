@@ -158,6 +158,9 @@ export default function InventoryPage() {
         <Link to={`/organizacoes/${organizationId}/atribuicoes`} className={styles.tabNavItem}>
           Rede Levora
         </Link>
+        <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>
+          Configurações de Matching
+        </Link>
       </nav>
 
       <div className={styles.titleRow}>

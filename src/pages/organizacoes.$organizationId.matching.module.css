@@ -1,0 +1,253 @@
+.page {
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+  padding: var(--spacing-8);
+  max-width: 72rem;
+  margin: 0 auto;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  text-decoration: none;
+  margin-bottom: var(--spacing-4);
+}
+
+.backLink:hover {
+  color: var(--foreground);
+}
+
+.tabNav {
+  display: flex;
+  gap: var(--spacing-1);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--spacing-6);
+  flex-wrap: wrap;
+}
+
+.tabNavItem,
+.tabNavItemActive {
+  padding: var(--spacing-2) var(--spacing-1);
+  font-size: 0.875rem;
+  text-decoration: none;
+  color: var(--muted-foreground);
+  border-bottom: 2px solid transparent;
+  margin-right: var(--spacing-4);
+  white-space: nowrap;
+}
+
+.tabNavItem:hover {
+  color: var(--foreground);
+}
+
+.tabNavItemActive {
+  color: var(--foreground);
+  font-weight: 500;
+  border-bottom-color: var(--primary);
+}
+
+.titleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-4);
+  flex-wrap: wrap;
+}
+
+.title {
+  font-family: var(--font-family-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 var(--spacing-1) 0;
+}
+
+.subtitle {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  margin: 0;
+  max-width: 40rem;
+  line-height: 1.5;
+}
+
+.infoBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3) var(--spacing-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  margin-bottom: var(--spacing-6);
+}
+
+.section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-6);
+  margin-bottom: var(--spacing-6);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-4);
+  flex-wrap: wrap;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-4);
+}
+
+.sectionHeader .sectionHeading {
+  margin-bottom: 0;
+}
+
+.sectionIcon {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.sectionTitle {
+  font-family: var(--font-family-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--card-foreground);
+}
+
+.helperText {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  margin: 0 0 var(--spacing-4) 0;
+  line-height: 1.5;
+}
+
+.helperTextSmall {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  margin: var(--spacing-1) 0 0 0;
+  line-height: 1.4;
+}
+
+.emptyText {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  padding: var(--spacing-4) 0;
+}
+
+.listSkeleton {
+  height: 6rem;
+  border-radius: var(--radius);
+}
+
+.itemList {
+  list-style: none;
+  margin: 0 0 var(--spacing-2) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.itemRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+.itemInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.itemPrimary {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--card-foreground);
+  word-break: break-word;
+}
+
+.itemSecondary {
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.itemActions {
+  display: flex;
+  gap: var(--spacing-1);
+  flex-shrink: 0;
+}
+
+.formGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.formRow {
+  display: flex;
+  gap: var(--spacing-3);
+  flex-wrap: wrap;
+}
+
+.formRowItem {
+  flex: 1;
+  min-width: 8rem;
+}
+
+.switchRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.switchControl {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.switchLabel {
+  font-size: 0.875rem;
+  color: var(--card-foreground);
+}
+
+@media (max-width: 40rem) {
+  .page {
+    padding: var(--spacing-4);
+  }
+
+  .itemRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .itemActions {
+    align-self: flex-end;
+  }
+
+  .sectionHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

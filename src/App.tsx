@@ -29,6 +29,9 @@ import organizationAllocationsPageLayout from "./pages/organizacoes.$organizatio
 import OrganizationAccountingPage from "./pages/organizacoes.$organizationId.prestacao-contas";
 import organizationAccountingPageLayout from "./pages/organizacoes.$organizationId.prestacao-contas.pageLayout";
 
+import OrganizationMatchingSettingsPage from "./pages/organizacoes.$organizationId.matching";
+import organizationMatchingSettingsPageLayout from "./pages/organizacoes.$organizationId.matching.pageLayout";
+
 import PlatformPage from "./pages/plataforma";
 import platformPageLayout from "./pages/plataforma.pageLayout";
 
@@ -93,6 +96,10 @@ const router = createBrowserRouter([
       {
         path: "/organizacoes/:organizationId/prestacao-contas",
         element: <>{withPageLayout(organizationAccountingPageLayout, OrganizationAccountingPage)}</>,
+      },
+      {
+        path: "/organizacoes/:organizationId/matching",
+        element: <>{withPageLayout(organizationMatchingSettingsPageLayout, OrganizationMatchingSettingsPage)}</>,
       },
       {
         path: "/plataforma",
