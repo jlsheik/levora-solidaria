@@ -340,13 +340,14 @@ HTTP reais + simulação de tempo via SQL direto no banco). Ver
       puro do motor de correspondência (pontuação por palavra-chave).
 - [x] `npm test` / `npm run test:watch` / `npm run test:coverage`
       adicionados ao `package.json`.
-- [ ] Cobertura de isolamento multi-organização ainda não estendida a todos
-      os domínios (`opportunity_registry`, `opportunity_allocations`,
-      `logistics_events`, `approval_requests`) — só `stock_transactions` e
-      `needs` têm teste explícito hoje. Ver "o que ainda falta" em
-      `docs/TESTING.md`.
-- [ ] Sem pipeline de CI configurado neste repositório — a suíte roda hoje
-      só localmente/sob demanda.
+- [x] ~~Cobertura de isolamento multi-organização ainda não estendida a
+      todos os domínios~~ — resolvido na Fase 20
+      (`test/crossOrgIsolation.test.ts`: `opportunity_allocations`,
+      `approval_requests`, isolamento de plataforma do
+      `opportunity_registry`). `logistics_events` coberto indiretamente
+      (é gravado pelo mesmo endpoint testado para `opportunity_allocations`).
+- [x] ~~Sem pipeline de CI configurado neste repositório~~ — resolvido na
+      Fase 20 (`.github/workflows/ci.yml`).
 
 
 
