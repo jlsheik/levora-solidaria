@@ -2,6 +2,7 @@ import { db } from "./db";
 import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks";
 import { recordAuditLogEntry } from "./auditLog";
 import { runMatchingForOpportunity } from "./opportunityMatching";
+import { withScheduledTaskLock } from "./scheduledTaskLock";
 
 /**
  * Tarefa agendada: libera atribuições propostas automaticamente (confiança
@@ -9,8 +10,20 @@ import { runMatchingForOpportunity } from "./opportunityMatching";
  * tenta o matching de novo para a mesma descoberta — para que a
  * oportunidade não fique parada esperando uma organização que nunca vai
  * responder.
+ *
+ * `withScheduledTaskLock` (achado de auditoria) garante que duas chamadas
+ * concorrentes desta função — seja o cron disparando de novo antes da
+ * anterior terminar, seja o reprocessamento manual (POST
+ * background-tasks-retry) rodando ao mesmo tempo — nunca executam o corpo
+ * simultaneamente. `claimTaskRun` continua com sua semântica de sempre
+ * (registro em background_task_runs + idempotência por `idempotencyKey`
+ * quando usada), inalterada.
  */
 export async function expireReservations() {
+  await withScheduledTaskLock("expireReservations", () => runExpireReservations());
+}
+
+async function runExpireReservations() {
   const claim = await claimTaskRun({ taskName: "expireReservations" });
   if (!claim.claimed) return;
 

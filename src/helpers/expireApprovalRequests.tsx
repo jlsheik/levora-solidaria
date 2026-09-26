@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks";
 import { recordAuditLogEntry } from "./auditLog";
+import { withScheduledTaskLock } from "./scheduledTaskLock";
 
 export const APPROVAL_REQUEST_EXPIRATION_DAYS = Number(process.env.APPROVAL_REQUEST_EXPIRATION_DAYS ?? 7);
 
@@ -14,8 +15,16 @@ export const APPROVAL_REQUEST_EXPIRATION_DAYS = Number(process.env.APPROVAL_REQU
  * pedido não é mais válido, exatamente como uma reserva de matching vencida
  * (ver expireReservations.tsx). Quem precisar da ação original tem que
  * pedir de novo.
+ *
+ * `withScheduledTaskLock` (achado de auditoria) impede que duas chamadas
+ * concorrentes desta função executem o corpo simultaneamente. `claimTaskRun`
+ * continua inalterado.
  */
 export async function expireApprovalRequests() {
+  await withScheduledTaskLock("expireApprovalRequests", () => runExpireApprovalRequests());
+}
+
+async function runExpireApprovalRequests() {
   const claim = await claimTaskRun({ taskName: "expireApprovalRequests" });
   if (!claim.claimed) return;
 

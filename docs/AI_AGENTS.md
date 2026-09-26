@@ -59,9 +59,39 @@ registros antigos **não foram e não serão reescritos** — reescrever
 histórico destruiria a própria rastreabilidade que este campo existe para
 proteger. Uma investigação sobre uma decisão antiga registrada como "1.1"
 pode precisar correlacionar `created_at` com o histórico de commits/deploy
-para saber qual comportamento estava realmente vigente. A partir de "1.2",
-cada nova avaliação identifica de forma inequívoca a versão comportamental
-vigente no momento em que foi calculada.
+para saber qual comportamento estava realmente vigente.
+
+**"1.2" (estado anterior, já validado)**: proximidade cidade+UF e desempate
+determinístico corrigidos (commit `cdfa0de`) — score, pesos, thresholds e
+fórmula inalterados desde então.
+
+**"1.3" (estado atual)**: motor idêntico ao "1.2" em score, pesos, fórmula e
+thresholds — **nenhuma dessas quatro coisas mudou**. A única mudança de
+comportamento observável é de **completude do rastro de auditoria**:
+quando a quantidade da oportunidade já foi totalmente distribuída para
+candidatos anteriores na mesma execução (`remaining <= 0`), um candidato
+que já havia sido pontuado e já era estruturalmente elegível
+(`finalScore >= MEDIUM_CONFIDENCE_THRESHOLD`) antes só desaparecia do
+motor sem deixar nenhum registro — indistinguível de "nunca foi
+candidato". A partir de "1.3", esse candidato passa a gerar uma
+`match_evaluations` com `decision = "elegivel_sem_quantidade"` — nunca
+"descartado" (não foi reprovado pelo score) — sem nunca criar uma
+`opportunity_allocations` (a regra "sem quantidade, sem alocação" nunca
+mudou, só a rastreabilidade de quem chegou a ser considerado). Registros
+antigos gravados como "1.0"/"1.1"/"1.2" **não foram e não serão
+reescritos**, pelo mesmo motivo já explicado acima.
+
+A partir de "1.3", cada nova avaliação identifica de forma inequívoca a
+versão comportamental vigente no momento em que foi calculada — mas, como
+sempre, isso não retroage a avaliações já gravadas sob uma versão anterior.
+
+**Nota separada — exclusão mútua do agendador não é o motor**: a proteção
+contra sobreposição de execuções das tarefas agendadas
+(`src/helpers/scheduledTaskLock.tsx`, ver `docs/OPERATIONS.md`) é uma
+camada de execução operacional (advisory lock do Postgres), completamente
+fora do motor de matching — não altera nenhum critério, peso, fórmula ou
+decisão, e por isso **não é, por si só, motivo de bump de
+`ALGORITHM_VERSION`**.
 
 ## Adaptador (`src/helpers/aiClient.tsx`)
 

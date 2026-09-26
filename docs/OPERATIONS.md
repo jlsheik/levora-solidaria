@@ -25,30 +25,60 @@ quando falha.
 `docs/DEPLOYMENT.md`, "Múltiplas instâncias" — cada instância roda o
 agendador de forma independente hoje.
 
-### Idempotência de `background_task_runs` — achado de auditoria (RESOLVIDO parcialmente)
+### Idempotência de `background_task_runs` — achado de auditoria (RESOLVIDO)
 
-Auditoria de segurança encontrou dois pontos:
+Auditoria de segurança (Fase 21) e auditoria E2E do ciclo operacional
+(sessão de versionamento 1.3) encontraram, no total, três pontos:
 
 1. **`idempotencyKey` nunca é usado por nenhum chamador real** — as 4
    tarefas agendadas chamam `claimTaskRun({ taskName })` sem essa chave.
-   A proteção real contra duplicação hoje vem das cláusulas
-   `WHERE status = ...` de cada tarefa (cada uma naturalmente idempotente
-   por conta própria — ver testes em `test/idempotency.test.ts`), não do
-   mecanismo de idempotência dedicado. Isso é suficiente para o padrão
-   atual (nenhuma tarefa hoje precisa de deduplicação por uma chave de
-   negócio específica), mas o mecanismo de `idempotencyKey` continua sendo
-   "capacidade não usada" — decisão registrada aqui, não corrigida
-   silenciosamente: usar essa chave nas tarefas agendadas exigiria decidir
-   a granularidade de deduplicação (por tick de cron? por dia?), o que é
-   uma escolha de produto, não um bug.
-2. **Corrida real corrigida**: `claimTaskRun` fazia SELECT-then-INSERT
-   dentro de uma transação; sob concorrência genuína com a MESMA
-   `idempotencyKey`, duas chamadas podiam ambas ver "não existe" (READ
-   COMMITTED não impede isso) e uma delas recebia uma exceção de violação
-   de unicidade não tratada, em vez do mesmo `claimed: false` que o
-   caminho normal devolve. Corrigido capturando a violação e reconsultando
-   a linha vencedora — `src/helpers/backgroundTasks.tsx`. Testado com
-   chamadas concorrentes reais em `test/idempotency.test.ts`.
+   Decisão mantida (não é um bug): usar essa chave nas tarefas agendadas
+   exigiria decidir a granularidade de deduplicação (por tick de cron? por
+   dia?), o que é uma escolha de produto — `claimTaskRun` continua com a
+   mesma semântica de sempre (registro em `background_task_runs` +
+   idempotência por `idempotencyKey` só para quem passar essa chave).
+2. **Corrida real corrigida** (Fase 21): `claimTaskRun` fazia
+   SELECT-then-INSERT dentro de uma transação; sob concorrência genuína com
+   a MESMA `idempotencyKey`, duas chamadas podiam ambas ver "não existe"
+   (READ COMMITTED não impede isso) e uma delas recebia uma exceção de
+   violação de unicidade não tratada, em vez do mesmo `claimed: false` que
+   o caminho normal devolve. Corrigido capturando a violação e
+   reconsultando a linha vencedora — `src/helpers/backgroundTasks.tsx`.
+   Testado com chamadas concorrentes reais em `test/idempotency.test.ts`.
+3. **Sobreposição real entre execuções da MESMA tarefa, corrigida**: como
+   `claimTaskRun` sem `idempotencyKey` sempre grava uma linha nova e nunca
+   deduplica (ponto 1), duas chamadas verdadeiramente concorrentes de
+   `expireReservations`/`expireOpportunities`/`expireApprovalRequests`/
+   `runMatchingSweep` — um tick de cron atrasado sobrepondo o próximo, ou o
+   reprocessamento manual (`POST background-tasks-retry`) rodando junto com
+   um tick — executavam o corpo da tarefa em paralelo. Isso nunca corrompeu
+   dado de negócio (a proteção real contra duplicação de EFEITO sempre foi
+   a cláusula `WHERE status = ...` de cada tarefa, já testada), mas gerava
+   histórico operacional redundante em `background_task_runs` e trabalho
+   duplicado. Corrigido com `withScheduledTaskLock`
+   (`src/helpers/scheduledTaskLock.tsx`): uma camada adicional, por cima de
+   `claimTaskRun` (que não foi alterado), usando
+   `pg_try_advisory_lock`/`pg_advisory_unlock` de **sessão** do Postgres —
+   uma conexão dedicada (`sql.reserve()`) é reservada e mantida aberta
+   durante toda a execução da tarefa, então o lock protege mesmo uma
+   execução mais lenta que o próprio intervalo do cron (não depende de
+   janela/tick). `classid` fixo (`842013`) + `objid` estável por nome de
+   tarefa, mapeados explicitamente em `SCHEDULED_TASK_LOCK_IDS` — nunca um
+   hash probabilístico, e nunca pode colidir com o advisory lock (de forma
+   diferente, uma chave só) usado pela cadeia de auditoria em
+   `src/helpers/auditLog.tsx`. Se o processo morrer no meio, o Postgres
+   libera o lock de sessão automaticamente quando a conexão cai — sem lock
+   órfão persistente. Testado com concorrência real (sem sleeps: controle
+   via promessas resolvidas manualmente) em
+   `test/scheduledTaskLock.test.ts`: duas chamadas concorrentes da mesma
+   tarefa (uma recusada), tarefa diferente não bloqueada, lock liberado
+   após falha, e execução "longa" continuando protegida indefinidamente
+   até ser liberada.
+
+Esta camada de exclusão mútua é puramente operacional — protege a
+EXECUÇÃO das tarefas agendadas contra sobreposição, e não faz parte da
+fórmula do motor de matching nem de `ALGORITHM_VERSION` (ver
+`docs/AI_AGENTS.md`, "Regra de versionamento").
 
 ## Monitoramento
 

@@ -18,11 +18,11 @@ import {
 } from "./helpers";
 
 describe("ALGORITHM_VERSION — versão comportamental do motor", () => {
-  it("a constante está fixada em 1.2", () => {
-    expect(ALGORITHM_VERSION).toBe("1.2");
+  it("a constante está fixada em 1.3", () => {
+    expect(ALGORITHM_VERSION).toBe("1.3");
   });
 
-  it("uma avaliação real do motor persiste algorithm_version = 1.2 em match_evaluations (descarte, sem alocação)", async () => {
+  it("uma avaliação real do motor persiste algorithm_version = 1.3 em match_evaluations (descarte, sem alocação)", async () => {
     const owner = await createAuthenticatedUser();
     // Organização sem nenhuma configuração de capacidade/logística/área →
     // score baixo, avaliação é descartada (decision != "auto_atribuido"),
@@ -57,10 +57,10 @@ describe("ALGORITHM_VERSION — versão comportamental do motor", () => {
       .orderBy("id", "desc")
       .executeTakeFirstOrThrow();
 
-    expect(evaluation.algorithmVersion).toBe("1.2");
+    expect(evaluation.algorithmVersion).toBe("1.3");
   });
 
-  it("no caminho de alocação automática, notes e audit_log também refletem 1.2 — todos vindos da mesma constante", async () => {
+  it("no caminho de alocação automática, notes e audit_log também refletem 1.3 — todos vindos da mesma constante", async () => {
     const owner = await createAuthenticatedUser();
     const org = await createTestOrganization(owner.userId, { city: "Belo Horizonte", state: "MG" });
     const admin = await createAuthenticatedUser();
@@ -96,7 +96,7 @@ describe("ALGORITHM_VERSION — versão comportamental do motor", () => {
       .where("organizationId", "=", org.id)
       .orderBy("id", "desc")
       .executeTakeFirstOrThrow();
-    expect(evaluation.algorithmVersion).toBe("1.2");
+    expect(evaluation.algorithmVersion).toBe("1.3");
 
     if (evaluation.allocationId) {
       const allocation = await db
@@ -104,7 +104,7 @@ describe("ALGORITHM_VERSION — versão comportamental do motor", () => {
         .select(["notes"])
         .where("id", "=", evaluation.allocationId)
         .executeTakeFirstOrThrow();
-      expect(allocation.notes).toContain("algoritmo 1.2");
+      expect(allocation.notes).toContain("algoritmo 1.3");
     }
 
     const auditRow = await db
@@ -114,6 +114,6 @@ describe("ALGORITHM_VERSION — versão comportamental do motor", () => {
       .where("entityId", "=", String(opportunity.id))
       .orderBy("id", "desc")
       .executeTakeFirstOrThrow();
-    expect((auditRow.metadata as { algoritmo?: string }).algoritmo).toBe("1.2");
+    expect((auditRow.metadata as { algoritmo?: string }).algoritmo).toBe("1.3");
   });
 });

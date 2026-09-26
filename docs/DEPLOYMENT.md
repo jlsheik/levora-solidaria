@@ -94,17 +94,20 @@ processo**, e precisam de atenção antes de rodar mais de uma instância:
 1. **Rate limiting** (`src/helpers/rateLimit.tsx`) — contador em `Map` por
    processo. Com N instâncias atrás de um load balancer, o limite efetivo
    vira `limite × N`. Upgrade: trocar por um backend compartilhado (Redis).
-2. **Agendador de tarefas** (`src/helpers/scheduler.tsx`) — cada instância
-   rodaria as mesmas tarefas agendadas de forma independente. As tarefas
-   já são idempotentes o bastante para não corromper dado (ex.:
-   `expireReservations` só atualiza linhas cujo prazo já passou — rodar em
-   paralelo em 2 instâncias não duplica nada), mas gera trabalho
-   redundante. Upgrade natural: um lock distribuído (ex.: advisory lock do
-   Postgres) para só uma instância disparar cada tarefa por vez.
+2. **Agendador de tarefas** (`src/helpers/scheduler.tsx`) — **RESOLVIDO**:
+   `withScheduledTaskLock` (`src/helpers/scheduledTaskLock.tsx`, ver
+   `docs/OPERATIONS.md`) usa `pg_try_advisory_lock` de sessão do Postgres,
+   que é global ao servidor de banco — não por processo. Múltiplas
+   instâncias tentando disparar a mesma tarefa (`expireReservations` etc.)
+   ao mesmo tempo já são protegidas pelo mesmo mecanismo que protege
+   sobreposição dentro de uma única instância, sem precisar de nenhum lock
+   distribuído adicional (Redis etc.) — o Postgres já É o coordenador
+   distribuído aqui, e todas as instâncias já se conectam a ele.
 
-Nenhuma dessas duas coisas quebra com múltiplas instâncias — só ficam
-menos eficientes/precisas do que com uma instância só. Documentado aqui
-para quem for decidir escalar horizontalmente saber o que revisar primeiro.
+Rate limiting continua sendo estado em memória por processo — não quebra
+com múltiplas instâncias, só fica menos preciso (limite efetivo vira
+`limite × N`). Documentado aqui para quem for decidir escalar
+horizontalmente saber o que ainda precisa de atenção.
 
 ## O que este documento não cobre (porque não existe ainda)
 

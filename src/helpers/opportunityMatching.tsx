@@ -25,7 +25,7 @@ import type { DB, Json, NeedPriority } from "./schema";
  * automático até todo mundo preencher a configuração nova.
  */
 
-export const ALGORITHM_VERSION = "1.2";
+export const ALGORITHM_VERSION = "1.3";
 export const HIGH_CONFIDENCE_THRESHOLD = 90;
 export const MEDIUM_CONFIDENCE_THRESHOLD = 70;
 export const RESERVATION_MINUTES = 30;
@@ -420,7 +420,6 @@ export async function runMatchingForOpportunity(
     let opportunityBecameAssigned = false;
 
     for (const cand of evaluated) {
-      if (remaining !== null && remaining <= 0) break;
       if (remaining === null && unboundedProcessed >= 3) break;
       if (cand.finalScore < MEDIUM_CONFIDENCE_THRESHOLD) {
         discarded.push({ organizationId: cand.organizationId, needId: cand.needId, score: cand.finalScore });
@@ -435,6 +434,33 @@ export async function runMatchingForOpportunity(
             algorithmVersion: ALGORITHM_VERSION,
             aiModelUsed: cand.aiModelUsed,
             decision: "descartado",
+          })
+          .execute();
+        continue;
+      }
+
+      // Candidato estruturalmente elegível (score >= MEDIUM_CONFIDENCE_THRESHOLD),
+      // mas a quantidade da oportunidade já foi totalmente distribuída para
+      // candidatos anteriores nesta mesma execução (score/pesos/fórmula já
+      // calculados acima, antes deste ponto — nada disso muda aqui). Achado
+      // de auditoria: antes, o loop simplesmente parava (`break`) e estes
+      // candidatos desapareciam de match_evaluations sem nenhum rastro,
+      // como se nunca tivessem sido considerados — indistinguível de "nunca
+      // foi candidato". Persiste a avaliação real (nunca "descartado": o
+      // candidato não foi reprovado pelo score, foi impedido só pela falta
+      // de quantidade) e segue para o próximo, sem nunca criar alocação.
+      if (remaining !== null && remaining <= 0) {
+        await trx
+          .insertInto("matchEvaluations")
+          .values({
+            opportunityRegistryId,
+            organizationId: cand.organizationId,
+            needId: cand.needId,
+            criteria: cand.criteria as unknown as Json,
+            finalScore: cand.finalScore,
+            algorithmVersion: ALGORITHM_VERSION,
+            aiModelUsed: cand.aiModelUsed,
+            decision: "elegivel_sem_quantidade",
           })
           .execute();
         continue;

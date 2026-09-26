@@ -2,6 +2,7 @@ import { db } from "./db";
 import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks";
 import { recordAuditLogEntry } from "./auditLog";
 import type { OpportunityRegistryStatus } from "./schema";
+import { withScheduledTaskLock } from "./scheduledTaskLock";
 
 const TERMINAL_STATUSES: OpportunityRegistryStatus[] = ["concluida", "recusada", "expirada", "cancelada", "bloqueada", "duplicada"];
 
@@ -11,8 +12,17 @@ const TERMINAL_STATUSES: OpportunityRegistryStatus[] = ["concluida", "recusada",
  * descobertas hoje não tem expires_at preenchido (a interface ainda não
  * coleta esse campo no formulário rápido), então esta tarefa
  * frequentemente não encontra nada — isso é esperado, não é um bug.
+ *
+ * `withScheduledTaskLock` (achado de auditoria) impede que duas chamadas
+ * concorrentes desta função (cron sobreposto, ou reprocessamento manual ao
+ * mesmo tempo) executem o corpo simultaneamente. `claimTaskRun` continua
+ * inalterado.
  */
 export async function expireOpportunities() {
+  await withScheduledTaskLock("expireOpportunities", () => runExpireOpportunities());
+}
+
+async function runExpireOpportunities() {
   const claim = await claimTaskRun({ taskName: "expireOpportunities" });
   if (!claim.claimed) return;
 

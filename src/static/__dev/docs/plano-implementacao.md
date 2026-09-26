@@ -1208,6 +1208,120 @@ aqui, só de rastreabilidade, sem tocar em nenhuma lógica do motor:
       concorrência/reserva/expiração/alocação/multi-tenancy/UI/endpoint/
       schema foi tocado.
 
+## Fase 26 — Auditoria E2E do ciclo operacional + correção dos 2 achados médios: advisory lock do agendador e `ALGORITHM_VERSION` 1.2→1.3 (CONCLUÍDA)
+
+Depois do motor aprovado na auditoria definitiva (Fase 24) e do
+versionamento corrigido para "1.2" (Fase 25), uma auditoria E2E do ciclo
+operacional completo (oportunidade → matching → proposta/reserva →
+expiração → reabertura → novo matching → alocação final → auditoria),
+com simulações reais (incluindo concorrência real via `Promise.all`, não
+só leitura de código), concluiu **CICLO E2E APTO COM LACUNAS**: nenhum
+achado crítico/alto, 2 achados médios. Uma investigação arquitetural
+dedicada (também só leitura) analisou os dois antes de decidir a correção.
+Implementado aqui, cirurgicamente, sem tocar em pesos/fórmula/thresholds/
+critérios/capacidade/proximidade/desempate/quantidade alocada/reserva de
+30min/expiração/multi-tenancy:
+
+**Achado 1 — sobreposição de execuções da mesma tarefa agendada**:
+`claimTaskRun` não protegia contra isso porque as 4 tarefas
+(`expireReservations`, `expireOpportunities`, `expireApprovalRequests`,
+`runMatchingSweep`) chamam `claimTaskRun({ taskName })` sem
+`idempotencyKey` (já documentado como decisão consciente na Fase 21,
+`docs/OPERATIONS.md`) — nunca corrompia dado de negócio (as cláusulas
+`WHERE status = ...` de cada tarefa já protegiam isso, testado), mas
+gerava histórico redundante em `background_task_runs` e trabalho
+duplicado.
+
+- [x] `src/helpers/scheduledTaskLock.tsx` (novo): `withScheduledTaskLock(taskName, fn)`,
+      camada adicional por cima de `claimTaskRun` (não alterado, mesma
+      semântica de sempre). Usa `pg_try_advisory_lock`/`pg_advisory_unlock`
+      de **sessão** — não de transação, porque as tarefas fazem várias
+      transações soltas, não uma única `db.transaction()` do início ao
+      fim (decisão explícita: não mudar a granularidade transacional).
+      Uma conexão dedicada (`sql.reserve()`, exposta por
+      `reserveDedicatedConnection()` em `src/helpers/db.tsx`) é mantida
+      aberta durante toda a execução — devolver a conexão ao pool antes de
+      soltar o lock manteria o lock preso naquela conexão física para
+      sempre. Protege mesmo uma execução mais lenta que o próprio
+      intervalo do cron, porque não depende de janela/tick, só de o lock
+      estar preso ou não.
+- [x] `classid` fixo (`842013`) + `objid` estável por tarefa, mapeados
+      explicitamente (`SCHEDULED_TASK_LOCK_IDS`) — nunca hash
+      probabilístico. Forma de duas chaves nunca conflita com a forma de
+      uma chave só usada pela cadeia de auditoria
+      (`pg_advisory_xact_lock(hashtext(...))` em
+      `src/helpers/auditLog.tsx`) — os dois mecanismos nunca podem
+      colidir, mesmo por acaso.
+- [x] Aplicado às 4 chamadas reais (`expireReservations.tsx`,
+      `expireOpportunities.tsx`, `expireApprovalRequests.tsx`,
+      `runMatchingSweep.tsx`) — o corpo original de cada uma foi só movido
+      para uma função interna (`runExpireReservations` etc.), chamada de
+      dentro do lock; nada do corpo mudou. Protege igualmente o
+      reprocessamento manual (`POST background-tasks-retry`), que chama
+      exatamente as mesmas funções.
+- [x] Se o processo morrer no meio, o Postgres libera o lock de sessão
+      automaticamente quando a conexão cai — sem lock órfão. Se a tarefa
+      lança exceção, o lock é liberado no `finally` antes de propagar.
+- [x] `test/scheduledTaskLock.test.ts` (6 testes, sem sleeps reais —
+      controle via promessas resolvidas manualmente): duas chamadas
+      concorrentes da mesma tarefa (uma recusada); execução posterior
+      normal após liberar; lock liberado mesmo após falha; tarefa
+      diferente não bloqueada; execução "longa" continua protegida
+      indefinidamente até liberar; `taskName` sem mapeamento lança erro
+      explícito.
+- [x] `docs/OPERATIONS.md` e `docs/DEPLOYMENT.md` atualizados — o achado
+      "múltiplas instâncias fariam trabalho redundante" também fica
+      resolvido de graça: o lock é do Postgres (global ao servidor de
+      banco), não por processo.
+
+**Achado 2 — candidatos elegíveis desaparecendo do rastro quando
+`remaining` chega a zero**: o motor já avalia e pontua TODOS os candidatos
+com correspondência de categoria antes de decidir alocações; o `break` no
+topo do loop de alocação, ao ver `remaining <= 0`, parava o loop inteiro —
+candidatos seguintes (mesmo com score alto, já calculado) nunca eram
+persistidos em `match_evaluations`, indistinguível de "nunca foi
+candidato". Investigação confirmou, com evidência documental
+(`status-fase5.md`, `docs/AI_AGENTS.md`, `match-evaluations_GET.ts` sem
+filtro por `decision`), que a intenção sempre foi Modelo B
+("match_evaluations representa todos os candidatos elegíveis
+considerados"), e que `decision` é `TEXT` livre sem enum — um valor novo
+não exige migration.
+
+- [x] `remaining <= 0` deixou de ser um `break` do loop inteiro: agora,
+      só para o candidato atual, se ele já era estruturalmente elegível
+      (`finalScore >= MEDIUM_CONFIDENCE_THRESHOLD`) mas não resta
+      quantidade, persiste `match_evaluations` com
+      `decision = "elegivel_sem_quantidade"` (nunca "descartado" — o
+      candidato não foi reprovado pelo score) e `continue` para o
+      próximo. Nenhuma `opportunity_allocations` é criada para esse caso.
+      Candidatos com score abaixo do threshold continuam "descartado",
+      independente de `remaining` — comportamento inalterado. O cap
+      separado `unboundedProcessed >= 3` (oportunidades sem quantidade
+      conhecida) não foi tocado — achado e correção só cobrem o caso de
+      quantidade conhecida e esgotada.
+- [x] `ALGORITHM_VERSION` alterada de `"1.2"` para `"1.3"` — mudança de
+      comportamento observável (completude do rastro de auditoria), não
+      de score/peso/fórmula/threshold. Ver `docs/AI_AGENTS.md`, "Regra de
+      versionamento", para a explicação completa e a confirmação de que
+      1.0/1.1/1.2 não foram e não serão reescritos.
+- [x] UI (`plataforma.tsx`) inspecionada e **não alterada** — o badge já
+      mostra o texto literal de `ev.decision`, então `"elegivel_sem_quantidade"`
+      aparece de forma autoexplicativa sem qualquer mudança de código
+      (só cai no `variant="secondary"` padrão, mesmo de "descartado").
+- [x] `test/opportunityMatchingElegivelSemQuantidade.test.ts` (4 testes):
+      quantidade esgota no 1º candidato, 2º (score alto, >=90) fica
+      `elegivel_sem_quantidade` sem alocação, com score real persistido
+      (nunca 0/null); 3 candidatos empatados depois do esgotamento, todos
+      logados; contagem de alocações não aumenta; fluxos antigos
+      (`<70`/`70-89,99`/`>=90`, todos com quantidade disponível) intactos.
+- [x] `test/opportunityMatchingAlgorithmVersion.test.ts` atualizado de
+      `"1.2"` para `"1.3"` (constante atual — não é reescrita de
+      histórico, é o teste de regressão do comportamento vigente).
+- [x] Suíte completa (177→187 testes) e typecheck confirmados sem
+      regressão. Diff conferido — só o helper novo de lock, sua
+      integração nas 4 tarefas, o `break` substituído no motor, a
+      constante de versão, os testes novos, e a documentação.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

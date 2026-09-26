@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks";
 import { runMatchingForOpportunity } from "./opportunityMatching";
+import { withScheduledTaskLock } from "./scheduledTaskLock";
 
 /**
  * Tarefa agendada: rede de segurança do matching automático. Toda entrada
@@ -12,8 +13,17 @@ import { runMatchingForOpportunity } from "./opportunityMatching";
  * Processa no máximo 20 por execução, de forma síncrona dentro dos 15
  * minutos de limite do invocador — suficiente para o volume atual; se
  * crescer, isso vira fan-out com `queueTask`.
+ *
+ * `withScheduledTaskLock` (achado de auditoria) impede que duas chamadas
+ * concorrentes desta função executem o corpo simultaneamente — inclusive
+ * uma varredura ainda processando as 20 oportunidades quando o próximo
+ * tick do cron dispara de novo. `claimTaskRun` continua inalterado.
  */
 export async function runMatchingSweep() {
+  await withScheduledTaskLock("runMatchingSweep", () => runMatchingSweepBody());
+}
+
+async function runMatchingSweepBody() {
   const claim = await claimTaskRun({ taskName: "runMatchingSweep" });
   if (!claim.claimed) return;
 

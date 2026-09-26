@@ -24,13 +24,23 @@ if (!connectionString) {
   );
 }
 
+// Guardado à parte (não só passado inline para o dialect) porque
+// src/helpers/scheduledTaskLock.tsx precisa reservar uma conexão dedicada
+// (`.reserve()`) para manter um advisory lock de sessão vivo durante toda a
+// execução de uma tarefa agendada — algo que o Kysely/dialect não expõe.
+const pgClient = postgres(connectionString, {
+  prepare: false,
+  idle_timeout: 10,
+  max: 3,
+});
+
 export const db = new Kysely<DB>({
 plugins: [new FlootCamelCasePlugin()],
 dialect: new PostgresJSDialect({
-postgres: postgres(connectionString, {
-prepare: false,
-idle_timeout: 10,
-max: 3,
-}),
+postgres: pgClient,
 }),
 })
+
+export async function reserveDedicatedConnection() {
+  return pgClient.reserve();
+}
