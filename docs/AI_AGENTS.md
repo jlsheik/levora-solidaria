@@ -34,6 +34,35 @@ autônoma. Fluxo real:
    rastreável, nunca "a IA decidiu" sem registro do que exatamente foi
    perguntado e respondido.
 
+## Regra de versionamento (`ALGORITHM_VERSION`)
+
+`ALGORITHM_VERSION` (`src/helpers/opportunityMatching.tsx`, única fonte de
+verdade — `match_evaluations.algorithm_version`,
+`opportunity_allocations.notes` e `audit_log.metadata.algoritmo` sempre a
+consomem, nunca têm literal próprio) representa a versão das **regras
+comportamentais do motor**, não apenas a fórmula matemática de agregação.
+Qualquer mudança capaz de alterar o resultado final do matching (decisão ou
+alocação) para uma mesma entrada exige nova versão. Exemplos: alteração de
+critério, da regra de cálculo de um critério, de peso, da fórmula de
+agregação, de threshold, de elegibilidade de candidato, ou do desempate.
+Mudanças puramente internas (refatoração, comentário, nome de variável) que
+não alteram o comportamento observável não exigem bump.
+
+**Nota histórica**: os registros gravados com `algorithm_version = "1.1"`
+não são necessariamente homogêneos. Entre a introdução de "1.1" (commit
+`a07d2cc`) e sua substituição por "1.2", pelo menos duas correções de bug
+alteraram resultados reais do motor (compatibilidade de unidade em
+capacidade e exigência de cidade+UF em área de atendimento, commit
+`ed45102`; comparação de proximidade por cidade+UF e desempate
+determinístico, commit `cdfa0de`) sem que a versão fosse incrementada. Esses
+registros antigos **não foram e não serão reescritos** — reescrever
+histórico destruiria a própria rastreabilidade que este campo existe para
+proteger. Uma investigação sobre uma decisão antiga registrada como "1.1"
+pode precisar correlacionar `created_at` com o histórico de commits/deploy
+para saber qual comportamento estava realmente vigente. A partir de "1.2",
+cada nova avaliação identifica de forma inequívoca a versão comportamental
+vigente no momento em que foi calculada.
+
 ## Adaptador (`src/helpers/aiClient.tsx`)
 
 Integração real com a API da Anthropic, configurada por variável de

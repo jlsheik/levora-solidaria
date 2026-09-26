@@ -1164,6 +1164,50 @@ pesos/thresholds/fórmula/outros critérios:
       registrado como decisão de modelagem pendente para uma etapa
       própria.
 
+## Fase 25 — Correção de versionamento do motor: `ALGORITHM_VERSION` 1.1→1.2 (CONCLUÍDA)
+
+Auditoria dedicada (só leitura, sem alterar código) sobre a semântica de
+`ALGORITHM_VERSION` concluiu **VERSIONAMENTO PRECISA SER CORRIGIDO**: o
+histórico do git mostrou que a Fase 23 (`ed45102`, correção de unidade em
+capacidade e cidade+UF em área de atendimento) e a Fase 24 (`cdfa0de`,
+proximidade cidade+UF e desempate determinístico) alteraram resultado real
+do motor para as mesmas entradas, sem bump de versão — quebrando a mesma
+convenção que a Fase 22 (`a07d2cc`) havia seguido ao introduzir capacidade/
+logística/área (bump `1.0→1.1`). Correção mínima e controlada aplicada
+aqui, só de rastreabilidade, sem tocar em nenhuma lógica do motor:
+
+- [x] `ALGORITHM_VERSION` alterada de `"1.1"` para `"1.2"` em
+      `src/helpers/opportunityMatching.tsx` (única fonte de verdade —
+      `match_evaluations.algorithm_version`, `opportunity_allocations.notes`
+      e `audit_log.metadata.algoritmo` continuam consumindo a mesma
+      constante, nenhum tem literal próprio).
+- [x] Nenhum registro histórico foi alterado. `match_evaluations` gravadas
+      como `"1.1"` continuam exatamente como foram gravadas — sem `UPDATE`,
+      sem migração de dados, sem "correção" retroativa. Ver
+      `docs/AI_AGENTS.md` (seção "Regra de versionamento") para a
+      documentação explícita de que "1.1" já cobre pelo menos 3 eras
+      comportamentais distintas e uma investigação histórica precisa
+      correlacionar `created_at` com o commit vigente na época.
+- [x] Regra de versionamento documentada em `docs/AI_AGENTS.md`:
+      `algorithm_version` representa o comportamento completo do motor, não
+      só a fórmula — qualquer mudança capaz de alterar decisão/alocação
+      final exige nova versão (critério, regra de cálculo, peso, fórmula,
+      threshold, elegibilidade, desempate); mudança puramente interna não
+      exige.
+- [x] Teste de regressão novo
+      (`test/opportunityMatchingAlgorithmVersion.test.ts`, 174→177):
+      executa o motor de ponta a ponta (não só lê a constante em memória) e
+      confirma que a avaliação persistida em `match_evaluations` grava
+      `"1.2"`, tanto no caminho de descarte quanto no de alocação
+      automática, e que `opportunity_allocations.notes` e
+      `audit_log.metadata.algoritmo` refletem `"1.2"` automaticamente por
+      dependerem da mesma constante.
+- [x] Suíte completa (177 testes) e typecheck confirmados sem regressão.
+      Diff conferido — só a constante, o teste novo e a documentação; nada
+      de peso/threshold/fórmula/critério/capacidade/proximidade/desempate/
+      concorrência/reserva/expiração/alocação/multi-tenancy/UI/endpoint/
+      schema foi tocado.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

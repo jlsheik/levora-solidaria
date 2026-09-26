@@ -25,7 +25,7 @@ import type { DB, Json, NeedPriority } from "./schema";
  * automático até todo mundo preencher a configuração nova.
  */
 
-export const ALGORITHM_VERSION = "1.1";
+export const ALGORITHM_VERSION = "1.2";
 export const HIGH_CONFIDENCE_THRESHOLD = 90;
 export const MEDIUM_CONFIDENCE_THRESHOLD = 70;
 export const RESERVATION_MINUTES = 30;
