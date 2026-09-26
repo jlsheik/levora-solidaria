@@ -3,6 +3,7 @@ import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks";
 import { recordAuditLogEntry } from "./auditLog";
 import { runMatchingForOpportunity } from "./opportunityMatching";
 import { withScheduledTaskLock } from "./scheduledTaskLock";
+import { reopenOpportunityIfNoActiveAllocations } from "./reopenOpportunity";
 
 /**
  * Tarefa agendada: libera atribuições propostas automaticamente (confiança
@@ -65,24 +66,16 @@ async function runExpireReservations() {
     }
 
     // Reabrir a oportunidade para novo matching quando não sobrou nenhuma
-    // atribuição ativa.
+    // atribuição ativa. reopenOpportunityIfNoActiveAllocations trava a
+    // linha da oportunidade ANTES de contar atribuições-irmãs (achado de
+    // auditoria: sem essa travação, esta varredura e uma decisão humana
+    // concorrente — ou outra varredura — terminando uma atribuição
+    // diferente da mesma oportunidade podiam cada uma ver a outra ainda
+    // "ativa", e nenhuma reabrir). Cada oportunidade numa transação própria
+    // — mantém o padrão de transações curtas já usado no resto do arquivo.
     for (const oppId of opportunityIds) {
-      const remainingActive = await db
-        .selectFrom("opportunityAllocations")
-        .select((eb) => eb.fn.countAll().as("count"))
-        .where("opportunityRegistryId", "=", oppId)
-        .where("status", "!=", "recusada")
-        .where("status", "!=", "cancelada")
-        .executeTakeFirst();
-
-      if (Number(remainingActive?.count ?? 0) === 0) {
-        await db
-          .updateTable("opportunityRegistry")
-          .set({ status: "aguardando_destinacao", updatedAt: new Date() })
-          .where("id", "=", oppId)
-          .where("status", "=", "reservada")
-          .execute();
-
+      const didReopen = await db.transaction().execute((trx) => reopenOpportunityIfNoActiveAllocations(trx, oppId));
+      if (didReopen) {
         await runMatchingForOpportunity(oppId, null);
       }
     }

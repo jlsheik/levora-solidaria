@@ -1322,6 +1322,90 @@ não exige migration.
       integração nas 4 tarefas, o `break` substituído no motor, a
       constante de versão, os testes novos, e a documentação.
 
+## Fase 27 — Correção da race condition crítica de reabertura da oportunidade (CONCLUÍDA — motor de matching 1.3 intocado)
+
+Auditoria dedicada do ciclo completo da oportunidade (fora do motor,
+tratado como caixa-preta) encontrou um achado **CRÍTICO** reproduzido
+deterministicamente: quando duas atribuições diferentes da mesma
+oportunidade terminam (recusa/cancelamento/expiração, em qualquer
+combinação de `allocations-decide_POST`/`allocations-logistics_POST`/
+`expireReservations`) em transações verdadeiramente concorrentes, cada
+uma lia "quantas atribuições-irmãs ainda estão ativas" sem travar essas
+linhas — sob READ COMMITTED, cada transação via a outra ainda "ativa"
+(pré-commit), e **nenhuma** das duas reabria a oportunidade, mesmo com as
+duas já de fato terminadas. Oportunidade ficava presa (`"atribuida"`/
+`"reservada"` com zero atribuições ativas) até reprocessamento manual. Um
+achado ALTO relacionado: `allocations-logistics_POST.ts` reabria sem
+nenhuma cláusula condicional de status. Corrigido aqui, sem tocar em
+peso/fórmula/threshold/critério/`ALGORITHM_VERSION`/schema:
+
+- [x] `src/helpers/reopenOpportunity.tsx` (novo):
+      `reopenOpportunityIfNoActiveAllocations(trx, opportunityRegistryId)`
+      — trava a linha da OPORTUNIDADE (`FOR UPDATE`) **antes** de contar
+      atribuições-irmãs ativas, serializando a decisão "zero ativas"
+      entre todas as transações concorrentes que tentam terminar
+      atribuições da mesma oportunidade. A escrita de reabertura é sempre
+      condicional e atômica: `WHERE status IN ('reservada','atribuida')`
+      — os dois únicos estados de onde uma reabertura por recusa/
+      cancelamento/expiração pode legitimamente partir (análise dos 3
+      fluxos que levam a `remainingActive=0`); qualquer outro status
+      (terminal, ou já `aguardando_destinacao`) faz a escrita ser um
+      no-op seguro.
+- [x] Usado nos 3 caminhos reais que terminam uma atribuição e podem
+      provocar reabertura: `allocations-decide_POST.ts` (recusa),
+      `allocations-logistics_POST.ts` (cancelamento — corrige também o
+      achado ALTO da guarda ausente), `expireReservations.tsx`
+      (expiração — reestruturado para abrir uma transação curta por
+      oportunidade em vez de queries soltas fora de transação).
+- [x] **Deadlock real encontrado e corrigido durante a implementação**
+      (não hipotético — reproduzido pelo próprio Postgres,
+      `PostgresError 40P01`, ao rodar os testes de concorrência reais):
+      `allocations-logistics_POST.ts` chamava `recordAuditLogEntry`
+      (que trava um advisory lock GLOBAL da cadeia de auditoria até o
+      commit — ver `auditLog.tsx`) **antes** de
+      `reopenOpportunityIfNoActiveAllocations` (que trava a linha da
+      oportunidade); `allocations-decide_POST.ts` já fazia na ordem
+      inversa (oportunidade primeiro, auditoria por último — mesmo padrão
+      já usado no resto do código, ex. `needs-status_POST.ts`). Duas
+      transações concorrentes, uma por cada endpoint, formavam um ciclo
+      clássico A-espera-B/B-espera-A. Corrigido alinhando
+      `allocations-logistics_POST.ts` à mesma ordem: travar recursos
+      próprios primeiro, `recordAuditLogEntry` sempre por último.
+      Nenhuma outra ordem de lock no restante do código precisou mudar —
+      `runMatchingForOpportunity`/`opportunity-allocations_POST.ts`/
+      `opportunity-registry-status_POST.ts` só travam a oportunidade e
+      nunca uma atribuição específica via `FOR UPDATE` depois, então não
+      participam de nenhum ciclo possível com os 3 caminhos corrigidos.
+- [x] `test/opportunityReopenConcurrency.test.ts` (11 testes novos): os 7
+      cenários pedidos (A/B sequenciais em qualquer ordem; A+B
+      concorrentes; 3 atribuições concorrentes; 2 concorrentes + 1 ainda
+      ativa não reabre; reabertura permite novo matching; reabrir duas
+      vezes não duplica) + 4 cenários de concorrência real entre
+      endpoints/tarefas via `Promise.all` (logística+matching,
+      logística+expiração, logística+decisão humana — cenário que expôs
+      o deadlock antes da correção de ordem —, duas logísticas
+      concorrentes sobre atribuições diferentes).
+- [x] Suíte completa (187→198 testes) e typecheck confirmados sem
+      regressão. Diff conferido — só o helper novo, sua integração nos 3
+      caminhos, a correção de ordem de lock em `allocations-logistics_POST.ts`,
+      os testes novos, e esta entrada de documentação. `opportunityMatching.tsx`
+      e `db/schema.sql` com diff zero confirmado (`git diff --stat`).
+- [ ] `needs.status` não atualizado automaticamente pelo ciclo de
+      aceite/recebimento — **decisão de produto pendente, não
+      implementada nesta etapa** (instrução explícita).
+- [ ] Reaparecimento de organização recusada no matching seguinte — sem
+      bloqueio histórico adicionado, **decisão de produto pendente, não
+      implementada nesta etapa** (instrução explícita).
+- [ ] `aguardando_coleta`/`em_transporte` continuam como valores mortos
+      do enum `opportunity_registry_status` — **não removidos nesta
+      etapa** (instrução explícita, dívida de modelagem registrada).
+- [ ] O mesmo padrão de corrida (contar irmãs sem travar) também existe
+      em `allocations-receive_POST.ts`, para a transição `→"concluida"`
+      (fechamento, não reabertura) — **fora do escopo desta correção**
+      (a auditoria e a instrução desta etapa cobriram só os 3 caminhos de
+      reabertura), registrado aqui como achado conhecido para decisão
+      futura.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

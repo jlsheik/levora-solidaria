@@ -3,6 +3,7 @@ import { getServerUserSession } from "../helpers/getServerUserSession";
 import { requirePermission } from "../helpers/organizationAccess";
 import { recordAuditLogEntry } from "../helpers/auditLog";
 import { runMatchingForOpportunity } from "../helpers/opportunityMatching";
+import { reopenOpportunityIfNoActiveAllocations } from "../helpers/reopenOpportunity";
 import { schema } from "./allocations-logistics_POST.schema";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse";
@@ -60,6 +61,32 @@ export async function handle(request: Request) {
         })
         .execute();
 
+      // reopenOpportunityIfNoActiveAllocations trava a linha da oportunidade
+      // ANTES de contar atribuições-irmãs ainda ativas (achado de auditoria:
+      // esta escrita antes era incondicional quanto ao status da
+      // oportunidade, e a contagem não travava as linhas-irmãs — as duas
+      // coisas corrigidas aqui). A escrita agora só acontece, de forma
+      // atômica, se o status atual for "reservada" ou "atribuida" — os
+      // únicos dois de onde uma reabertura por cancelamento logístico pode
+      // legitimamente partir (ver comentário no helper).
+      //
+      // Chamado ANTES de recordAuditLogEntry de propósito — não é só estilo.
+      // recordAuditLogEntry trava um advisory lock GLOBAL (a cadeia de
+      // auditoria) até o commit desta transação; se este bloco travasse a
+      // oportunidade DEPOIS do audit log, uma segunda transação que também
+      // precisa travar a MESMA oportunidade antes de gravar SEU próprio
+      // audit log (ex.: allocations-decide_POST) podia formar um ciclo
+      // (A trava auditoria→espera linha da oportunidade; B trava a linha da
+      // oportunidade→espera auditoria) — exatamente o deadlock que a
+      // auditoria pediu para evitar. Travar recursos "próprios" primeiro e
+      // deixar o audit log sempre por último é o mesmo padrão já usado em
+      // needs-status_POST.ts e em todo o resto do código.
+      let reopenOpportunityId: number | null = null;
+      if (input.eventType === "cancelado") {
+        const didReopen = await reopenOpportunityIfNoActiveAllocations(trx, allocation.opportunityRegistryId);
+        if (didReopen) reopenOpportunityId = allocation.opportunityRegistryId;
+      }
+
       await recordAuditLogEntry(
         {
           organizationId: input.organizationId,
@@ -71,26 +98,6 @@ export async function handle(request: Request) {
         },
         trx
       );
-
-      let reopenOpportunityId: number | null = null;
-      if (input.eventType === "cancelado") {
-        const remainingActive = await trx
-          .selectFrom("opportunityAllocations")
-          .select((eb) => eb.fn.countAll().as("count"))
-          .where("opportunityRegistryId", "=", allocation.opportunityRegistryId)
-          .where("status", "!=", "recusada")
-          .where("status", "!=", "cancelada")
-          .executeTakeFirst();
-
-        if (Number(remainingActive?.count ?? 0) === 0) {
-          await trx
-            .updateTable("opportunityRegistry")
-            .set({ status: "aguardando_destinacao", updatedAt: new Date() })
-            .where("id", "=", allocation.opportunityRegistryId)
-            .execute();
-          reopenOpportunityId = allocation.opportunityRegistryId;
-        }
-      }
 
       return { type: "success" as const, status: nextStatus, reopenOpportunityId };
     });

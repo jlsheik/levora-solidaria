@@ -3,6 +3,7 @@ import { getServerUserSession } from "../helpers/getServerUserSession";
 import { requirePermission } from "../helpers/organizationAccess";
 import { recordAuditLogEntry } from "../helpers/auditLog";
 import { runMatchingForOpportunity } from "../helpers/opportunityMatching";
+import { reopenOpportunityIfNoActiveAllocations } from "../helpers/reopenOpportunity";
 import { schema } from "./allocations-decide_POST.schema";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse";
@@ -45,26 +46,16 @@ export async function handle(request: Request) {
           .execute();
       }
 
-      let reopenedForRematch = false;
-      if (input.decision === "recusada") {
-        const remainingActive = await trx
-          .selectFrom("opportunityAllocations")
-          .select((eb) => eb.fn.countAll().as("count"))
-          .where("opportunityRegistryId", "=", allocation.opportunityRegistryId)
-          .where("status", "!=", "recusada")
-          .where("status", "!=", "cancelada")
-          .executeTakeFirst();
-
-        if (Number(remainingActive?.count ?? 0) === 0) {
-          await trx
-            .updateTable("opportunityRegistry")
-            .set({ status: "aguardando_destinacao", updatedAt: new Date() })
-            .where("id", "=", allocation.opportunityRegistryId)
-            .where("status", "=", "reservada")
-            .execute();
-          reopenedForRematch = true;
-        }
-      }
+      // reopenOpportunityIfNoActiveAllocations trava a linha da oportunidade
+      // ANTES de contar atribuições-irmãs ainda ativas — serializa essa
+      // decisão contra qualquer outra transação concorrente terminando uma
+      // atribuição diferente da mesma oportunidade (achado de auditoria:
+      // sem essa travação, duas transações concorrentes podiam cada uma ver
+      // a outra ainda "ativa" e nenhuma reabrir a oportunidade).
+      const reopenedForRematch =
+        input.decision === "recusada"
+          ? await reopenOpportunityIfNoActiveAllocations(trx, allocation.opportunityRegistryId)
+          : false;
 
       await recordAuditLogEntry(
         {
