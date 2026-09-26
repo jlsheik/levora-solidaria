@@ -951,7 +951,7 @@ proprietário no chat desta sessão.
 
 
 
-## Fase 22 — Modelagem de dados para matching automático (capacidade, logística, área de atendimento) (CONCLUÍDA — camada de dados/API; algoritmo e UI ficam para depois)
+## Fase 22 — Modelagem de dados para matching automático (capacidade, logística, área de atendimento) (CONCLUÍDA)
 
 Decisão de arquitetura apresentada e aprovada explicitamente pelo
 proprietário antes de qualquer migration (relatório completo entregue no
@@ -997,16 +997,51 @@ normalizada); "capacidade disponível" sempre calculada, nunca armazenada;
 - [x] 18 testes novos (`test/organizationMatchingConfig.test.ts`) + 1
       teste de RBAC (`test/permissions.test.ts`) — 123→141 no total desta
       sessão.
-- [ ] **Não implementado ainda, de propósito**: os 4 critérios inertes de
-      `opportunityMatching.tsx` continuam `"nao_aplicavel"` — ligar o
-      algoritmo a estes dados novos é um próximo passo separado, só depois
-      de confirmar que a camada de dados/API está correta (mesma ordem que
-      o relatório de arquitetura já registrava: "só depois que existir
-      dado real para ler").
-- [ ] **UI não construída ainda** — tela de configuração
-      (`organizacoes.$organizationId.tsx`, nova aba) fica para quando o
-      wiring do algoritmo também estiver pronto, para não entregar um
-      formulário que ainda não afeta nada de verdade.
+- [x] **Algoritmo ligado aos dados novos** (`src/helpers/opportunityMatching.tsx`,
+      `ALGORITHM_VERSION` 1.0→1.1): `capacidade_armazenamento` (score
+      calculado contra `max_capacity − uso real em
+      stock_transactions/inventory_items` da mesma categoria, nunca um
+      contador à parte), `capacidade_logistica` (binário: realiza coleta
+      ou não), `raio_atendimento` (áreas declaradas, separado de
+      `proximidade` que continua olhando só a sede — decisão aprovada
+      explicitamente: manter os dois critérios). `horarios_restricoes`
+      continua `"nao_aplicavel"` — texto livre não vira pontuação sem uma
+      estrutura própria.
+- [x] **Pesos redistribuídos com aprovação explícita** (categoria 0.30→0.20,
+      urgência 0.20→0.15, quantidade 0.20→0.15, proximidade 0.30→0.15,
+      + raio_atendimento 0.15, capacidade_armazenamento 0.15, capacidade_logistica
+      0.05 — soma 1.00) e **`finalScore` agora é a média ponderada só dos
+      critérios aplicáveis a cada candidato específico** (renormalizado
+      pela soma dos pesos com dado disponível), não mais uma soma fixa
+      assumindo pesos somando 1.00. Decisão crítica aprovada explicitamente
+      antes de implementar: sem essa renormalização, NENHUMA organização
+      (100% delas ainda não haviam configurado nada) conseguiria mais
+      atingir os limiares de confiança média/alta, travando o matching
+      automático em produção até todo mundo preencher a configuração nova.
+      Confirmado por teste: `test/opportunityMatching.test.ts` e
+      `test/idempotency.test.ts` (que já existiam, com organizações sem
+      nenhuma configuração nova) continuam passando sem alteração —
+      comportamento antigo preservado.
+- [x] 5 testes novos (`test/opportunityMatchingCapacity.test.ts`, 141→146):
+      sem configuração os 3 critérios ficam `null` (não entram no
+      cálculo); capacidade com folga = 100, esgotada = 0; logística
+      true/false = 100/0; área de atendimento mesma cidade/mesmo
+      estado/nenhuma = 100/60/20; configurar tudo favoravelmente eleva uma
+      oportunidade de confiança média para atribuição automática de alta
+      confiança.
+- [x] **Achado documentado, não um bug introduzido agora**: o
+      `FlootCamelCasePlugin` (`src/helpers/db.tsx`) transforma
+      recursivamente as chaves de QUALQUER objeto numa linha lida via
+      Kysely, inclusive as de dentro de uma coluna JSONB —
+      `match_evaluations.criteria` grava `"capacidade_armazenamento"` mas
+      volta como `"capacidadeArmazenamento"` depois de um SELECT. Já era
+      assim antes desta sessão; documentado em comentário no código e no
+      teste, porque foi a primeira vez que algo leu uma chave específica
+      de `criteria` programaticamente.
+- [ ] **UI ainda não construída** — tela de configuração
+      (`organizacoes.$organizationId.tsx`, nova aba) para capacidade/área
+      de atendimento/logística fica para uma próxima etapa; hoje só é
+      possível configurar via API diretamente.
 
 ## Limitação registrada: proximidade não é distância real
 

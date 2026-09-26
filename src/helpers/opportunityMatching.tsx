@@ -7,13 +7,25 @@ import type { DB, Json, NeedPriority } from "./schema";
 
 /**
  * Motor de correspondência — determinístico + IA como apoio, nunca como
- * decisão. Ver docs/plano-implementacao.md, fase 5, para as regras de
- * negócio e as limitações assumidas (proximidade é aproximação por
- * cidade/estado; capacidade/raio/horários ainda não são coletados e
- * entram como "não aplicável", nunca como número inventado).
+ * decisão. Ver docs/plano-implementacao.md, fase 5 e fase 22 (esta última
+ * liga capacidade/logística/área de atendimento a dado real, quando a
+ * organização configurou — ver organization_capacities/
+ * organization_matching_settings/organization_service_areas). Proximidade
+ * continua sendo aproximação por cidade/estado da SEDE; raio_atendimento é
+ * um critério separado, sobre áreas declaradas ADEMAIS da sede.
+ * horarios_restricoes continua "não aplicável" — texto livre não vira
+ * pontuação sem uma estrutura própria, que ainda não existe.
+ *
+ * Peso por critério só conta para o score final quando o dado existe para
+ * aquele candidato específico (`finalScore` é a média ponderada só dos
+ * critérios aplicáveis, não uma soma fixa sobre 1.00) — isto é
+ * deliberado: sem isso, uma organização que ainda não configurou
+ * capacidade/logística/área de atendimento (hoje, 100% delas) nunca mais
+ * atingiria os limiares de confiança média/alta, travando o matching
+ * automático até todo mundo preencher a configuração nova.
  */
 
-export const ALGORITHM_VERSION = "1.0";
+export const ALGORITHM_VERSION = "1.1";
 export const HIGH_CONFIDENCE_THRESHOLD = 90;
 export const MEDIUM_CONFIDENCE_THRESHOLD = 70;
 export const RESERVATION_MINUTES = 30;
@@ -152,6 +164,69 @@ export async function runMatchingForOpportunity(
       .where("organizations.status", "=", "ativa")
       .execute();
 
+    // Uma única busca em lote por tipo de dado, para todas as organizações
+    // candidatas de uma vez — nunca uma query por candidato dentro do loop
+    // de pontuação (risco de N+1 real com muitas organizações/oportunidades).
+    const candidateOrgIds = [...new Set(candidates.filter((c) => !existingOrgIds.has(c.organizationId)).map((c) => c.organizationId))];
+
+    const [capacityRows, settingsRows, serviceAreaRows, stockUsageRows] = candidateOrgIds.length === 0
+      ? [[], [], [], []]
+      : await Promise.all([
+          trx
+            .selectFrom("organizationCapacities")
+            .select(["organizationId", "category", "unit", "maxCapacity"])
+            .where("organizationId", "in", candidateOrgIds)
+            .execute(),
+          trx
+            .selectFrom("organizationMatchingSettings")
+            .select(["organizationId", "realizaColeta"])
+            .where("organizationId", "in", candidateOrgIds)
+            .execute(),
+          trx
+            .selectFrom("organizationServiceAreas")
+            .select(["organizationId", "city", "state"])
+            .where("organizationId", "in", candidateOrgIds)
+            .execute(),
+          // Uso atual de estoque por (organização, categoria) — mesma fonte
+          // de verdade de sempre (stock_transactions), nunca um contador
+          // paralelo. Agrupado no banco, não calculado item a item aqui.
+          trx
+            .selectFrom("inventoryItems")
+            .leftJoin("stockTransactions", "stockTransactions.itemId", "inventoryItems.id")
+            .select([
+              "inventoryItems.organizationId",
+              "inventoryItems.category",
+              (eb) => eb.fn.coalesce(eb.fn.sum("stockTransactions.delta"), sql<string>`0`).as("total"),
+            ])
+            .where("inventoryItems.organizationId", "in", candidateOrgIds)
+            .where("inventoryItems.category", "is not", null)
+            .groupBy(["inventoryItems.organizationId", "inventoryItems.category"])
+            .execute(),
+        ]);
+
+    const capacitiesByOrg = new Map<number, Array<{ category: string; unit: string; maxCapacity: number }>>();
+    for (const row of capacityRows) {
+      const list = capacitiesByOrg.get(row.organizationId) ?? [];
+      list.push({ category: row.category, unit: row.unit, maxCapacity: Number(row.maxCapacity) });
+      capacitiesByOrg.set(row.organizationId, list);
+    }
+
+    const realizaColetaByOrg = new Map<number, boolean>();
+    for (const row of settingsRows) realizaColetaByOrg.set(row.organizationId, row.realizaColeta);
+
+    const serviceAreasByOrg = new Map<number, Array<{ city: string; state: string }>>();
+    for (const row of serviceAreaRows) {
+      const list = serviceAreasByOrg.get(row.organizationId) ?? [];
+      list.push({ city: row.city, state: row.state });
+      serviceAreasByOrg.set(row.organizationId, list);
+    }
+
+    const stockUsageByOrgCategory = new Map<string, number>();
+    for (const row of stockUsageRows) {
+      if (!row.category) continue;
+      stockUsageByOrgCategory.set(`${row.organizationId}::${normalize(row.category)}`, Number(row.total));
+    }
+
     const opportunityText = [opportunity.title, opportunity.category, opportunity.description].filter(Boolean).join(" — ");
 
     const evaluated: CandidateEvaluation[] = [];
@@ -195,20 +270,86 @@ export async function runMatchingForOpportunity(
         ? 50
         : sameCity ? 100 : sameState ? 60 : 20;
 
+      // Capacidade de armazenamento: só aplicável se a organização declarou
+      // um teto para a MESMA categoria da oportunidade (comparação fuzzy,
+      // igual ao resto do sistema — não existe taxonomia normalizada de
+      // categoria). "Disponível" é sempre calculado contra o uso real de
+      // estoque já existente, nunca um número guardado à parte.
+      const orgCapacities = capacitiesByOrg.get(c.organizationId) ?? [];
+      const matchingCapacity = opportunity.category
+        ? orgCapacities.find((cap) => normalize(cap.category) === normalize(opportunity.category!))
+        : undefined;
+      const capacidadeArmazenamento: CriterionResult =
+        !matchingCapacity || opportunity.quantity === null
+          ? { score: null, weight: 0.15, detail: "nao_aplicavel: capacidade nao declarada para esta categoria" }
+          : (() => {
+              const used = stockUsageByOrgCategory.get(`${c.organizationId}::${normalize(matchingCapacity.category)}`) ?? 0;
+              const available = matchingCapacity.maxCapacity - used;
+              const rawScore = available <= 0 ? 0 : Math.min(100, (available / Number(opportunity.quantity)) * 100);
+              return {
+                score: Math.round(rawScore * 100) / 100,
+                weight: 0.15,
+                detail: `capacidade declarada ${matchingCapacity.maxCapacity}${matchingCapacity.unit}, uso atual ${used}, disponivel ${available}`,
+              };
+            })();
+
+      // Capacidade logística: MVP deliberadamente simples — só "realiza
+      // coleta ou não" (ver docs/plano-implementacao.md, fase 21). Sem
+      // configuração registrada, o critério fica não aplicável (nunca
+      // penaliza quem simplesmente ainda não configurou).
+      const realizaColeta = realizaColetaByOrg.get(c.organizationId);
+      const capacidadeLogistica: CriterionResult =
+        realizaColeta === undefined
+          ? { score: null, weight: 0.05, detail: "nao_aplicavel: configuracao de logistica nao definida" }
+          : { score: realizaColeta ? 100 : 0, weight: 0.05, detail: realizaColeta ? "organizacao realiza coleta" : "organizacao nao realiza coleta" };
+
+      // Raio de atendimento: áreas declaradas ADEMAIS da sede (distinto de
+      // `proximidade` acima, que só olha a sede). Sem nenhuma área
+      // declarada, fica não aplicável — lista vazia não significa "não
+      // atende em lugar nenhum", significa "não configurou ainda".
+      const orgServiceAreas = serviceAreasByOrg.get(c.organizationId) ?? [];
+      const raioAtendimento: CriterionResult =
+        !opportunity.locationCity && !opportunity.locationState
+          ? { score: null, weight: 0.15, detail: "nao_aplicavel: oportunidade sem localizacao" }
+          : orgServiceAreas.length === 0
+            ? { score: null, weight: 0.15, detail: "nao_aplicavel: organizacao nao declarou areas de atendimento" }
+            : (() => {
+                const cityMatch = opportunity.locationCity && orgServiceAreas.some((a) => normalize(a.city) === normalize(opportunity.locationCity!));
+                const stateMatch = opportunity.locationState && orgServiceAreas.some((a) => normalize(a.state) === normalize(opportunity.locationState!));
+                return {
+                  score: cityMatch ? 100 : stateMatch ? 60 : 20,
+                  weight: 0.15,
+                  detail: "baseado em areas de atendimento declaradas, nao e distancia em km",
+                };
+              })();
+
+      // Nota para quem for LER esta coluna de volta via Kysely (ex.:
+      // match-evaluations_GET, ou um teste): o FlootCamelCasePlugin
+      // (src/helpers/db.tsx) transforma recursivamente as chaves de
+      // qualquer objeto simples numa linha, inclusive as de dentro deste
+      // JSONB — "capacidade_armazenamento" grava assim, mas volta como
+      // "capacidadeArmazenamento" depois de um SELECT. Não é um bug, é um
+      // efeito colateral do plugin sobre CADA objeto na linha, não só
+      // nomes de coluna.
       const criteria: Record<string, CriterionResult> = {
-        categoria: { score: categoriaScore, weight: 0.30, detail: categoriaDetail },
-        necessidade_urgencia: { score: URGENCY_SCORE[c.priority], weight: 0.20, detail: `prioridade da necessidade: ${c.priority}` },
-        quantidade: { score: Math.round(quantidadeScore * 100) / 100, weight: 0.20, detail: opportunity.quantity !== null ? `oferecido ${opportunity.quantity}${opportunity.unit ?? ""} vs necessário ${needQty}` : "quantidade da oportunidade não informada" },
-        proximidade: { score: localizacaoScore, weight: 0.30, detail: "aproximacao por cidade/estado, nao e distancia em km" },
-        capacidade_armazenamento: { score: null, weight: 0, detail: "nao_aplicavel: dado nao coletado ainda" },
-        capacidade_logistica: { score: null, weight: 0, detail: "nao_aplicavel: dado nao coletado ainda" },
-        raio_atendimento: { score: null, weight: 0, detail: "nao_aplicavel: dado nao coletado ainda" },
+        categoria: { score: categoriaScore, weight: 0.20, detail: categoriaDetail },
+        necessidade_urgencia: { score: URGENCY_SCORE[c.priority], weight: 0.15, detail: `prioridade da necessidade: ${c.priority}` },
+        quantidade: { score: Math.round(quantidadeScore * 100) / 100, weight: 0.15, detail: opportunity.quantity !== null ? `oferecido ${opportunity.quantity}${opportunity.unit ?? ""} vs necessário ${needQty}` : "quantidade da oportunidade não informada" },
+        proximidade: { score: localizacaoScore, weight: 0.15, detail: "aproximacao por cidade/estado da sede, nao e distancia em km" },
+        capacidade_armazenamento: capacidadeArmazenamento,
+        capacidade_logistica: capacidadeLogistica,
+        raio_atendimento: raioAtendimento,
         horarios_restricoes: { score: null, weight: 0, detail: "nao_aplicavel: dado nao coletado ainda" },
       };
 
-      const finalScore = Math.round(
-        Object.values(criteria).reduce((sum, c2) => sum + (c2.score ?? 0) * c2.weight, 0) * 100
-      ) / 100;
+      // Média ponderada só dos critérios APLICÁVEIS a este candidato (score
+      // não nulo) — não uma soma fixa assumindo que os pesos sempre somam
+      // 1.00. Ver comentário no topo do arquivo: sem isto, organizações que
+      // ainda não configuraram capacidade/logística/área de atendimento
+      // (hoje, todas) nunca mais atingiriam os limiares de confiança.
+      const applicableWeight = Object.values(criteria).reduce((sum, c2) => sum + (c2.score !== null ? c2.weight : 0), 0);
+      const rawWeightedSum = Object.values(criteria).reduce((sum, c2) => sum + (c2.score ?? 0) * c2.weight, 0);
+      const finalScore = applicableWeight > 0 ? Math.round((rawWeightedSum / applicableWeight) * 100) / 100 : 0;
 
       evaluated.push({
         organizationId: c.organizationId,
