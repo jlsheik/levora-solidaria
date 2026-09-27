@@ -3,18 +3,26 @@ import type { DB } from "./schema";
 import { normalize } from "./opportunityMatching";
 
 /**
- * Ledger append-only de atendimento de necessidades (`need_fulfillments`
- * — ver db/migrations/0006_need_fulfillments.sql para o comentário
- * arquitetural completo). Registra o FATO FÍSICO de que um recebimento de
- * doação contribuiu para uma necessidade — sem transformar
- * `needs.quantity_needed` num contador mutável, sem alterar
- * `needs.status`, e sem tocar no motor de matching (`opportunityMatching.tsx`
- * é só consultado aqui pela função pura `normalize`, exportada — nada no
- * motor é chamado nem alterado).
+ * Ledger append-only de EVENTOS de atendimento de necessidades
+ * (`need_fulfillments` — ver db/migrations/0006_need_fulfillments.sql,
+ * 0007_need_fulfillments_fk_restrict.sql e
+ * 0008_need_fulfillments_ledger_of_events.sql para o comentário
+ * arquitetural completo). Não transforma `needs.quantity_needed` num
+ * contador mutável, não altera `needs.status`, e não toca no motor de
+ * matching (`opportunityMatching.tsx` é só consultado aqui pela função
+ * pura `normalize`, exportada — nada no motor é chamado nem alterado).
  *
  * `quantity`/`unit` registrados aqui são sempre os do RECEBIMENTO real
  * (`quantityReceived`), nunca `quantityAllocated` nem `quantityNeeded` —
  * este ledger é sobre o que aconteceu de verdade, não sobre a expectativa.
+ *
+ * Esta função cria sempre um evento `entry_type="original"` — a única
+ * função de criação implementada nesta fase (infraestrutura do Modelo B).
+ * Correções/reversões (`entry_type="correction"`/`"reversal"`,
+ * `reverses_fulfillment_id`) são suportadas pelo schema (validadas por
+ * `need_fulfillments_validate_entry`, trigger BEFORE INSERT), mas nenhuma
+ * função/endpoint para criá-las foi implementado ainda — isso é
+ * deliberadamente uma etapa futura separada.
  *
  * Chamado por `allocations-receive_POST.ts`, dentro da mesma transação do
  * recebimento, depois de a `stock_transaction` já existir (precisa do seu
@@ -39,7 +47,8 @@ export async function createNeedFulfillment(trx: Transaction<DB>, input: CreateN
   // específica (opportunityMatching.tsx) — nunca reaproveitado por outra
   // allocation depois — então no máximo uma linha pode aplicar-se aqui;
   // `executeTakeFirst()` não é um LIMIT 1 arbitrário sobre dado ambíguo,
-  // é a cardinalidade real garantida pelo próprio motor. Allocations
+  // é a cardinalidade real garantida pelo próprio motor (reforçada por
+  // `idx_match_evaluations_allocation_id`, índice único). Allocations
   // criadas manualmente (opportunity-allocations_POST.ts) nunca geram uma
   // linha em match_evaluations — para essas, esta consulta legitimamente
   // não encontra nada, e needId permanece null (não é um erro nem uma
@@ -51,6 +60,7 @@ export async function createNeedFulfillment(trx: Transaction<DB>, input: CreateN
     .executeTakeFirst();
 
   let needId: number | null = null;
+  let isCountable = true;
   let unitMismatchNote: string | null = null;
 
   if (evaluation?.needId) {
@@ -60,15 +70,22 @@ export async function createNeedFulfillment(trx: Transaction<DB>, input: CreateN
       .where("id", "=", evaluation.needId)
       .executeTakeFirst();
 
-    // Nunca soma unidades incompatíveis (kg + unidade, litros + kg, etc.).
-    // Mesma normalização textual usada em todo o motor de matching
-    // (normalize(): NFD + remoção de acento + minúsculas) — não é uma
-    // conversão de unidade, só evita que "Kg"/"kg "/"KG" sejam tratados
-    // como divergentes por diferença puramente textual.
-    if (need && normalize(need.unit) === normalize(input.unit)) {
+    // Modelo B (decisão arquitetural desta sessão): a RELAÇÃO com a need
+    // (need_id) é um fato já certo, gravado no momento do matching — nunca
+    // deve ser descartada só porque a unidade do recebimento diverge.
+    // O que fica incerto é só se esta quantidade pode ser CONTADA no
+    // progresso da need (isCountable) — nunca soma unidades incompatíveis
+    // (kg + unidade, litros + kg, etc.). Mesma normalização textual usada
+    // em todo o motor de matching (normalize(): NFD + remoção de acento +
+    // minúsculas) — não é conversão de unidade, só evita que
+    // "Kg"/"kg "/"KG" sejam tratados como divergentes por diferença
+    // puramente textual.
+    if (need) {
       needId = evaluation.needId;
-    } else if (need) {
-      unitMismatchNote = `needId ${evaluation.needId} encontrado via match_evaluations, mas unidade do recebimento ("${input.unit}") diverge da unidade da necessidade ("${need.unit}") — need_id não atribuído para evitar somar unidades incompatíveis.`;
+      isCountable = normalize(need.unit) === normalize(input.unit);
+      if (!isCountable) {
+        unitMismatchNote = `Unidade do recebimento ("${input.unit}") diverge da unidade da necessidade ${evaluation.needId} ("${need.unit}") — is_countable=false para nunca somar unidades incompatíveis, mas need_id é preservado (a relação com o matching é um fato certo, não descartado por causa da unidade).`;
+      }
     }
   }
 
@@ -83,6 +100,8 @@ export async function createNeedFulfillment(trx: Transaction<DB>, input: CreateN
       unit: input.unit,
       unitMismatchNote,
       createdByUserId: input.createdByUserId,
+      entryType: "original",
+      isCountable,
     })
     .execute();
 }

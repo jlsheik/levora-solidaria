@@ -1619,6 +1619,76 @@ modelo append-only e deve ser evitada; `RESTRICT`/`NO ACTION` são as
 únicas ações de FK seguras para uma tabela append-only referenciada por
 outras entidades.
 
+## Fase 31 — Evolução do ledger para eventos (Modelo B): `entry_type`/`is_countable`/`reverses_fulfillment_id` (CONCLUÍDA)
+
+Investigação arquitetural aprovou o **Modelo B**: `need_fulfillments` deixa de significar "uma allocation gera exatamente um fulfillment" e passa a significar "um evento de atendimento relacionado a uma allocation/need/movimento de estoque" — permitindo correções/reversões como novas linhas (append-only preservado) e preservando `need_id` mesmo quando a unidade do recebimento é incompatível (a relação com o matching é um fato já certo, nunca deve ser descartada por causa da unidade — só a contabilização é suspensa). Escopo desta etapa: **só a infraestrutura**, nenhuma regra automática de negócio nova.
+
+- [x] `db/migrations/0008_need_fulfillments_ledger_of_events.sql`: `entry_type`
+      (`'original'|'correction'|'reversal'`, `CHECK`, default `'original'`
+      — taxonomia mínima analisada, não assumida: `original` é o
+      recebimento físico real, nunca referencia outra linha, exige
+      `stock_transaction_id`; `correction` adiciona um valor
+      novo/corrigido, referência opcional a uma linha anterior;
+      `reversal` desfaz numericamente uma contribuição, sempre exige
+      `reverses_fulfillment_id`); `is_countable BOOLEAN NOT NULL DEFAULT true`
+      (independente de `entry_type` — um `original` pode ter
+      `is_countable=false`); `reverses_fulfillment_id` (auto-FK,
+      `RESTRICT`, nullable) — ciclos estruturalmente impossíveis
+      (auto-referência a uma linha que já precisa existir no momento do
+      `INSERT`, PK auto-incremental). `stock_transaction_id` virou
+      **nullable** (uma correção puramente de metadado não tem motivo de
+      negócio para inventar um novo lançamento físico de estoque).
+- [x] `need_fulfillments_validate_entry` (novo trigger `BEFORE INSERT`,
+      mesmo padrão de `audit_log_block_mutation`): valida cruzamento entre
+      linhas (não expressável só com `CHECK`/FK simples) — `original` sem
+      `reverses_fulfillment_id`, com `stock_transaction_id` obrigatório;
+      `correction`/`reversal` sempre com `reverses_fulfillment_id`
+      apontando para uma linha da MESMA `allocation_id` cujo `entry_type`
+      não seja `'reversal'` (nunca reverter uma reversão — para isso, uma
+      nova `correction` aponta de volta ao evento original).
+- [x] `UNIQUE(allocation_id)` substituído por índice único **parcial**
+      (`WHERE entry_type='original'`) — no máximo uma linha original por
+      allocation, mas correções/reversões repetem a `allocation_id`
+      livremente (a mudança central que resolve o conflito com
+      append-only encontrado na auditoria anterior).
+      `UNIQUE(stock_transaction_id)` não precisou mudar — Postgres já
+      trata múltiplos `NULL` como não-conflitantes.
+- [x] `src/helpers/needFulfillment.tsx`: mudança de comportamento
+      (Modelo B) — incompatibilidade de unidade agora preserva `needId`
+      (`isCountable=false` + `unitMismatchNote`), em vez de descartar a
+      relação (`needId=null`, comportamento da Fase 29). Continua criando
+      só `entry_type="original"` — nenhuma função/endpoint de
+      correção/reversão foi implementado (infraestrutura apenas).
+- [x] `test/needFulfillment.test.ts` (+8 testes; teste 6 de unidade
+      incompatível atualizado para a nova semântica): correção de evento
+      original sem novo movimento físico; reversão exigindo
+      `reverses_fulfillment_id`; correção com novo `stock_transaction`
+      real (`type="ajuste"`); duas linhas `original` para a mesma
+      allocation proibidas (índice único parcial); duas linhas `original`
+      para o mesmo `stock_transaction` proibidas (`UNIQUE`); reverter uma
+      `reversal` proibido pelo trigger; referenciar allocation diferente
+      proibido pelo trigger; migração de uma linha "estilo Fase 29" (sem
+      `entry_type`/`is_countable` explícitos) confirma os defaults
+      corretos.
+- [x] Suíte completa (228→236 testes) e typecheck confirmados sem
+      regressão. Diff conferido — só a migration nova, `schema.sql`,
+      `schema.tsx` (tipos), `needFulfillment.tsx`, os testes, e esta
+      entrada de documentação. `opportunityMatching.tsx` com diff zero
+      confirmado; `ALGORITHM_VERSION` continua `"1.3"`.
+- [ ] **Não implementado nesta etapa, por instrução explícita**: função/
+      endpoint para CRIAR eventos de correção/reversão (só o schema
+      suporta, nenhum caminho de aplicação os gera ainda);
+      `need_remaining` no matching; mudança automática de `needs.status`;
+      política de over-fulfillment; bloqueio de reaparecimento pós-recusa;
+      endpoint de relatório/progresso da need. Todos continuam decisões de
+      produto pendentes, registradas em fases anteriores.
+
+**Regra de soma futura (documentada, não implementada)**: um cálculo
+determinístico de progresso de uma need deve ser
+`SUM(CASE WHEN entry_type='reversal' THEN -quantity ELSE quantity END)
+WHERE need_id=? AND is_countable=true` — nunca dependente de parsear
+`unit_mismatch_note` ou qualquer outro texto livre.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

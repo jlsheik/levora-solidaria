@@ -409,35 +409,90 @@ ALTER TABLE opportunity_allocations
 
 -- ============================================================
 -- Fase 29 — Ledger de atendimento de necessidades (need_fulfillments)
--- Ver db/migrations/0006_need_fulfillments.sql para o comentário completo,
--- e 0007_need_fulfillments_fk_restrict.sql para o motivo das 3 FKs abaixo
--- serem RESTRICT (não CASCADE/SET NULL): need_fulfillments é append-only
--- (trigger audit_log_block_mutation), e uma ação de FK que exigisse o
--- Postgres alterar/apagar a própria linha do ledger para honrar a
--- exclusão de uma need/allocation/organização seria bloqueada por esse
+-- Fase 30 — FKs RESTRICT (0007) e evolução para ledger de EVENTOS (0008)
+-- Ver db/migrations/0006_need_fulfillments.sql, 0007_need_fulfillments_fk_restrict.sql
+-- e 0008_need_fulfillments_ledger_of_events.sql para os comentários completos.
+--
+-- RESTRICT (não CASCADE/SET NULL) em organization_id/need_id/allocation_id:
+-- need_fulfillments é append-only (trigger audit_log_block_mutation), e uma
+-- ação de FK que exigisse o Postgres alterar/apagar a própria linha do
+-- ledger para honrar a exclusão de uma linha-pai seria bloqueada por esse
 -- mesmo trigger, fazendo o DELETE da linha-pai falhar por inteiro —
--- confirmado por reprodução, não hipotético. RESTRICT torna essa
--- incompatibilidade explícita na própria FK, em vez de deixar uma
--- promessa (SET NULL/CASCADE) que nunca se cumpre de verdade.
+-- confirmado por reprodução. RESTRICT torna essa incompatibilidade
+-- explícita na própria FK.
+--
+-- entry_type ('original'/'correction'/'reversal') + is_countable +
+-- reverses_fulfillment_id: permitem registrar correções/reversões como
+-- novas linhas (nunca UPDATE/DELETE) sem perder a relação com a need —
+-- inclusive quando a unidade do recebimento é incompatível
+-- (is_countable=false, need_id preservado, nunca NULL). Validação cruzada
+-- de entry_type/reverses_fulfillment_id feita por trigger BEFORE INSERT
+-- (need_fulfillments_validate_entry) — não expressável só com CHECK/FK
+-- simples. stock_transaction_id é NULLABLE porque uma correção
+-- puramente de metadado (need_id/is_countable errados, item físico já
+-- certo) não tem motivo de negócio para um novo lançamento de estoque;
+-- 'original' continua exigindo um valor real, validado pelo trigger.
 -- ============================================================
 CREATE TABLE need_fulfillments (
   id BIGSERIAL PRIMARY KEY,
   organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT,
   need_id INTEGER REFERENCES needs(id) ON DELETE RESTRICT,
   allocation_id INTEGER NOT NULL REFERENCES opportunity_allocations(id) ON DELETE RESTRICT,
-  stock_transaction_id BIGINT NOT NULL REFERENCES stock_transactions(id) ON DELETE RESTRICT,
+  stock_transaction_id BIGINT REFERENCES stock_transactions(id) ON DELETE RESTRICT,
   quantity NUMERIC(12,3) NOT NULL CHECK (quantity > 0),
   unit TEXT NOT NULL,
   unit_mismatch_note TEXT,
   created_by_user_id INTEGER REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (allocation_id),
+  entry_type TEXT NOT NULL DEFAULT 'original' CONSTRAINT need_fulfillments_entry_type_chk CHECK (entry_type IN ('original', 'correction', 'reversal')),
+  is_countable BOOLEAN NOT NULL DEFAULT true,
+  reverses_fulfillment_id BIGINT REFERENCES need_fulfillments(id) ON DELETE RESTRICT,
   UNIQUE (stock_transaction_id)
 );
 CREATE TRIGGER need_fulfillments_no_update BEFORE UPDATE ON need_fulfillments FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
 CREATE TRIGGER need_fulfillments_no_delete BEFORE DELETE ON need_fulfillments FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
 CREATE INDEX idx_need_fulfillments_need ON need_fulfillments(need_id);
 CREATE INDEX idx_need_fulfillments_org ON need_fulfillments(organization_id, created_at DESC);
+CREATE INDEX idx_need_fulfillments_reverses ON need_fulfillments(reverses_fulfillment_id) WHERE reverses_fulfillment_id IS NOT NULL;
+-- No máximo UMA linha 'original' por allocation — correções/reversões
+-- repetem a mesma allocation_id livremente (ver comentário acima).
+CREATE UNIQUE INDEX idx_need_fulfillments_one_original_per_allocation ON need_fulfillments(allocation_id) WHERE entry_type = 'original';
+
+CREATE OR REPLACE FUNCTION need_fulfillments_validate_entry() RETURNS TRIGGER AS $$
+DECLARE
+  target RECORD;
+BEGIN
+  IF NEW.entry_type = 'original' THEN
+    IF NEW.reverses_fulfillment_id IS NOT NULL THEN
+      RAISE EXCEPTION 'need_fulfillments: entry_type=original não pode ter reverses_fulfillment_id';
+    END IF;
+    IF NEW.stock_transaction_id IS NULL THEN
+      RAISE EXCEPTION 'need_fulfillments: entry_type=original exige stock_transaction_id (representa um recebimento físico real)';
+    END IF;
+  ELSE
+    IF NEW.reverses_fulfillment_id IS NULL THEN
+      RAISE EXCEPTION 'need_fulfillments: entry_type=% exige reverses_fulfillment_id', NEW.entry_type;
+    END IF;
+
+    SELECT allocation_id, entry_type INTO target FROM need_fulfillments WHERE id = NEW.reverses_fulfillment_id;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'need_fulfillments: reverses_fulfillment_id % não encontrado', NEW.reverses_fulfillment_id;
+    END IF;
+    IF target.allocation_id IS DISTINCT FROM NEW.allocation_id THEN
+      RAISE EXCEPTION 'need_fulfillments: reverses_fulfillment_id precisa pertencer à mesma allocation_id';
+    END IF;
+    IF target.entry_type = 'reversal' THEN
+      RAISE EXCEPTION 'need_fulfillments: não é permitido referenciar (corrigir/reverter) uma linha que já é entry_type=reversal';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER need_fulfillments_validate_entry_trigger
+  BEFORE INSERT ON need_fulfillments
+  FOR EACH ROW EXECUTE FUNCTION need_fulfillments_validate_entry();
 
 -- ============================================================
 -- Fase 6 — Logística (coleta, transporte, entrega)

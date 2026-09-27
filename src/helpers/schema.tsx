@@ -35,6 +35,8 @@ export type MembershipRole = "administrador" | "operador" | "proprietario" | "vo
 
 export type MembershipStatus = "ativo" | "convidado" | "inativo";
 
+export type NeedFulfillmentEntryType = "correction" | "original" | "reversal";
+
 export type NeedPriority = "alta" | "baixa" | "critica" | "media";
 
 export type NeedStatus = "aberta" | "atendida" | "cancelada";
@@ -198,11 +200,14 @@ export interface NeedFulfillments {
   allocationId: number;
   createdAt: Generated<Timestamp>;
   createdByUserId: number | null;
+  entryType: Generated<NeedFulfillmentEntryType>;
   id: Generated<Int8>;
+  isCountable: Generated<boolean>;
   needId: number | null;
   organizationId: number;
   quantity: Numeric;
-  stockTransactionId: Int8;
+  reversesFulfillmentId: Int8 | null;
+  stockTransactionId: Int8 | null;
   unit: string;
   unitMismatchNote: string | null;
 }

@@ -61,6 +61,9 @@ describe("need_fulfillments — ledger de atendimento", () => {
     expect(Number(fulfillment.quantity)).toBe(20);
     expect(fulfillment.unit).toBe("kg");
     expect(fulfillment.unitMismatchNote).toBeNull();
+    expect(fulfillment.entryType).toBe("original");
+    expect(fulfillment.isCountable).toBe(true);
+    expect(fulfillment.reversesFulfillmentId).toBeNull();
 
     const stockTx = await db.selectFrom("stockTransactions").select(["id"]).where("itemId", "=", item.id).executeTakeFirstOrThrow();
     expect(String(fulfillment.stockTransactionId)).toBe(String(stockTx.id));
@@ -145,7 +148,7 @@ describe("need_fulfillments — ledger de atendimento", () => {
     expect(fulfillment.needId).toBe(need.id); // "KG" (item) normaliza igual a "kg" (need) — vinculado
   });
 
-  it("teste 6: unidades incompatíveis (need em kg, item recebido em unidade) -> needId NAO atribuído, motivo registrado", async () => {
+  it("teste 6: unidades incompatíveis (need em kg, item recebido em unidade) -> needId PRESERVADO, isCountable=false, motivo registrado (Modelo B)", async () => {
     const admin = await createAuthenticatedUser();
     const source = await createTestSource(admin.userId);
     const owner = await createAuthenticatedUser();
@@ -174,7 +177,11 @@ describe("need_fulfillments — ledger de atendimento", () => {
     expect(receiveRes.status).toBe(200);
 
     const fulfillment = await getFulfillment(allocation.id);
-    expect(fulfillment.needId).toBeNull(); // nunca soma unidades incompatíveis
+    // Modelo B: a relação com a need é preservada (era um fato já certo,
+    // gravado no matching) — só a contabilização é suspensa.
+    expect(fulfillment.needId).toBe(need.id);
+    expect(fulfillment.isCountable).toBe(false);
+    expect(fulfillment.entryType).toBe("original");
     expect(fulfillment.unitMismatchNote).toContain(String(need.id));
     expect(fulfillment.unitMismatchNote).toContain("unidade");
   });
@@ -314,5 +321,168 @@ describe("need_fulfillments — FKs RESTRICT (achado de auditoria corrigido: app
     // por auditoria) — este teste prova só a proteção de schema em si,
     // usando um DELETE direto, não um fluxo de produto inventado.
     await expect(db.deleteFrom("organizations").where("id", "=", org.id).execute()).rejects.toThrow();
+  });
+});
+
+describe("need_fulfillments — Modelo B: ledger de eventos (entry_type/is_countable/reverses_fulfillment_id)", () => {
+  async function setupOriginal(quantity = 200) {
+    const owner = await createAuthenticatedUser();
+    const org = await createTestOrganization(owner.userId);
+    const item = await createTestInventoryItem(org.id, owner.userId, { name: "Item Modelo B", unit: "kg" });
+    const admin = await createAuthenticatedUser();
+    const source = await createTestSource(admin.userId);
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { status: "atribuida" });
+    const allocation = await createTestAllocation(opportunity.id, org.id, { status: "aceita", quantityAllocated: quantity });
+
+    const receiveRes = await receiveHandle(buildRequest("allocations-receive", { method: "POST", cookie: owner.cookie, body: { organizationId: org.id, allocationId: allocation.id, itemId: item.id, quantityReceived: quantity } }));
+    expect(receiveRes.status).toBe(200);
+
+    const original = await getFulfillment(allocation.id);
+    return { owner, org, item, allocation, original };
+  }
+
+  it("teste 3: correção de evento original (novo valor, sem stock_transaction novo) -> permitido, referencia o original", async () => {
+    const { org, allocation, original } = await setupOriginal(200);
+
+    const [correction] = await db
+      .insertInto("needFulfillments")
+      .values({
+        organizationId: org.id,
+        needId: null,
+        allocationId: allocation.id,
+        stockTransactionId: null,
+        quantity: "150",
+        unit: "kg",
+        entryType: "correction",
+        isCountable: true,
+        reversesFulfillmentId: original.id,
+      })
+      .returning(["id"])
+      .execute();
+
+    const correctionRow = await db.selectFrom("needFulfillments").selectAll().where("id", "=", correction.id).executeTakeFirstOrThrow();
+    expect(correctionRow.entryType).toBe("correction");
+    expect(correctionRow.allocationId).toBe(allocation.id); // repete a allocation da linha original
+    expect(correctionRow.reversesFulfillmentId).toBe(original.id);
+    expect(correctionRow.stockTransactionId).toBeNull(); // teste 8: correção sem novo movimento físico
+    expect(Number(correctionRow.quantity)).toBe(150);
+  });
+
+  it("teste 4: reversão de evento original -> permitida, exige reverses_fulfillment_id", async () => {
+    const { org, allocation, original } = await setupOriginal(200);
+
+    const [reversal] = await db
+      .insertInto("needFulfillments")
+      .values({
+        organizationId: org.id,
+        needId: null,
+        allocationId: allocation.id,
+        stockTransactionId: null,
+        quantity: "200",
+        unit: "kg",
+        entryType: "reversal",
+        isCountable: true,
+        reversesFulfillmentId: original.id,
+      })
+      .returning(["id"])
+      .execute();
+
+    const reversalRow = await db.selectFrom("needFulfillments").selectAll().where("id", "=", reversal.id).executeTakeFirstOrThrow();
+    expect(reversalRow.entryType).toBe("reversal");
+    expect(reversalRow.reversesFulfillmentId).toBe(original.id);
+
+    // reversal SEM reverses_fulfillment_id é rejeitado pelo trigger.
+    await expect(
+      db.insertInto("needFulfillments").values({ organizationId: org.id, needId: null, allocationId: allocation.id, stockTransactionId: null, quantity: "50", unit: "kg", entryType: "reversal", isCountable: true }).execute()
+    ).rejects.toThrow(/exige reverses_fulfillment_id/);
+  });
+
+  it("teste 9: correção COM novo stock_transaction (movimento físico real de ajuste) -> permitido", async () => {
+    const { org, item, allocation, original } = await setupOriginal(200);
+
+    const [adjustmentTx] = await db
+      .insertInto("stockTransactions")
+      .values({ organizationId: org.id, itemId: item.id, type: "ajuste", delta: "-50", reason: "correção de recebimento" })
+      .returning(["id"])
+      .execute();
+
+    const [correction] = await db
+      .insertInto("needFulfillments")
+      .values({ organizationId: org.id, needId: null, allocationId: allocation.id, stockTransactionId: adjustmentTx.id, quantity: "50", unit: "kg", entryType: "correction", isCountable: true, reversesFulfillmentId: original.id })
+      .returning(["id"])
+      .execute();
+
+    const correctionRow = await db.selectFrom("needFulfillments").select(["stockTransactionId"]).where("id", "=", correction.id).executeTakeFirstOrThrow();
+    expect(String(correctionRow.stockTransactionId)).toBe(String(adjustmentTx.id));
+    expect(String(correctionRow.stockTransactionId)).not.toBe(String(original.stockTransactionId)); // stock_transaction distinto, nunca reaproveitado
+  });
+
+  it("teste 6 (schema): duas linhas 'original' para a MESMA allocation são proibidas (índice único parcial)", async () => {
+    const { org, item, allocation } = await setupOriginal(200);
+
+    // Insert válido quanto ao trigger (stock_transaction_id preenchido,
+    // entry_type=original) — a única coisa que deve barrar é o índice
+    // único parcial idx_need_fulfillments_one_original_per_allocation.
+    const [secondTx] = await db.insertInto("stockTransactions").values({ organizationId: org.id, itemId: item.id, type: "entrada", delta: "10" }).returning(["id"]).execute();
+
+    await expect(
+      db.insertInto("needFulfillments").values({ organizationId: org.id, needId: null, allocationId: allocation.id, stockTransactionId: secondTx.id, quantity: "10", unit: "kg", entryType: "original" }).execute()
+    ).rejects.toThrow(/idx_need_fulfillments_one_original_per_allocation|duplicate key/);
+  });
+
+  it("teste 7 (schema): duas linhas 'original' para o MESMO stock_transaction são proibidas (UNIQUE)", async () => {
+    const { org, item, allocation } = await setupOriginal(200);
+    const originalRow = await getFulfillment(allocation.id);
+
+    const secondAllocation = await createTestAllocation((await db.selectFrom("opportunityAllocations").select(["opportunityRegistryId"]).where("id", "=", allocation.id).executeTakeFirstOrThrow()).opportunityRegistryId, org.id, { status: "aceita", quantityAllocated: 10 });
+
+    await expect(
+      db
+        .insertInto("needFulfillments")
+        .values({ organizationId: org.id, needId: null, allocationId: secondAllocation.id, stockTransactionId: originalRow.stockTransactionId!, quantity: "10", unit: "kg", entryType: "original" })
+        .execute()
+    ).rejects.toThrow(); // UNIQUE(stock_transaction_id)
+  });
+
+  it("reverses_fulfillment_id não pode apontar para uma linha que já é 'reversal' (proibido pelo trigger)", async () => {
+    const { org, allocation, original } = await setupOriginal(200);
+    const [reversal] = await db
+      .insertInto("needFulfillments")
+      .values({ organizationId: org.id, needId: null, allocationId: allocation.id, stockTransactionId: null, quantity: "200", unit: "kg", entryType: "reversal", reversesFulfillmentId: original.id })
+      .returning(["id"])
+      .execute();
+
+    await expect(
+      db.insertInto("needFulfillments").values({ organizationId: org.id, needId: null, allocationId: allocation.id, stockTransactionId: null, quantity: "50", unit: "kg", entryType: "correction", reversesFulfillmentId: reversal.id }).execute()
+    ).rejects.toThrow(/já é entry_type=reversal/);
+  });
+
+  it("reverses_fulfillment_id não pode apontar para uma linha de OUTRA allocation", async () => {
+    const { org, allocation, original } = await setupOriginal(200);
+    const otherAllocation = await createTestAllocation((await db.selectFrom("opportunityAllocations").select(["opportunityRegistryId"]).where("id", "=", allocation.id).executeTakeFirstOrThrow()).opportunityRegistryId, org.id, { status: "aceita", quantityAllocated: 5 });
+
+    await expect(
+      db.insertInto("needFulfillments").values({ organizationId: org.id, needId: null, allocationId: otherAllocation.id, stockTransactionId: null, quantity: "5", unit: "kg", entryType: "correction", reversesFulfillmentId: original.id }).execute()
+    ).rejects.toThrow(/mesma allocation_id/);
+  });
+
+  it("teste 12: migração — linha inserida sem especificar entry_type/is_countable usa os defaults corretos ('original'/true)", async () => {
+    const owner = await createAuthenticatedUser();
+    const org = await createTestOrganization(owner.userId);
+    const admin = await createAuthenticatedUser();
+    const source = await createTestSource(admin.userId);
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { status: "atribuida" });
+    const allocation = await createTestAllocation(opportunity.id, org.id, { status: "aceita", quantityAllocated: 10 });
+    const item = await createTestInventoryItem(org.id, owner.userId, { name: "Item legado", unit: "kg" });
+    const [tx] = await db.insertInto("stockTransactions").values({ organizationId: org.id, itemId: item.id, type: "entrada", delta: "10", createdByUserId: owner.userId }).returning(["id"]).execute();
+
+    // Insert "à moda antiga" (Fase 29), sem entry_type/is_countable — como
+    // seria um registro histórico anterior a esta migration.
+    await db.insertInto("needFulfillments").values({ organizationId: org.id, needId: null, allocationId: allocation.id, stockTransactionId: tx.id, quantity: "10", unit: "kg" }).execute();
+
+    const row = await getFulfillment(allocation.id);
+    expect(row.entryType).toBe("original");
+    expect(row.isCountable).toBe(true);
+    expect(row.reversesFulfillmentId).toBeNull();
   });
 });
