@@ -141,6 +141,9 @@ export default function NeedsPage() {
         <Link to={`/organizacoes/${organizationId}/atribuicoes`} className={styles.tabNavItem}>
           Rede Levora
         </Link>
+        <Link to={`/organizacoes/${organizationId}/prestacao-contas`} className={styles.tabNavItem}>
+          Prestação de contas
+        </Link>
         <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>
           Configurações de Matching
         </Link>

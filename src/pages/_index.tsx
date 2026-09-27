@@ -46,6 +46,13 @@ const organizationTypeLabels: Record<string, string> = {
   ponto_distribuicao: "Ponto de distribuição",
 };
 
+const membershipRoleLabels: Record<string, string> = {
+  proprietario: "Proprietário",
+  administrador: "Administrador",
+  operador: "Operador",
+  voluntario: "Voluntário",
+};
+
 const organizationStatusLabels: Record<string, string> = {
   ativa: "Ativa",
   em_analise: "Em análise",
@@ -323,7 +330,7 @@ export default function DashboardPage() {
                   {organizationTypeLabels[org.type]} · {org.city}/{org.state}
                 </p>
                 <div className={styles.orgFooter}>
-                  <span className={styles.orgRole}>Seu papel: {org.myRole}</span>
+                  <span className={styles.orgRole}>Seu papel: {membershipRoleLabels[org.myRole] ?? org.myRole}</span>
                   <span className={styles.orgMembers}>{org.memberCount} membro(s)</span>
                 </div>
               </button>
