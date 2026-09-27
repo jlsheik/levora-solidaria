@@ -95,51 +95,67 @@ export interface CreateNeedFulfillmentInput {
 }
 
 export async function createNeedFulfillment(trx: Transaction<DB>, input: CreateNeedFulfillmentInput): Promise<void> {
-  // Resolve needId pela relação estrutural real que já existe hoje:
-  // opportunity_allocations.id → match_evaluations.allocation_id →
-  // match_evaluations.need_id. `allocationId` só é gravado em
-  // `match_evaluations` no momento em que o motor cria aquela allocation
-  // específica (opportunityMatching.tsx) — nunca reaproveitado por outra
-  // allocation depois — então no máximo uma linha pode aplicar-se aqui;
-  // `executeTakeFirst()` não é um LIMIT 1 arbitrário sobre dado ambíguo,
-  // é a cardinalidade real garantida pelo próprio motor (reforçada por
-  // `idx_match_evaluations_allocation_id`, índice único). Allocations
-  // criadas manualmente (opportunity-allocations_POST.ts) nunca geram uma
-  // linha em match_evaluations — para essas, esta consulta legitimamente
-  // não encontra nada, e needId permanece null (não é um erro nem uma
-  // lacuna a preencher, é o que realmente aconteceu).
-  const evaluation = await trx
-    .selectFrom("matchEvaluations")
-    .select(["needId"])
-    .where("allocationId", "=", input.allocationId)
-    .executeTakeFirst();
+  // Resolve needId a partir de DUAS fontes legítimas e mutuamente
+  // exclusivas (Fase 45):
+  //   1. opportunity_allocations.id → match_evaluations.allocation_id →
+  //      match_evaluations.need_id — allocations AUTOMÁTICAS (motor de
+  //      matching). `allocationId` só é gravado em `match_evaluations` no
+  //      momento em que o motor cria aquela allocation específica
+  //      (opportunityMatching.tsx) — nunca reaproveitado por outra
+  //      allocation depois — então no máximo uma linha pode aplicar-se
+  //      aqui; `executeTakeFirst()` não é um LIMIT 1 arbitrário sobre dado
+  //      ambíguo, é a cardinalidade real garantida pelo próprio motor
+  //      (reforçada por `idx_match_evaluations_allocation_id`, índice
+  //      único).
+  //   2. opportunity_allocations.need_id — allocations MANUAIS
+  //      (opportunity-allocations_POST.ts) com need explicitamente
+  //      escolhida pelo platformAdmin no momento da criação (nunca
+  //      inferida).
+  // As duas fontes nunca deveriam coexistir para a MESMA allocation
+  // (allocations manuais nunca geram match_evaluations, e vice-versa) —
+  // se um dia coexistirem com valores DIFERENTES, isso é uma
+  // inconsistência estrutural/de dados, nunca resolvida silenciosamente
+  // escolhendo uma das duas: falha explicitamente dentro da transação.
+  const [evaluation, allocation] = await Promise.all([
+    trx.selectFrom("matchEvaluations").select(["needId"]).where("allocationId", "=", input.allocationId).executeTakeFirst(),
+    trx.selectFrom("opportunityAllocations").select(["needId"]).where("id", "=", input.allocationId).executeTakeFirstOrThrow(),
+  ]);
+
+  if (evaluation?.needId != null && allocation.needId != null && evaluation.needId !== allocation.needId) {
+    throw new Error(
+      `need_fulfillments: inconsistência estrutural — match_evaluations.need_id (${evaluation.needId}) e opportunity_allocations.need_id (${allocation.needId}) divergem para a allocation ${input.allocationId}. As duas fontes nunca deveriam coexistir com valores diferentes; corrija o dado antes de registrar este recebimento.`
+    );
+  }
+
+  const resolvedNeedId = evaluation?.needId ?? allocation.needId ?? null;
 
   let needId: number | null = null;
   let isCountable = true;
   let unitMismatchNote: string | null = null;
 
-  if (evaluation?.needId) {
+  if (resolvedNeedId != null) {
     const need = await trx
       .selectFrom("needs")
       .select(["unit"])
-      .where("id", "=", evaluation.needId)
+      .where("id", "=", resolvedNeedId)
       .executeTakeFirst();
 
     // Modelo B (decisão arquitetural desta sessão): a RELAÇÃO com a need
-    // (need_id) é um fato já certo, gravado no momento do matching — nunca
-    // deve ser descartada só porque a unidade do recebimento diverge.
-    // O que fica incerto é só se esta quantidade pode ser CONTADA no
-    // progresso da need (isCountable) — nunca soma unidades incompatíveis
-    // (kg + unidade, litros + kg, etc.). Mesma normalização textual usada
-    // em todo o motor de matching (normalize(): NFD + remoção de acento +
+    // (need_id) é um fato já certo, gravado no momento do matching OU no
+    // momento da criação da allocation manual (Fase 45) — nunca deve ser
+    // descartada só porque a unidade do recebimento diverge. O que fica
+    // incerto é só se esta quantidade pode ser CONTADA no progresso da
+    // need (isCountable) — nunca soma unidades incompatíveis (kg +
+    // unidade, litros + kg, etc.). Mesma normalização textual usada em
+    // todo o motor de matching (normalize(): NFD + remoção de acento +
     // minúsculas) — não é conversão de unidade, só evita que
     // "Kg"/"kg "/"KG" sejam tratados como divergentes por diferença
     // puramente textual.
     if (need) {
-      needId = evaluation.needId;
+      needId = resolvedNeedId;
       isCountable = normalize(need.unit) === normalize(input.unit);
       if (!isCountable) {
-        unitMismatchNote = `Unidade do recebimento ("${input.unit}") diverge da unidade da necessidade ${evaluation.needId} ("${need.unit}") — is_countable=false para nunca somar unidades incompatíveis, mas need_id é preservado (a relação com o matching é um fato certo, não descartado por causa da unidade).`;
+        unitMismatchNote = `Unidade do recebimento ("${input.unit}") diverge da unidade da necessidade ${resolvedNeedId} ("${need.unit}") — is_countable=false para nunca somar unidades incompatíveis, mas need_id é preservado (a relação com a need é um fato certo, não descartado por causa da unidade).`;
       }
     }
   }

@@ -6,6 +6,10 @@ export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),
   quantityAllocated: z.coerce.number().positive("Informe uma quantidade maior que zero"),
   notes: z.string().optional(),
+  // Opcional (Fase 45): quando informado, precisa ser uma need ABERTA, com
+  // requiredRemaining > 0, da MESMA organização — validado no servidor,
+  // nunca confiado do cliente. Nunca inferido automaticamente.
+  needId: z.coerce.number().int().positive().optional(),
 });
 
 export type OutputType = {

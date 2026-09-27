@@ -242,6 +242,7 @@ export interface OpportunityAllocations {
   decidedByUserId: number | null;
   id: Generated<number>;
   matchEvaluationId: number | null;
+  needId: number | null;
   notes: string | null;
   opportunityRegistryId: number;
   organizationId: number;

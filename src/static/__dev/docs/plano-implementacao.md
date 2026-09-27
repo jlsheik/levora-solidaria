@@ -2019,6 +2019,103 @@ rede como se ainda precisasse da quantidade original inteira.
       novo status persistido, cache/materialização de progresso, ou
       alteração do Modelo B/`need_resolutions`.
 
+## Fase 44 — Allocation manual × need: análise de domínio (CONCLUÍDA — só análise)
+
+Read-only: allocation manual (`opportunity-allocations_POST.ts`, só
+`platformAdmin`) nunca gera `match_evaluations`, então `createNeedFulfillment`
+nunca resolve `need_id` para ela — reproduzido em transação temporária que
+uma allocation manual de 300kg recebida não reduz `requiredRemaining` de
+nenhuma need, mesmo tendo fisicamente entrado no estoque. Recomendação:
+`need_id` opcional em `opportunity_allocations`, escolhido explicitamente
+pelo admin (nunca inferido automaticamente — a alternativa de inferência
+por categoria/texto/quantidade foi explicitamente descartada, quebraria o
+padrão do projeto inteiro de nunca inventar relações). Regras propostas:
+mesma organização (validação em API + FK composta, padrão da Fase 33);
+`cancelada` bloqueia o vínculo (decorre da Fase 37); `atendida` é questão
+de produto em aberto; unidade incompatível não bloqueia — vira
+`is_countable=false`; quantidade > remaining permitida (vira `surplus`).
+
+## Fase 45 — Allocation manual com need_id opcional (CONCLUÍDA)
+
+Implementa a decisão da Fase 44.
+
+- [x] `db/migrations/0012_opportunity_allocations_need_id.sql`:
+      `needs` ganha `UNIQUE(id, organization_id)` (suporte à FK composta,
+      mesmo padrão da Fase 33); `opportunity_allocations` ganha `need_id`
+      nullable + FK composta `(need_id, organization_id) → needs(id,
+      organization_id) ON DELETE RESTRICT` — garante estruturalmente que
+      uma allocation nunca referencie a need de outra organização, mesmo
+      em SQL direto (confirmado por teste). `need_fulfillments`, triggers
+      e migrations do Modelo B permanecem intocados.
+- [x] `opportunity-allocations_POST.ts`: `needId` opcional no schema;
+      quando informado, valida (dentro da mesma transação, travando a
+      opportunity) existência, mesma organização, `status='aberta'`, e
+      `requiredRemaining>0` (via `getNeedFulfillmentBalance`+
+      `computeNeedProgress`, Fase 42 — nenhum cálculo paralelo). Quantity
+      maior que remaining continua aceito (vira `surplus`, mesma política
+      já vigente). `needId` incluído no `metadata` já existente do audit
+      event `atribuicao.proposta`.
+- [x] `needFulfillment.tsx`/`createNeedFulfillment`: segunda fonte
+      legítima de `need_id` — `opportunity_allocations.need_id`, usada
+      quando não há `match_evaluations` (allocations automáticas e
+      manuais nunca coexistem para a mesma allocation). Se as duas fontes
+      um dia divergirem para a mesma allocation, a função lança um erro
+      explícito dentro da transação (nunca escolhe uma silenciosamente) —
+      confirmado por teste que insere essa inconsistência manualmente.
+      `needs.status` mudar ou `requiredRemaining` mudar DEPOIS da
+      allocation já criada nunca bloqueia o recebimento (a seleção já foi
+      validada na criação; o Modelo B registra o fato físico ocorrido,
+      independente de decisões administrativas posteriores) —
+      confirmado por 2 testes dedicados.
+- [x] `plataforma.tsx`: diálogo "Atribuir: {título}" ganha um seletor
+      "Necessidade (opcional)", visível só depois da organização
+      escolhida, listando apenas needs elegíveis (`status='aberta' AND
+      requiredRemaining>0`) via o mesmo `GET /needs` da Fase 42 (nenhum
+      cálculo de progresso no front-end) — cada opção mostra
+      necessária/recebido/faltam. Mensagem dedicada quando não há
+      nenhuma need elegível. Trocar de organização limpa a need
+      selecionada.
+- [x] Sem infraestrutura de teste de componente no projeto (confirmado:
+      nenhum `@testing-library`/`render()` em nenhum teste existente) —
+      validação de UI feita inteiramente no preview real (Central
+      Visual), não com testes de UI fabricados, conforme instrução
+      explícita.
+- [x] 16 testes novos (`test/opportunityAllocationsManualNeed.test.ts`):
+      allocation sem need inalterada; allocation com need persiste o
+      vínculo; organization mismatch, need cancelada, need atendida e
+      need com `remaining=0` rejeitadas; need com `remaining>0` aceita;
+      quantity>remaining aceita; recebimento gera `need_fulfillment` com
+      o mesmo `need_id` (ou `NULL`, quando a allocation não tinha need);
+      `requiredRemaining` diminui de verdade após o recebimento; unidade
+      incompatível gera `is_countable=false` preservando o vínculo;
+      inconsistência hipotética entre as duas fontes nunca resolvida
+      silenciosamente; mudança de status/remaining depois da criação não
+      bloqueia o recebimento; FK composta bloqueada em SQL direto.
+- [x] Validado de ponta a ponta no preview real: criada uma allocation
+      manual vinculada à need "Parcial" (500kg necessários, 200kg já
+      recebidos) via `/plataforma`, aceita e recebida via `/organizacoes/
+      12/atribuicoes`, e confirmado na tela real de Necessidades que
+      "Recebido pela rede" subiu de 200kg para 350kg e "Faltam" caiu de
+      300kg para 150kg — o ciclo completo funcionando com dados reais do
+      banco dev, nenhum mock. Desktop (800px/1280px) e mobile
+      (375×812/390×844) verificados; nenhum overflow novo introduzido
+      pelo seletor de need.
+- [x] Suíte completa (312→328 testes) e `npx tsc --noEmit` confirmados
+      sem regressão. `git diff --stat` de `opportunityMatching.tsx`,
+      `allocations-receive_POST.ts`, `allocations-decide_POST.ts`,
+      `reopenOpportunity.tsx`, `concludeOpportunity.tsx`,
+      `expireReservations.tsx` e de todas as migrations/triggers do
+      Modelo B e de `need_resolutions` permanece vazio.
+- [ ] **Achado registrado, fora do escopo desta fase (pré-existente, não
+      introduzido aqui)**: o diálogo "Atribuir: {título}" (e outros
+      diálogos do projeto, confirmado no dashboard) tem um overflow
+      horizontal em viewports estreitos (~375-390px) — o conteúdo do
+      `DialogContent` excede seu próprio `max-width: 90vw`. Reproduzido
+      ANTES do seletor de need renderizar (existia desde a Fase 41), não
+      corrigido nesta fase por ser um problema estrutural do componente
+      compartilhado `Dialog`/`Select`, não deste diálogo específico —
+      registrado para uma fase dedicada de UI.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

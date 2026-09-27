@@ -6,6 +6,7 @@ import { getOpportunityRegistry } from "../endpoints/opportunity-registry_GET.sc
 import { postOpportunityRegistry } from "../endpoints/opportunity-registry_POST.schema";
 import { postOpportunityRegistryStatus } from "../endpoints/opportunity-registry-status_POST.schema";
 import { postOpportunityAllocations } from "../endpoints/opportunity-allocations_POST.schema";
+import { getNeeds } from "../endpoints/needs_GET.schema";
 import { postOpportunityRegistryMatch } from "../endpoints/opportunity-registry-match_POST.schema";
 import { getMatchEvaluations } from "../endpoints/match-evaluations_GET.schema";
 import { getBackgroundTasks } from "../endpoints/background-tasks_GET.schema";
@@ -62,6 +63,10 @@ const newDiscoverySchema = z.object({
 
 const allocationSchema = z.object({
   organizationId: z.coerce.number().int().positive(), quantityAllocated: z.coerce.number().positive(), notes: z.string().optional(),
+  // Opcional (Fase 45): escolhida explicitamente aqui, nunca inferida —
+  // ver seletor de need abaixo, que só lista needs elegíveis
+  // (status='aberta' AND requiredRemaining>0) da organização selecionada.
+  needId: z.coerce.number().int().positive().optional(),
 });
 
 export default function PlatformPage() {
@@ -146,6 +151,22 @@ export default function PlatformPage() {
   });
 
   const allocationForm = useForm({ schema: allocationSchema, defaultValues: { quantityAllocated: 0, notes: "" } });
+  const allocationOrgId = allocationForm.values.organizationId ? Number(allocationForm.values.organizationId) : undefined;
+
+  // Needs elegíveis para vínculo (Fase 45): reaproveita o mesmo endpoint e
+  // os mesmos campos derivados (fulfilled/requiredRemaining/surplus) já
+  // implementados na Fase 42 — nenhum cálculo de progresso paralelo aqui.
+  // Filtro de elegibilidade (status='aberta' AND requiredRemaining>0) é a
+  // MESMA regra já aprovada no Matching 1.4 (Fase 43), aplicada aqui só
+  // sobre campos que o servidor já calculou — não é uma inferência nova,
+  // é filtrar dado já pronto.
+  const needsForAllocationQuery = useQuery({
+    queryKey: ["needs", allocationOrgId],
+    queryFn: () => getNeeds({ organizationId: allocationOrgId! }),
+    enabled: !!allocationOrgId,
+  });
+  const eligibleNeeds = (needsForAllocationQuery.data?.needs ?? []).filter((n) => n.status === "aberta" && n.requiredRemaining > 0);
+
   const allocateMutation = useMutation({
     mutationFn: (data: z.infer<typeof allocationSchema>) =>
       postOpportunityAllocations({ opportunityId: allocateTarget!.id, ...data }),
@@ -472,7 +493,10 @@ export default function PlatformPage() {
               <FormItem name="organizationId">
                 <FormLabel>Organização</FormLabel>
                 <FormControl>
-                  <Select value={allocationForm.values.organizationId ? String(allocationForm.values.organizationId) : undefined} onValueChange={(v) => allocationForm.setValues((p: any) => ({ ...p, organizationId: v }))}>
+                  <Select
+                    value={allocationForm.values.organizationId ? String(allocationForm.values.organizationId) : undefined}
+                    onValueChange={(v) => allocationForm.setValues((p: any) => ({ ...p, organizationId: v, needId: undefined }))}
+                  >
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       {(orgsQuery.data?.organizations ?? []).map((o) => <SelectItem key={o.id} value={String(o.id)}>{o.name} ({o.city}/{o.state})</SelectItem>)}
@@ -481,6 +505,34 @@ export default function PlatformPage() {
                 </FormControl>
                 <FormMessage />
               </FormItem>
+              {allocationOrgId && (
+                <FormItem name="needId">
+                  <FormLabel>Necessidade (opcional)</FormLabel>
+                  <FormControl>
+                    {needsForAllocationQuery.isFetching && !needsForAllocationQuery.data ? (
+                      <Skeleton className={styles.listSkeleton} style={{ height: "2.25rem" }} />
+                    ) : eligibleNeeds.length === 0 ? (
+                      <p className={styles.emptyText}>Esta organização não possui necessidades abertas com saldo pendente.</p>
+                    ) : (
+                      <Select
+                        value={allocationForm.values.needId ? String(allocationForm.values.needId) : "none"}
+                        onValueChange={(v) => allocationForm.setValues((p: any) => ({ ...p, needId: v === "none" ? undefined : v }))}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Nenhuma" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          {eligibleNeeds.map((n) => (
+                            <SelectItem key={n.id} value={String(n.id)}>
+                              {n.title} — necessária: {n.quantityNeeded}{n.unit} · recebido: {n.fulfilled}{n.unit} · faltam: {n.requiredRemaining}{n.unit}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
               <FormItem name="quantityAllocated">
                 <FormLabel>Quantidade atribuída</FormLabel>
                 <FormControl><Input type="number" step="0.001" value={allocationForm.values.quantityAllocated ?? ""} onChange={(e) => allocationForm.setValues((p: any) => ({ ...p, quantityAllocated: e.target.value }))} /></FormControl>

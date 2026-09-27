@@ -2,6 +2,7 @@ import { db } from "../helpers/db";
 import { getServerUserSession } from "../helpers/getServerUserSession";
 import { requirePlatformAdmin } from "../helpers/platformAccess";
 import { recordAuditLogEntry } from "../helpers/auditLog";
+import { getNeedFulfillmentBalance, computeNeedProgress } from "../helpers/needFulfillment";
 import { schema } from "./opportunity-allocations_POST.schema";
 import { sql } from "kysely";
 import superjson from "superjson";
@@ -39,6 +40,29 @@ export async function handle(request: Request) {
 
       if (!org) return { type: "org_not_found" as const };
 
+      // need_id opcional (Fase 45): validado inteiramente no servidor,
+      // nunca confiado do cliente. Alinhado com a mesma regra de
+      // elegibilidade já aprovada no Matching 1.4 (Fase 43) — só needs
+      // 'aberta' com requiredRemaining > 0 podem ser escolhidas. Quantity
+      // maior que requiredRemaining continua permitido (Fase 44: vira
+      // surplus, mesma política já aceita em todo o resto do sistema) —
+      // não é validado aqui.
+      if (input.needId !== undefined) {
+        const need = await trx
+          .selectFrom("needs")
+          .select(["id", "organizationId", "status", "quantityNeeded"])
+          .where("id", "=", input.needId)
+          .executeTakeFirst();
+
+        if (!need) return { type: "need_not_found" as const };
+        if (need.organizationId !== input.organizationId) return { type: "need_org_mismatch" as const };
+        if (need.status !== "aberta") return { type: "need_not_open" as const, status: need.status };
+
+        const fulfilled = await getNeedFulfillmentBalance(trx, need.id);
+        const progress = computeNeedProgress(Number(need.quantityNeeded), fulfilled);
+        if (progress.requiredRemaining <= 0) return { type: "need_no_remaining" as const };
+      }
+
       // Nunca deixamos a soma das atribuições passar da quantidade total
       // descoberta — isso é o que impede a Levora de "prometer" mais do que
       // existe, e é validado aqui, travando a linha, não só sugerido na
@@ -68,6 +92,7 @@ export async function handle(request: Request) {
           organizationId: input.organizationId,
           quantityAllocated: input.quantityAllocated,
           notes: input.notes || null,
+          needId: input.needId ?? null,
           createdByUserId: user.id,
         })
         .returning(["id", "status"])
@@ -95,6 +120,7 @@ export async function handle(request: Request) {
             opportunityTitle: opportunity.title,
             organizationName: org.name,
             quantityAllocated: input.quantityAllocated,
+            needId: input.needId ?? null,
           },
         },
         trx
@@ -125,6 +151,30 @@ export async function handle(request: Request) {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
+    }
+    if (result.type === "need_not_found") {
+      return new Response(superjson.stringify({ message: "Necessidade não encontrada" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (result.type === "need_org_mismatch") {
+      return new Response(superjson.stringify({ message: "Esta necessidade não pertence à organização selecionada" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (result.type === "need_not_open") {
+      return new Response(
+        superjson.stringify({ message: `Esta necessidade não está aberta (status: ${result.status}) e não pode ser selecionada` }),
+        { status: 409, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (result.type === "need_no_remaining") {
+      return new Response(
+        superjson.stringify({ message: "Esta necessidade não tem mais saldo pendente pela rede (requiredRemaining=0)" }),
+        { status: 409, headers: { "Content-Type": "application/json" } }
+      );
     }
     if (result.type === "invalid_status") {
       return new Response(

@@ -236,7 +236,12 @@ CREATE TABLE needs (
   status need_status NOT NULL DEFAULT 'aberta',
   created_by_user_id INTEGER NOT NULL REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Fase 45 (0012): suporta a FK composta de opportunity_allocations.need_id
+  -- (garante que uma allocation nunca referencie a need de outra
+  -- organização) — id já é PK (único), só falta o UNIQUE explícito nas
+  -- colunas exatas exigido pelo Postgres para ser o lado referenciado.
+  CONSTRAINT needs_id_organization_id_key UNIQUE (id, organization_id)
 );
 CREATE TRIGGER needs_set_updated_at BEFORE UPDATE ON needs FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE INDEX idx_needs_org ON needs(organization_id, status);
@@ -403,11 +408,29 @@ CREATE TABLE opportunity_allocations (
   match_evaluation_id INTEGER, -- FK adicionada após criação de match_evaluations (ver abaixo)
   created_by_user_id INTEGER REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Fase 45 (0012): need_id opcional, escolhida explicitamente pelo
+  -- platformAdmin no momento da criação de uma allocation MANUAL (nunca
+  -- inferida). É a fonte de INTENÇÃO ("esta allocation destina-se a esta
+  -- need") — createNeedFulfillment passa a resolver need_id também a
+  -- partir daqui quando não houver match_evaluations (allocations
+  -- automáticas continuam usando match_evaluations; as duas fontes nunca
+  -- coexistem para a mesma allocation). FK adicionada abaixo, depois de
+  -- needs já existir.
+  need_id INTEGER
 );
 CREATE TRIGGER opportunity_allocations_set_updated_at BEFORE UPDATE ON opportunity_allocations FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE INDEX idx_opportunity_allocations_registry ON opportunity_allocations(opportunity_registry_id);
 CREATE INDEX idx_opportunity_allocations_org ON opportunity_allocations(organization_id, status);
+CREATE INDEX idx_opportunity_allocations_need ON opportunity_allocations(need_id) WHERE need_id IS NOT NULL;
+-- FK composta (Fase 45): garante estruturalmente que uma allocation nunca
+-- referencie a need de outra organização — nunca só validado em
+-- TypeScript (mesmo princípio da FK composta de
+-- need_fulfillments.stock_transaction_id, Fase 33). MATCH SIMPLE (padrão
+-- do Postgres) satisfaz trivialmente quando need_id é NULL.
+ALTER TABLE opportunity_allocations
+  ADD CONSTRAINT opportunity_allocations_need_org_fkey
+  FOREIGN KEY (need_id, organization_id) REFERENCES needs (id, organization_id) ON DELETE RESTRICT;
 CREATE INDEX idx_opportunity_allocations_reserved_until ON opportunity_allocations(reserved_until) WHERE reserved_until IS NOT NULL;
 
 -- ============================================================
