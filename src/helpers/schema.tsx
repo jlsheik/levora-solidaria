@@ -194,6 +194,19 @@ export interface Memberships {
   userId: number;
 }
 
+export interface NeedFulfillments {
+  allocationId: number;
+  createdAt: Generated<Timestamp>;
+  createdByUserId: number | null;
+  id: Generated<Int8>;
+  needId: number | null;
+  organizationId: number;
+  quantity: Numeric;
+  stockTransactionId: Int8;
+  unit: string;
+  unitMismatchNote: string | null;
+}
+
 export interface Needs {
   createdAt: Generated<Timestamp>;
   createdByUserId: number;
@@ -380,6 +393,7 @@ export interface DB {
   logisticsEvents: LogisticsEvents;
   matchEvaluations: MatchEvaluations;
   memberships: Memberships;
+  needFulfillments: NeedFulfillments;
   needs: Needs;
   opportunityAllocations: OpportunityAllocations;
   opportunityRegistry: OpportunityRegistry;

@@ -403,6 +403,29 @@ ALTER TABLE opportunity_allocations
   FOREIGN KEY (match_evaluation_id) REFERENCES match_evaluations(id) ON DELETE SET NULL;
 
 -- ============================================================
+-- Fase 29 — Ledger de atendimento de necessidades (need_fulfillments)
+-- Ver db/migrations/0006_need_fulfillments.sql para o comentário completo.
+-- ============================================================
+CREATE TABLE need_fulfillments (
+  id BIGSERIAL PRIMARY KEY,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  need_id INTEGER REFERENCES needs(id) ON DELETE SET NULL,
+  allocation_id INTEGER NOT NULL REFERENCES opportunity_allocations(id) ON DELETE CASCADE,
+  stock_transaction_id BIGINT NOT NULL REFERENCES stock_transactions(id) ON DELETE RESTRICT,
+  quantity NUMERIC(12,3) NOT NULL CHECK (quantity > 0),
+  unit TEXT NOT NULL,
+  unit_mismatch_note TEXT,
+  created_by_user_id INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (allocation_id),
+  UNIQUE (stock_transaction_id)
+);
+CREATE TRIGGER need_fulfillments_no_update BEFORE UPDATE ON need_fulfillments FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+CREATE TRIGGER need_fulfillments_no_delete BEFORE DELETE ON need_fulfillments FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+CREATE INDEX idx_need_fulfillments_need ON need_fulfillments(need_id);
+CREATE INDEX idx_need_fulfillments_org ON need_fulfillments(organization_id, created_at DESC);
+
+-- ============================================================
 -- Fase 6 — Logística (coleta, transporte, entrega)
 -- ============================================================
 CREATE TYPE logistics_event_type AS ENUM ('coleta_agendada', 'coleta_concluida', 'transporte_iniciado', 'entrega_confirmada', 'cancelado');

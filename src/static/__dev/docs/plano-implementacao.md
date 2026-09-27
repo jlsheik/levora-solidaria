@@ -1477,6 +1477,91 @@ sem tocar em pesos/fórmula/threshold/critério/`ALGORITHM_VERSION`/scheduler/
       `scheduledTaskLock.tsx` e `reopenOpportunity.tsx` com diff zero
       confirmado (`git diff --stat`).
 
+## Fase 29 — Ledger de atendimento de necessidades (`need_fulfillments`) — fundação de rastreabilidade (CONCLUÍDA)
+
+Investigação arquitetural (só leitura) concluiu **ARQUITETURA DE ATENDIMENTO PRONTA PARA DECISÃO**: `needs.quantity_needed` é estático, sem progresso; o recebimento de uma allocation nunca registrava estruturalmente qual `need` pretendia atender; uma `need` pode continuar `"aberta"` indefinidamente após receber doações. Recomendação técnica: ledger append-only dedicado, sem transformar `needs.quantity_needed` num contador mutável. Esta fase implementa **só a fundação de rastreabilidade** — nenhuma regra automática de negócio (status, matching, bloqueios) foi tocada.
+
+- [x] `need_fulfillments` (nova tabela, `db/migrations/0006_need_fulfillments.sql`):
+      `organization_id` (obrigatório, sempre derivado da própria allocation
+      — nunca um valor separado enviado pelo cliente), `need_id`
+      (**nullable de propósito** — allocations manuais nunca passam por
+      `match_evaluations`, então não há como saber a need pretendida;
+      `NULL` é o valor correto, não uma lacuna), `allocation_id`
+      (obrigatório, `UNIQUE` — uma allocation só pode ser recebida uma vez,
+      confirmado pela própria máquina de estados de
+      `allocations-receive_POST.ts`, então o ledger não inventa suporte a
+      múltiplos recebimentos que não existe), `stock_transaction_id`
+      (obrigatório, `UNIQUE` — um recebimento gera exatamente uma
+      `stock_transaction`), `quantity`/`unit` (sempre o **recebido de
+      verdade**, nunca o alocado nem o necessário), `unit_mismatch_note`
+      (nullable, só preenchido no caso descrito abaixo), `created_by_user_id`,
+      `created_at`. Append-only — mesmo `audit_log_block_mutation()` já
+      usado por `stock_transactions`/`audit_log`/`logistics_events`
+      (`UPDATE`/`DELETE` bloqueados por trigger, confirmado por teste).
+- [x] `src/helpers/needFulfillment.tsx` (novo): `createNeedFulfillment`
+      resolve `needId` pela relação estrutural real já existente —
+      `opportunity_allocations.id → match_evaluations.allocation_id →
+      match_evaluations.need_id` — nunca por texto/título/inferência.
+      Cardinalidade confirmada por leitura do motor: no máximo uma
+      `match_evaluations` tem um dado `allocation_id` (gravado só no
+      momento em que aquela allocation específica é criada, nunca
+      reaproveitado), então `executeTakeFirst()` reflete uma garantia
+      real, não um `LIMIT 1` arbitrário sobre dado ambíguo.
+- [x] **Unidades**: quando existe uma need candidata mas a unidade do
+      recebimento diverge da unidade declarada pela need (mesma
+      normalização textual do motor — `normalize()`, importada só como
+      função pura, sem tocar em `opportunityMatching.tsx`), o `need_id`
+      **não** é atribuído — nunca soma unidades incompatíveis (kg+unidade,
+      litros+kg) — e `unit_mismatch_note` registra o motivo de forma
+      identificável, em vez de um `NULL` silencioso e ambíguo com o caso
+      "allocation manual sem need". O recebimento em si **não é
+      bloqueado** por essa incompatibilidade (comportamento de negócio
+      existente preservado).
+- [x] Integrado em `allocations-receive_POST.ts`, na mesma transação,
+      logo após a allocation virar `"recebida"` e antes do bloco de
+      conclusão/auditoria — a chamada não trava a oportunidade nem o
+      advisory lock de auditoria, então não interfere na ordem de locks já
+      validada nas Fases 27/28 (nenhuma alteração naquele bloco).
+- [x] `test/needFulfillment.test.ts` (9 testes): allocation do motor
+      recebida (needId/allocationId/stockTransactionId/quantity/unit
+      corretos); allocation manual (needId null); recebimento parcial
+      (quantity = recebido, nunca o alocado); recebido acima do alocado
+      (refletido tal como aconteceu, sem bloqueio — decisão de produto
+      pendente); unidades compatíveis (vincula, com normalização
+      tolerando maiúsculas/espaços); unidades incompatíveis (não vincula,
+      motivo registrado); mesma allocation recebida duas vezes concorrente
+      (só um fulfillment, protegido a montante pela máquina de estados da
+      allocation); multi-tenancy (organizationId sempre da própria
+      allocation, needId nunca de outra organização mesmo com needs
+      parecidas na mesma oportunidade); append-only (`UPDATE`/`DELETE`
+      bloqueados pelo trigger).
+- [x] **Backfill histórico investigado, não executado** — confirmado no
+      banco de desenvolvimento: 1 única allocation `"recebida"` existente
+      hoje, criada manualmente (sem `match_evaluations`) durante os testes
+      ao vivo da UI de Configurações de Matching (Fase 23). Mesmo essa
+      não é backfillável com segurança: `stock_transactions` não tem
+      nenhuma referência estruturada de volta para a allocation que a
+      originou (só um campo `reason` de texto livre) — não há como
+      determinar `stock_transaction_id` (campo obrigatório do ledger) sem
+      inventar uma correspondência por inferência de texto, o que a
+      instrução desta etapa proíbe explicitamente. Cobertura do backfill:
+      **0 de 1 registros históricos reconstruíveis com segurança**.
+      Nenhum backfill foi escrito ou executado — o ledger passa a
+      registrar só recebimentos novos, a partir desta fase.
+- [x] Suíte completa (214→223 testes) e typecheck confirmados sem
+      regressão. Diff conferido — só a migration/schema da tabela nova, a
+      integração em `allocations-receive_POST.ts`, o helper novo, os
+      testes novos, e esta entrada de documentação.
+      `opportunityMatching.tsx` com diff zero confirmado (`git diff --stat`).
+- [ ] **Não implementado nesta etapa, por instrução explícita** (decisões
+      de produto ainda pendentes, não bugs técnicos): `needs.status`
+      derivado automaticamente do ledger; `needs.quantity_needed` virar
+      contador mutável ou ganhar uma view de saldo; limite/bloqueio de
+      `quantityReceived` acima do alocado; bloqueio de reaparecimento pós-
+      recusa; qualquer uso do ledger pelo motor de matching (`need_remaining`
+      continua não existindo — `opportunityMatching.tsx` intocado,
+      `ALGORITHM_VERSION` continua `"1.3"`).
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

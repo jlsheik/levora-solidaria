@@ -4,6 +4,7 @@ import { requirePermission } from "../helpers/organizationAccess";
 import { recordAuditLogEntry } from "../helpers/auditLog";
 import { getItemStockBalance } from "../helpers/stockBalance";
 import { concludeOpportunityIfAllTerminalAndReceived } from "../helpers/concludeOpportunity";
+import { createNeedFulfillment } from "../helpers/needFulfillment";
 import { schema } from "./allocations-receive_POST.schema";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse";
@@ -32,7 +33,7 @@ export async function handle(request: Request) {
 
       const item = await trx
         .selectFrom("inventoryItems")
-        .select(["id", "name"])
+        .select(["id", "name", "unit"])
         .where("id", "=", input.itemId)
         .where("organizationId", "=", input.organizationId)
         .forUpdate()
@@ -77,6 +78,21 @@ export async function handle(request: Request) {
         .set({ status: "recebida", updatedAt: new Date() })
         .where("id", "=", input.allocationId)
         .execute();
+
+      // Ledger de atendimento (Fase 29) — registra o fato físico do
+      // recebimento, resolvendo needId pela relação real com
+      // match_evaluations quando a allocation veio do motor (ver
+      // needFulfillment.tsx). organizationId vem sempre da própria
+      // allocation já validada acima, nunca de um valor separado — não há
+      // como uma organização criar um fulfillment associado a outra.
+      await createNeedFulfillment(trx, {
+        organizationId: input.organizationId,
+        allocationId: input.allocationId,
+        stockTransactionId: tx.id,
+        quantity: input.quantityReceived,
+        unit: item.unit,
+        createdByUserId: user.id,
+      });
 
       await trx
         .insertInto("logisticsEvents")
