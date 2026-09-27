@@ -1689,6 +1689,91 @@ determinístico de progresso de uma need deve ser
 WHERE need_id=? AND is_countable=true` — nunca dependente de parsear
 `unit_mismatch_note` ou qualquer outro texto livre.
 
+## Fase 32 — Estabilização do Modelo B: fechamento das lacunas de integridade da auditoria definitiva (CONCLUÍDA)
+
+A auditoria definitiva read-only da Fase 31 encontrou várias lacunas
+estruturais reais: regras que a documentação afirmava existir mas que o
+trigger não impunha de fato. Esta fase corrige **só** essas lacunas —
+preserva o desenho do Modelo B (cadeias `correction`/`reversal`
+continuam permitidas, nenhuma topologia "estrela" foi imposta), sem
+remodelagem ampla.
+
+- [x] `db/migrations/0009_need_fulfillments_inheritance_rules.sql` —
+      `need_fulfillments_validate_entry` (mesma função, `CREATE OR
+      REPLACE`) passa a exigir, estruturalmente, no `INSERT` de uma
+      `correction`/`reversal`:
+      - `organization_id` IGUAL ao da linha referenciada
+        (`reverses_fulfillment_id`) — antes só validado em TypeScript.
+      - `need_id` HERDADO da linha referenciada, nunca escolhido
+        livremente (`unit` continua livre — é o campo que uma
+        `correction` pode legitimamente precisar mudar).
+      - Para `reversal` especificamente: `unit`, `quantity` e
+        `is_countable` também precisam ser IDÊNTICOS aos da linha
+        revertida — um `reversal` é "a reversão direta do evento
+        apontado", nunca um evento com dados próprios; o único efeito
+        diferente é o sinal contábil (`-quantity`), nunca armazenado como
+        valor negativo (`quantity` continua sempre positiva, `CHECK`
+        inalterado).
+- [x] `idx_need_fulfillments_one_reversal_per_target` — índice único
+      parcial (`UNIQUE(reverses_fulfillment_id) WHERE entry_type =
+      'reversal'`) — impede duas reversões diretas do mesmo alvo, no
+      banco (não só numa checagem de aplicação); correções continuam sem
+      limite por alvo.
+- [x] `idx_need_fulfillments_allocation_history` — índice não-parcial em
+      `(allocation_id, created_at)` para consultas de histórico completo
+      (`original`+`correction`+`reversal`) de uma allocation, sem
+      depender do índice único parcial da `original`.
+- [x] `src/helpers/needFulfillment.tsx`: `getNeedFulfillmentBalance` —
+      fórmula canônica do ledger, implementada uma única vez (mesmo
+      padrão de `getItemStockBalance`), delegando a agregação ao Postgres:
+      `SUM(CASE WHEN entry_type='reversal' THEN -quantity ELSE quantity
+      END) WHERE need_id=? AND is_countable=true`. Nenhum endpoint público
+      novo — só uma função auxiliar reutilizável.
+- [x] `db/schema.sql`: comentário da seção `need_fulfillments` corrigido
+      para refletir o comportamento real (não a intenção previamente
+      documentada e errada) — `correction` NUNCA teve referência
+      opcional; cadeias são permitidas deliberadamente; `reversal` pode
+      apontar para uma `correction`; sinal contábil é sempre derivado de
+      `entry_type`, nunca armazenado negativo; um alvo só pode ter UM
+      `reversal` direto.
+- [x] `test/needFulfillmentModelB.test.ts` (novo, 25 testes, cenários
+      A–X do pedido): herança de `organization_id` (aceito/rejeitado,
+      inclusive teste de isolamento entre organizações); herança de
+      `need_id` (`NULL`→`NULL`, valor real→mesmo valor, tentativa de
+      trocar rejeitada, para `correction` e `reversal`); `unit` livre em
+      `correction` mas obrigatoriamente herdado em `reversal`;
+      `quantity`/`is_countable` obrigatoriamente herdados em `reversal`;
+      cadeias `correction→correction` e `reversal→correction` continuam
+      aceitas; proibição estrutural de referenciar uma linha `reversal`
+      permanece; dupla reversão do mesmo alvo rejeitada (sequencial E
+      concorrente — dois `INSERT`s concorrentes, só um persiste);
+      múltiplas `correction`s do mesmo alvo continuam ilimitadas; índice
+      de histórico por `allocation_id` retorna todas as linhas; fórmula
+      canônica (`getNeedFulfillmentBalance`) confere original+correction-
+      reversal ignorando linhas `is_countable=false`; over-fulfillment
+      continua representável sem bloqueio; append-only (`UPDATE`/`DELETE`
+      bloqueados) confirmado para os 3 `entry_type`s.
+- [x] `test/needFulfillment.test.ts` (22 testes pré-existentes da Fase
+      29-31): re-executados sem nenhuma alteração, todos passando contra
+      o trigger novo — nenhuma regressão de comportamento já coberto.
+- [x] Suíte completa (236→261 testes) e `npx tsc --noEmit` confirmados
+      sem regressão. `git diff --stat` de `src/helpers/opportunityMatching.tsx`
+      e de todos os arquivos do lifecycle da oportunidade
+      (`allocations-receive_POST.ts`, `allocations-decide_POST.ts`,
+      `reopenOpportunity.tsx`, `concludeOpportunity.tsx`,
+      `scheduledTaskLock.tsx`) permanece vazio — `ALGORITHM_VERSION`
+      continua `"1.3"`, motor e ciclo de vida intocados.
+- [ ] **Não implementado nesta etapa, por instrução explícita** (mesma
+      lista da Fase 31, ainda pendente): função/endpoint para CRIAR
+      eventos de correção/reversão a partir de uma ação do usuário (o
+      schema suporta desde a Fase 31; esta fase só reforçou as regras de
+      integridade que já deviam valer); `need_remaining` no matching;
+      mudança automática de `needs.status`; política de over-fulfillment;
+      bloqueio de reaparecimento pós-recusa; endpoint de relatório/
+      progresso da need; idempotência genérica por chave (não introduzida
+      — o índice único parcial de reversal já resolve o caso de
+      concorrência real sem esse mecanismo adicional).
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

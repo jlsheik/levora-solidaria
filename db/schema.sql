@@ -410,8 +410,10 @@ ALTER TABLE opportunity_allocations
 -- ============================================================
 -- Fase 29 — Ledger de atendimento de necessidades (need_fulfillments)
 -- Fase 30 — FKs RESTRICT (0007) e evolução para ledger de EVENTOS (0008)
--- Ver db/migrations/0006_need_fulfillments.sql, 0007_need_fulfillments_fk_restrict.sql
--- e 0008_need_fulfillments_ledger_of_events.sql para os comentários completos.
+-- Fase 32 — Regras de herança/integridade do Modelo B (0009)
+-- Ver db/migrations/0006_need_fulfillments.sql, 0007_need_fulfillments_fk_restrict.sql,
+-- 0008_need_fulfillments_ledger_of_events.sql e
+-- 0009_need_fulfillments_inheritance_rules.sql para os comentários completos.
 --
 -- RESTRICT (não CASCADE/SET NULL) em organization_id/need_id/allocation_id:
 -- need_fulfillments é append-only (trigger audit_log_block_mutation), e uma
@@ -432,6 +434,32 @@ ALTER TABLE opportunity_allocations
 -- puramente de metadado (need_id/is_countable errados, item físico já
 -- certo) não tem motivo de negócio para um novo lançamento de estoque;
 -- 'original' continua exigindo um valor real, validado pelo trigger.
+--
+-- Semântica exata (confirmada estrutural, não só documentada):
+--   'original'   — não referencia nada; exige stock_transaction_id real.
+--   'correction' — SEMPRE exige reverses_fulfillment_id (nunca opcional);
+--                  pode referenciar 'original' ou 'correction' (nunca
+--                  'reversal'); herda organization_id/need_id do alvo;
+--                  unit/quantity/is_countable ficam LIVRES (é exatamente
+--                  o que uma correction pode precisar mudar).
+--   'reversal'   — SEMPRE exige reverses_fulfillment_id; mesmas regras de
+--                  referência de 'correction'; além de organization_id/
+--                  need_id, herda TAMBÉM unit/quantity/is_countable do
+--                  alvo — um reversal é definido como "a reversão direta
+--                  do evento apontado", nunca um evento com dados
+--                  próprios. Só uma reversal direta é permitida por alvo
+--                  (índice único parcial abaixo). O sinal contábil
+--                  (-quantity) nunca é armazenado como valor negativo —
+--                  quantity continua sempre positiva (CHECK inalterado);
+--                  o sinal é sempre derivado de entry_type por quem lê.
+-- Cadeias (correction→correction, reversal→correction) são permitidas
+-- deliberadamente — não é imposta uma topologia "estrela" (tudo apontando
+-- só para o original), porque isso dificultaria reverter uma correction
+-- específica. Ciclos são estruturalmente impossíveis: reverses_fulfillment_id
+-- só pode apontar para uma linha que já existe no momento do INSERT, e o
+-- append-only impede qualquer linha já commitada de ser alterada depois
+-- para apontar "para trás" — confirmado por reprodução, não só por
+-- argumento lógico.
 -- ============================================================
 CREATE TABLE need_fulfillments (
   id BIGSERIAL PRIMARY KEY,
@@ -457,6 +485,13 @@ CREATE INDEX idx_need_fulfillments_reverses ON need_fulfillments(reverses_fulfil
 -- No máximo UMA linha 'original' por allocation — correções/reversões
 -- repetem a mesma allocation_id livremente (ver comentário acima).
 CREATE UNIQUE INDEX idx_need_fulfillments_one_original_per_allocation ON need_fulfillments(allocation_id) WHERE entry_type = 'original';
+-- No máximo UMA reversal direta por linha revertida — impede duas
+-- reversões (sequenciais OU concorrentes) do mesmo alvo; o banco é a
+-- última barreira, não só uma checagem de aplicação.
+CREATE UNIQUE INDEX idx_need_fulfillments_one_reversal_per_target ON need_fulfillments(reverses_fulfillment_id) WHERE entry_type = 'reversal';
+-- Histórico completo por allocation (original + corrections + reversals)
+-- — o índice único parcial acima só cobre a linha 'original'.
+CREATE INDEX idx_need_fulfillments_allocation_history ON need_fulfillments(allocation_id, created_at);
 
 CREATE OR REPLACE FUNCTION need_fulfillments_validate_entry() RETURNS TRIGGER AS $$
 DECLARE
@@ -474,15 +509,40 @@ BEGIN
       RAISE EXCEPTION 'need_fulfillments: entry_type=% exige reverses_fulfillment_id', NEW.entry_type;
     END IF;
 
-    SELECT allocation_id, entry_type INTO target FROM need_fulfillments WHERE id = NEW.reverses_fulfillment_id;
+    SELECT organization_id, allocation_id, need_id, entry_type, unit, quantity, is_countable
+      INTO target
+      FROM need_fulfillments
+      WHERE id = NEW.reverses_fulfillment_id;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'need_fulfillments: reverses_fulfillment_id % não encontrado', NEW.reverses_fulfillment_id;
     END IF;
+
+    IF target.entry_type = 'reversal' THEN
+      RAISE EXCEPTION 'need_fulfillments: não é permitido referenciar (corrigir/reverter) uma linha que já é entry_type=reversal';
+    END IF;
+
     IF target.allocation_id IS DISTINCT FROM NEW.allocation_id THEN
       RAISE EXCEPTION 'need_fulfillments: reverses_fulfillment_id precisa pertencer à mesma allocation_id';
     END IF;
-    IF target.entry_type = 'reversal' THEN
-      RAISE EXCEPTION 'need_fulfillments: não é permitido referenciar (corrigir/reverter) uma linha que já é entry_type=reversal';
+
+    IF target.organization_id IS DISTINCT FROM NEW.organization_id THEN
+      RAISE EXCEPTION 'need_fulfillments: organization_id precisa ser igual ao da linha referenciada por reverses_fulfillment_id';
+    END IF;
+
+    IF target.need_id IS DISTINCT FROM NEW.need_id THEN
+      RAISE EXCEPTION 'need_fulfillments: need_id é herdado da linha referenciada (reverses_fulfillment_id), nunca escolhido livremente';
+    END IF;
+
+    IF NEW.entry_type = 'reversal' THEN
+      IF NEW.unit IS DISTINCT FROM target.unit THEN
+        RAISE EXCEPTION 'need_fulfillments: reversal precisa ter a mesma unit da linha revertida';
+      END IF;
+      IF NEW.quantity IS DISTINCT FROM target.quantity THEN
+        RAISE EXCEPTION 'need_fulfillments: reversal precisa ter a mesma quantity da linha revertida';
+      END IF;
+      IF NEW.is_countable IS DISTINCT FROM target.is_countable THEN
+        RAISE EXCEPTION 'need_fulfillments: reversal precisa ter o mesmo is_countable da linha revertida';
+      END IF;
     END IF;
   END IF;
 

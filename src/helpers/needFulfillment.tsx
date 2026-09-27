@@ -1,4 +1,5 @@
-import type { Transaction } from "kysely";
+import type { Kysely, Transaction } from "kysely";
+import { sql } from "kysely";
 import type { DB } from "./schema";
 import { normalize } from "./opportunityMatching";
 
@@ -104,4 +105,31 @@ export async function createNeedFulfillment(trx: Transaction<DB>, input: CreateN
       isCountable,
     })
     .execute();
+}
+
+/**
+ * Fórmula canônica do ledger — única implementação reutilizável do
+ * cálculo de efeito contábil (achado de auditoria: antes só existia em
+ * documentação/teste manual, risco de futuros consumidores implementarem
+ * fórmulas divergentes). Não expõe endpoint público; é só uma função
+ * auxiliar, mesmo padrão de `getItemStockBalance` em `stockBalance.tsx`.
+ *
+ * Regra:
+ *   is_countable = false                 → 0 (nunca participa da soma,
+ *                                            seja original/correction/reversal)
+ *   entry_type = 'original'/'correction' → +quantity
+ *   entry_type = 'reversal'              → -quantity
+ *
+ * `quantity` nunca é armazenada negativa (CHECK(quantity > 0) inalterado)
+ * — o sinal é sempre derivado de `entry_type` na leitura, nunca no dado
+ * persistido.
+ */
+export async function getNeedFulfillmentBalance(trx: Transaction<DB> | Kysely<DB>, needId: number): Promise<number> {
+  const row = await trx
+    .selectFrom("needFulfillments")
+    .select(() => sql<string>`coalesce(sum(case when entry_type = 'reversal' then -quantity else quantity end), 0)`.as("total"))
+    .where("needId", "=", needId)
+    .where("isCountable", "=", true)
+    .executeTakeFirst();
+  return Number(row?.total ?? 0);
 }
