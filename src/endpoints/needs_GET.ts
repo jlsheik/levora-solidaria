@@ -1,6 +1,7 @@
 import { db } from "../helpers/db";
 import { getServerUserSession } from "../helpers/getServerUserSession";
 import { requireOrganizationMembership } from "../helpers/organizationAccess";
+import { getNeedFulfillmentBalanceBatch, computeNeedProgress } from "../helpers/needFulfillment";
 import { schema } from "./needs_GET.schema";
 import { sql } from "kysely";
 import superjson from "superjson";
@@ -40,21 +41,34 @@ export async function handle(request: Request) {
       .orderBy("needs.createdAt", "desc")
       .execute();
 
+    // Progresso derivado do Modelo B (Fase 42) — uma única query em lote
+    // (GROUP BY need_id) para todas as needs desta listagem, nunca um SUM
+    // por linha (evita N+1). `needs.status` nunca é lido nem alterado aqui;
+    // o progresso é puramente informativo, calculado à parte.
+    const balances = await getNeedFulfillmentBalanceBatch(db, rows.map((r) => r.id));
+
     return new Response(
       superjson.stringify({
-        needs: rows.map((r) => ({
-          id: r.id,
-          title: r.title,
-          description: r.description,
-          itemId: r.itemId,
-          itemName: r.itemName,
-          quantityNeeded: Number(r.quantityNeeded),
-          unit: r.unit,
-          priority: r.priority,
-          status: r.status,
-          createdByDisplayName: r.createdByDisplayName,
-          createdAt: r.createdAt.toString(),
-        })),
+        needs: rows.map((r) => {
+          const quantityNeeded = Number(r.quantityNeeded);
+          const progress = computeNeedProgress(quantityNeeded, balances.get(r.id) ?? 0);
+          return {
+            id: r.id,
+            title: r.title,
+            description: r.description,
+            itemId: r.itemId,
+            itemName: r.itemName,
+            quantityNeeded,
+            unit: r.unit,
+            priority: r.priority,
+            status: r.status,
+            createdByDisplayName: r.createdByDisplayName,
+            createdAt: r.createdAt.toString(),
+            fulfilled: progress.fulfilled,
+            requiredRemaining: progress.requiredRemaining,
+            surplus: progress.surplus,
+          };
+        }),
       }),
       { headers: { "Content-Type": "application/json" } }
     );

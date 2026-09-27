@@ -19,6 +19,13 @@ export type OutputType = {
     status: NeedStatus;
     createdByDisplayName: string;
     createdAt: string;
+    // Progresso derivado do Modelo B (Fase 42) — nunca persistido, nunca
+    // sincronizado com `status`. `fulfilled` é só o saldo contábil dos
+    // recebimentos da rede (need_fulfillments), nunca inclui resolução
+    // administrativa por estoque próprio (need_resolutions).
+    fulfilled: number;
+    requiredRemaining: number;
+    surplus: number;
   }>;
 };
 

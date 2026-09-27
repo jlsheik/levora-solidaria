@@ -137,6 +137,49 @@
   flex-shrink: 0;
 }
 
+.progressGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(5.5rem, 1fr));
+  gap: var(--spacing-3);
+  margin-top: var(--spacing-3);
+  padding-top: var(--spacing-3);
+  border-top: 1px solid var(--border);
+}
+
+.progressStat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.progressLabel {
+  font-size: 0.6875rem;
+  color: var(--muted-foreground);
+}
+
+.progressValue {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--card-foreground);
+  overflow-wrap: break-word;
+}
+
+.progressValueSurplus {
+  color: var(--warning);
+}
+
+.partialBadge {
+  grid-column: 1 / -1;
+  width: fit-content;
+}
+
+@media (max-width: 30rem) {
+  .progressGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .statusSelect {
   min-width: 8.5rem;
 }

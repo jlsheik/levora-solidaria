@@ -187,3 +187,58 @@ export async function getNeedFulfillmentBalance(trx: Transaction<DB> | Kysely<DB
     .executeTakeFirst();
   return Number(row?.total ?? 0);
 }
+
+/**
+ * Mesma fórmula de `getNeedFulfillmentBalance`, em lote — uma única query
+ * `GROUP BY need_id` para uma listagem inteira de needs, em vez de um SUM
+ * por linha (Fase 42, achado de auditoria: uma listagem chamando
+ * `getNeedFulfillmentBalance` dentro de um loop por need seria N+1 —
+ * evitado aqui pelo mesmo motivo que `opportunityMatching.tsx` já busca
+ * capacidade/logística/área de atendimento em lote para todos os
+ * candidatos de uma vez, nunca um SELECT por candidato). Needs sem
+ * nenhuma linha no ledger simplesmente não aparecem no Map — o chamador
+ * trata a ausência como saldo 0 (`?? 0`), nunca como erro.
+ */
+export async function getNeedFulfillmentBalanceBatch(trx: Transaction<DB> | Kysely<DB>, needIds: number[]): Promise<Map<number, number>> {
+  if (needIds.length === 0) return new Map();
+  const rows = await trx
+    .selectFrom("needFulfillments")
+    .select(["needId", () => sql<string>`coalesce(sum(case when entry_type = 'reversal' then -quantity else quantity end), 0)`.as("total")])
+    .where("needId", "in", needIds)
+    .where("isCountable", "=", true)
+    .groupBy("needId")
+    .execute();
+
+  const balances = new Map<number, number>();
+  for (const row of rows) {
+    if (row.needId !== null) balances.set(row.needId, Number(row.total));
+  }
+  return balances;
+}
+
+export interface NeedProgress {
+  fulfilled: number;
+  requiredRemaining: number;
+  surplus: number;
+}
+
+/**
+ * Camada de progresso da need (Fase 42) — puramente derivada, nunca
+ * persistida. `fulfilled` é exclusivamente o saldo do Modelo B
+ * (recebimentos CONTÁVEIS da rede Levora via `getNeedFulfillmentBalance`/
+ * `getNeedFulfillmentBalanceBatch`) — nunca inclui `need_resolutions`
+ * (resolução administrativa por estoque próprio, um conceito
+ * estruturalmente separado desde a Fase 40) nem qualquer outra fonte.
+ * `needs.status` permanece inteiramente independente deste cálculo —
+ * uma need `atendida` com `fulfilled=0`, ou uma need `aberta` com
+ * `requiredRemaining=0`, são ambas representações válidas e esperadas
+ * (ver docs/plano-implementacao.md, Fase 37): este helper nunca tenta
+ * sincronizar as duas dimensões.
+ */
+export function computeNeedProgress(quantityNeeded: number, fulfilled: number): NeedProgress {
+  return {
+    fulfilled,
+    requiredRemaining: Math.max(0, quantityNeeded - fulfilled),
+    surplus: Math.max(0, fulfilled - quantityNeeded),
+  };
+}

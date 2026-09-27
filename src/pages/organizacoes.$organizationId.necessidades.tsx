@@ -300,10 +300,40 @@ export default function NeedsPage() {
                 </div>
                 {need.description && <p className={styles.needDescription}>{need.description}</p>}
                 <p className={styles.needMeta}>
-                  {need.quantityNeeded} {need.unit}
-                  {need.itemName ? ` · vinculado a "${need.itemName}"` : ""} · cadastrada por{" "}
+                  {need.itemName ? `vinculado a "${need.itemName}" · ` : ""}cadastrada por{" "}
                   {need.createdByDisplayName} em {new Date(need.createdAt).toLocaleDateString("pt-BR")}
                 </p>
+
+                {/* Progresso derivado do Modelo B (Fase 42) — nunca sincronizado
+                    com `status`: uma need "Aberta" pode já não faltar nada pela
+                    rede (requiredRemaining=0), e uma need "Atendida" manualmente
+                    pode não ter recebido nada da rede (fulfilled=0). As duas
+                    dimensões são intencionalmente independentes (Fase 37). */}
+                <div className={styles.progressGrid}>
+                  <div className={styles.progressStat}>
+                    <span className={styles.progressLabel}>Quantidade necessária</span>
+                    <span className={styles.progressValue}>{need.quantityNeeded} {need.unit}</span>
+                  </div>
+                  <div className={styles.progressStat}>
+                    <span className={styles.progressLabel}>Recebido pela rede</span>
+                    <span className={styles.progressValue}>{need.fulfilled} {need.unit}</span>
+                  </div>
+                  <div className={styles.progressStat}>
+                    <span className={styles.progressLabel}>Faltam</span>
+                    <span className={styles.progressValue}>{need.requiredRemaining} {need.unit}</span>
+                  </div>
+                  <div className={styles.progressStat}>
+                    <span className={styles.progressLabel}>Excedente</span>
+                    <span className={need.surplus > 0 ? `${styles.progressValue} ${styles.progressValueSurplus}` : styles.progressValue}>
+                      {need.surplus} {need.unit}
+                    </span>
+                  </div>
+                  {need.fulfilled > 0 && need.requiredRemaining > 0 && (
+                    <Badge variant="outline" className={styles.partialBadge}>
+                      Parcialmente atendida pela rede
+                    </Badge>
+                  )}
+                </div>
               </div>
               <div className={styles.needActions}>
                 {canManage ? (
