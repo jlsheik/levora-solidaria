@@ -1774,6 +1774,75 @@ remodelagem ampla.
       — o índice único parcial de reversal já resolve o caso de
       concorrência real sem esse mecanismo adicional).
 
+## Fase 33 — Isolamento multi-tenant do lastro físico de `need_fulfillments` (CONCLUÍDA)
+
+Auditoria read-only definitiva pós-Fase 32 (nenhuma alteração feita
+naquela etapa) reproduziu, em transação temporária revertida, dois
+problemas estruturais reais em `stock_transaction_id`: (1) um
+`need_fulfillment` de uma organização podia referenciar um
+`stock_transaction` de OUTRA organização — a FK simples só garantia
+existência do id, nunca a mesma organização; (2) nenhuma constraint
+impedia associar um `stock_transaction` fisicamente incompatível (item,
+unidade, quantidade, direção diferentes). Esta fase corrige **só** o
+problema (1), estruturalmente; o problema (2) foi investigado a fundo e
+**deliberadamente não corrigido**, por não existir hoje uma fonte
+canônica dos dados físicos esperados na cadeia allocation→opportunity/
+need — inventar uma coluna nova (`item_id` em `need_fulfillments`) sem
+necessidade de negócio comprovada foi explicitamente rejeitado.
+
+- [x] `db/migrations/0010_need_fulfillments_stock_transaction_org_fk.sql`:
+      `stock_transactions` ganha `UNIQUE(id, organization_id)` (`id` já é
+      PK, mas o Postgres exige um UNIQUE explícito nas colunas exatas para
+      servir de lado referenciado de uma FK composta). A FK simples
+      `need_fulfillments_stock_transaction_id_fkey` (só `id`) foi
+      substituída por `need_fulfillments_stock_transaction_org_fkey`,
+      composta `(stock_transaction_id, organization_id)` →
+      `stock_transactions(id, organization_id)`. Com `MATCH SIMPLE`
+      (padrão do Postgres), a FK composta é trivialmente satisfeita
+      quando `stock_transaction_id` é `NULL` — preserva sem nenhuma
+      mudança correction/reversal interpretativos (sem movimento físico).
+      Confirmado antes de aplicar: `stock_transactions.organization_id`
+      já era `NOT NULL` desde a criação da tabela; `need_fulfillments`
+      tinha **zero linhas** no banco dev — nenhum dado histórico
+      incompatível, nenhuma limpeza/correção silenciosa necessária.
+- [x] `db/schema.sql`: `CREATE TABLE stock_transactions`/
+      `need_fulfillments` atualizados inline para o estado final; novo
+      bloco de comentário documentando a garantia de organização E a
+      limitação física conhecida (não corrigida, decisão registrada).
+- [x] `test/needFulfillmentStockTransactionOrg.test.ts` (novo, 7 testes):
+      fulfillment org A + stock_transaction da própria org A aceito;
+      fulfillment/correction org A + stock_transaction de org B rejeitado
+      pela FK composta (`need_fulfillments_stock_transaction_org_fkey`);
+      correction física (novo `stock_transaction` real, mesma org)
+      aceita; correction interpretativa (`stock_transaction_id=NULL`)
+      aceita; `UNIQUE(stock_transaction_id)` continua rejeitando dois
+      fulfillments para o mesmo movimento físico; múltiplos
+      `stock_transaction_id=NULL` continuam permitidos e
+      `getNeedFulfillmentBalance` confirmado independente de
+      `stock_transaction_id` (fórmula inalterada:
+      `original+correction-reversal`, ignorando `is_countable=false`).
+- [x] Suíte completa (261→268 testes) e `npx tsc --noEmit` confirmados
+      sem regressão. `git diff --stat` de `opportunityMatching.tsx`,
+      `allocations-receive_POST.ts`, `allocations-decide_POST.ts`,
+      `reopenOpportunity.tsx`, `concludeOpportunity.tsx`,
+      `expireReservations.tsx` e `needFulfillment.tsx` permanece vazio —
+      nenhum código de aplicação foi alterado nesta fase, só schema/
+      migration/documentação/testes.
+- [ ] **Não implementado nesta etapa, por decisão arquitetural
+      registrada (não por instrução momentânea)**: validação estrutural
+      de compatibilidade física (item/unidade/quantidade/direção) entre
+      `need_fulfillments` e o `stock_transaction` referenciado. Motivo:
+      `opportunity_registry`/`opportunity_allocations`/`match_evaluations`
+      não carregam `item_id` em nenhum ponto da cadeia;
+      `needs.item_id` é opcional; `need_fulfillments.need_id` só existe
+      quando há `match_evaluations` para aquela allocation (nunca em
+      allocations manuais). Menor mudança estrutural que resolveria isso:
+      adicionar `item_id` (não-nulo) a `need_fulfillments`, mas isso
+      exigiria decidir de onde esse valor viria em TODOS os caminhos de
+      criação (incluindo allocations manuais sem matching) — decisão de
+      produto/arquitetura ainda pendente, não uma lacuna a fechar
+      silenciosamente agora.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

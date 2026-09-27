@@ -211,7 +211,13 @@ CREATE TABLE stock_transactions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT stock_transactions_type_sign_chk CHECK (
     (type = 'entrada' AND delta > 0) OR (type = 'saida' AND delta < 0) OR (type = 'ajuste')
-  )
+  ),
+  -- Fase 33 (0010): (id, organization_id) único — id já é PK, mas o
+  -- Postgres exige um UNIQUE explícito nas colunas exatas para servir de
+  -- lado referenciado de uma FK composta (ver need_fulfillments abaixo,
+  -- que usa isso para garantir que um fulfillment nunca referencie
+  -- fisicamente um stock_transaction de outra organização).
+  CONSTRAINT stock_transactions_id_organization_id_key UNIQUE (id, organization_id)
 );
 CREATE TRIGGER stock_transactions_no_update BEFORE UPDATE ON stock_transactions FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
 CREATE TRIGGER stock_transactions_no_delete BEFORE DELETE ON stock_transactions FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
@@ -411,9 +417,10 @@ ALTER TABLE opportunity_allocations
 -- Fase 29 — Ledger de atendimento de necessidades (need_fulfillments)
 -- Fase 30 — FKs RESTRICT (0007) e evolução para ledger de EVENTOS (0008)
 -- Fase 32 — Regras de herança/integridade do Modelo B (0009)
+-- Fase 33 — Isolamento multi-tenant do lastro físico (0010)
 -- Ver db/migrations/0006_need_fulfillments.sql, 0007_need_fulfillments_fk_restrict.sql,
--- 0008_need_fulfillments_ledger_of_events.sql e
--- 0009_need_fulfillments_inheritance_rules.sql para os comentários completos.
+-- 0008_need_fulfillments_ledger_of_events.sql, 0009_need_fulfillments_inheritance_rules.sql
+-- e 0010_need_fulfillments_stock_transaction_org_fk.sql para os comentários completos.
 --
 -- RESTRICT (não CASCADE/SET NULL) em organization_id/need_id/allocation_id:
 -- need_fulfillments é append-only (trigger audit_log_block_mutation), e uma
@@ -460,13 +467,40 @@ ALTER TABLE opportunity_allocations
 -- append-only impede qualquer linha já commitada de ser alterada depois
 -- para apontar "para trás" — confirmado por reprodução, não só por
 -- argumento lógico.
+--
+-- Fase 33 — lastro físico (stock_transaction_id): FK composta
+-- (stock_transaction_id, organization_id) → stock_transactions(id,
+-- organization_id) garante ESTRUTURALMENTE que o movimento físico
+-- referenciado pertence à mesma organização do fulfillment — antes disso
+-- (Fases 29-32) só a FK simples (id) existia, e nada impedia
+-- estruturalmente um fulfillment de organization_id=A referenciar um
+-- stock_transaction de organization_id=B (achado de auditoria,
+-- confirmado por reprodução em transação temporária). UNIQUE
+-- (stock_transaction_id) continua garantindo que um mesmo movimento
+-- físico só possa ser usado por UMA linha do ledger; múltiplos NULL
+-- continuam permitidos nativamente pelo Postgres.
+--
+-- Compatibilidade FÍSICA além da organização (item, unidade, quantidade,
+-- direção do movimento) permanece SEM validação estrutural — investigado
+-- e documentado como lacuna conhecida, não como omissão: a cadeia
+-- allocation → opportunity_registry / match_evaluations não carrega
+-- item_id em nenhum ponto (opportunity_registry só descreve o item como
+-- texto livre category/quantity/unit); needs.item_id existe mas é
+-- NULLABLE; e need_fulfillments.need_id só é preenchido quando existe uma
+-- linha em match_evaluations para aquela allocation (nunca para
+-- allocations manuais). Não existe, hoje, uma fonte canônica e sempre
+-- presente do item/unidade/quantidade/direção esperados para validar
+-- contra o stock_transaction referenciado — adicionar isso exigiria uma
+-- nova coluna (ex.: item_id em need_fulfillments) sem necessidade de
+-- negócio comprovada; fica registrado como decisão arquitetural futura,
+-- não implementada por instrução explícita.
 -- ============================================================
 CREATE TABLE need_fulfillments (
   id BIGSERIAL PRIMARY KEY,
   organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT,
   need_id INTEGER REFERENCES needs(id) ON DELETE RESTRICT,
   allocation_id INTEGER NOT NULL REFERENCES opportunity_allocations(id) ON DELETE RESTRICT,
-  stock_transaction_id BIGINT REFERENCES stock_transactions(id) ON DELETE RESTRICT,
+  stock_transaction_id BIGINT,
   quantity NUMERIC(12,3) NOT NULL CHECK (quantity > 0),
   unit TEXT NOT NULL,
   unit_mismatch_note TEXT,
@@ -475,7 +509,18 @@ CREATE TABLE need_fulfillments (
   entry_type TEXT NOT NULL DEFAULT 'original' CONSTRAINT need_fulfillments_entry_type_chk CHECK (entry_type IN ('original', 'correction', 'reversal')),
   is_countable BOOLEAN NOT NULL DEFAULT true,
   reverses_fulfillment_id BIGINT REFERENCES need_fulfillments(id) ON DELETE RESTRICT,
-  UNIQUE (stock_transaction_id)
+  UNIQUE (stock_transaction_id),
+  -- Fase 33 (0010): FK composta (não mais uma FK simples em
+  -- stock_transaction_id sozinho) — garante estruturalmente que o
+  -- stock_transaction referenciado pertence à MESMA organização deste
+  -- fulfillment (nunca só validado em TypeScript). Com MATCH SIMPLE
+  -- (padrão do Postgres), é trivialmente satisfeita quando
+  -- stock_transaction_id é NULL — não afeta em nada o suporte a
+  -- correction/reversal interpretativos (sem movimento físico).
+  CONSTRAINT need_fulfillments_stock_transaction_org_fkey
+    FOREIGN KEY (stock_transaction_id, organization_id)
+    REFERENCES stock_transactions (id, organization_id)
+    ON DELETE RESTRICT
 );
 CREATE TRIGGER need_fulfillments_no_update BEFORE UPDATE ON need_fulfillments FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
 CREATE TRIGGER need_fulfillments_no_delete BEFORE DELETE ON need_fulfillments FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
