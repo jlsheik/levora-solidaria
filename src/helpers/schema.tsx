@@ -212,6 +212,14 @@ export interface NeedFulfillments {
   unitMismatchNote: string | null;
 }
 
+export interface NeedResolutions {
+  createdAt: Generated<Timestamp>;
+  createdByUserId: number | null;
+  id: Generated<number>;
+  needId: number;
+  stockTransactionId: Int8 | null;
+}
+
 export interface Needs {
   createdAt: Generated<Timestamp>;
   createdByUserId: number;
@@ -399,6 +407,7 @@ export interface DB {
   matchEvaluations: MatchEvaluations;
   memberships: Memberships;
   needFulfillments: NeedFulfillments;
+  needResolutions: NeedResolutions;
   needs: Needs;
   opportunityAllocations: OpportunityAllocations;
   opportunityRegistry: OpportunityRegistry;

@@ -51,14 +51,35 @@ export async function handle(request: Request) {
 
       if (!existing) return { type: "not_found" as const };
 
+      // Resolução administrativa (Fase 40, achado da Fase 38): a baixa de
+      // estoque próprio deve acontecer NO MÁXIMO UMA VEZ em toda a vida da
+      // need, nunca uma vez por transição de status — reabrir e reatender
+      // (needs.status continua livre, Fase 35/37) não deve gerar uma
+      // segunda baixa. `need_resolutions` (UNIQUE(need_id)) é o registro
+      // estrutural de "esta need já foi administrativamente resolvida uma
+      // vez". A checagem abaixo acontece DEPOIS de travar a linha da need
+      // (FOR UPDATE, acima) — a mesma trava que já serializa a Fase 35
+      // também serializa esta decisão, então duas requisições concorrentes
+      // (inclusive uma delas chegando logo após uma reabertura) nunca veem
+      // "sem resolução ainda" ao mesmo tempo.
+      const existingResolution = input.status === "atendida"
+        ? await trx.selectFrom("needResolutions").select(["id"]).where("needId", "=", existing.id).executeTakeFirst()
+        : undefined;
+
       // Vínculo automático necessidade→estoque (master prompt, "estoque
       // atualizado" nunca sem transação registrada): só dispara na
-      // transição PARA "atendida" vinda de outro status, e só quando a
-      // necessidade está vinculada a um item de inventário. Reverter o
-      // status depois NÃO desfaz a saída automaticamente — isso exigiria um
-      // lançamento manual explícito (ajuste), para nunca alterar o
-      // histórico de estoque em silêncio.
-      const willConsumeStock = input.status === "atendida" && existing.status !== "atendida" && existing.itemId !== null;
+      // transição PARA "atendida" vinda de outro status, só quando a
+      // necessidade está vinculada a um item de inventário, e só quando
+      // ainda NÃO existe uma resolução para esta need. Reverter o status
+      // depois NÃO desfaz a saída automaticamente nem a resolução — isso
+      // exigiria um lançamento manual explícito (ajuste), para nunca
+      // alterar o histórico de estoque em silêncio.
+      const willConsumeStock = input.status === "atendida" && existing.status !== "atendida" && existing.itemId !== null && !existingResolution;
+      // Entrando em "atendida" pela primeira vez (nenhuma resolução ainda),
+      // mesmo sem item vinculado: cria uma resolução puramente declarativa
+      // (stockTransactionId=null) — o evento administrativo continua
+      // identificável historicamente, mesmo sem lastro físico.
+      const willCreateDeclarativeResolution = input.status === "atendida" && !existingResolution && existing.itemId === null;
       let stockAuditEntry: { itemId: number; itemName: string; delta: number } | null = null;
 
       if (willConsumeStock) {
@@ -71,7 +92,9 @@ export async function handle(request: Request) {
           .executeTakeFirst();
 
         // Item foi excluído/movido depois que a necessidade foi criada —
-        // não impede marcar como atendida, mas não há como dar baixa.
+        // não impede marcar como atendida, mas não há como dar baixa (nem
+        // como criar uma resolução com lastro físico — fica sem resolução
+        // nenhuma nesse caso raro, igual ao comportamento pré-existente).
         if (item) {
           const currentStock = await getItemStockBalance(trx, item.id);
           const quantity = Number(existing.quantityNeeded);
@@ -81,7 +104,7 @@ export async function handle(request: Request) {
             return { type: "insufficient_stock" as const, currentStock, quantity, itemName: item.name };
           }
 
-          await trx
+          const [tx] = await trx
             .insertInto("stockTransactions")
             .values({
               organizationId: input.organizationId,
@@ -91,10 +114,21 @@ export async function handle(request: Request) {
               reason: `Baixa automática: necessidade "${existing.title}" marcada como atendida`,
               createdByUserId: user.id,
             })
+            .returning(["id"])
             .execute();
 
           stockAuditEntry = { itemId: item.id, itemName: item.name, delta: -quantity };
+
+          await trx
+            .insertInto("needResolutions")
+            .values({ needId: existing.id, stockTransactionId: tx.id, createdByUserId: user.id })
+            .execute();
         }
+      } else if (willCreateDeclarativeResolution) {
+        await trx
+          .insertInto("needResolutions")
+          .values({ needId: existing.id, stockTransactionId: null, createdByUserId: user.id })
+          .execute();
       }
 
       const [updated] = await trx

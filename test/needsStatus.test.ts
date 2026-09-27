@@ -36,6 +36,21 @@ async function stockBalance(itemId: number): Promise<number> {
   return Number(row?.total ?? 0);
 }
 
+async function saidaCount(itemId: number): Promise<number> {
+  const row = await db
+    .selectFrom("stockTransactions")
+    .select((eb) => eb.fn.countAll().as("c"))
+    .where("itemId", "=", itemId)
+    .where("type", "=", "saida")
+    .executeTakeFirst();
+  return Number(row?.c ?? 0);
+}
+
+async function resolutionCount(needId: number): Promise<number> {
+  const row = await db.selectFrom("needResolutions").select((eb) => eb.fn.countAll().as("c")).where("needId", "=", needId).executeTakeFirst();
+  return Number(row?.c ?? 0);
+}
+
 describe("POST /needs-status", () => {
   let owner: AuthenticatedTestUser;
   let orgId: number;
@@ -152,6 +167,13 @@ describe("POST /needs-status", () => {
         .where("entityId", "=", String(item.id))
         .executeTakeFirst();
       expect(auditEntry?.action).toBe("inventario.saida_registrada");
+
+      // Fase 40: a resolução administrativa é criada e ligada ESTRUTURALMENTE
+      // (nunca por texto livre) ao stock_transaction que representou a baixa.
+      const resolution = await db.selectFrom("needResolutions").selectAll().where("needId", "=", need.id).executeTakeFirstOrThrow();
+      const saida = await db.selectFrom("stockTransactions").select(["id"]).where("itemId", "=", item.id).where("type", "=", "saida").executeTakeFirstOrThrow();
+      expect(resolution.stockTransactionId).toBe(saida.id);
+      expect(resolution.createdByUserId).toBe(owner.userId);
     });
 
     it("bloqueia (409) e não altera o status quando o estoque do item vinculado é insuficiente", async () => {
@@ -171,9 +193,13 @@ describe("POST /needs-status", () => {
 
       const stillOpen = await db.selectFrom("needs").select(["status"]).where("id", "=", need.id).executeTakeFirstOrThrow();
       expect(stillOpen.status).toBe("aberta");
+
+      // Fase 40: saldo insuficiente é rollback integral — nenhuma resolução
+      // pode existir para um atendimento que nunca foi de fato confirmado.
+      expect(await resolutionCount(need.id)).toBe(0);
     });
 
-    it("não dá baixa quando a necessidade não está vinculada a um item de inventário", async () => {
+    it("não dá baixa quando a necessidade não está vinculada a um item de inventário, mas cria uma resolução puramente declarativa (Fase 40)", async () => {
       const need = await createNeed(orgId, owner.userId, { quantityNeeded: 40 });
 
       const response = await postNeedsStatus(
@@ -187,6 +213,9 @@ describe("POST /needs-status", () => {
 
       const auditEntry = await db.selectFrom("auditLog").select(["action"]).where("entityType", "=", "inventory_item").executeTakeFirst();
       expect(auditEntry).toBeUndefined();
+
+      const resolution = await db.selectFrom("needResolutions").selectAll().where("needId", "=", need.id).executeTakeFirstOrThrow();
+      expect(resolution.stockTransactionId).toBeNull();
     });
 
     it("não dá baixa de novo ao reenviar 'atendida' para uma necessidade que já estava atendida (idempotência)", async () => {
@@ -204,6 +233,7 @@ describe("POST /needs-status", () => {
         buildRequest("needs-status", { method: "POST", cookie: owner.cookie, body: { organizationId: orgId, needId: need.id, status: "atendida" } })
       );
       expect(await stockBalance(item.id)).toBe(60);
+      expect(await resolutionCount(need.id)).toBe(1);
     });
 
     it("concorrência: duas requisições simultâneas marcando a mesma necessidade como 'atendida' resultam em exatamente UMA baixa de estoque (Fase 35 — FOR UPDATE na linha da need)", async () => {
@@ -242,6 +272,109 @@ describe("POST /needs-status", () => {
       // concorrência, nunca um erro/409 nem uma segunda saída).
       expect(responseA.status).toBe(200);
       expect(responseB.status).toBe(200);
+      expect(await resolutionCount(need.id)).toBe(1);
+    });
+  });
+
+  describe("Fase 40 — need_resolutions: baixa de estoque próprio no máximo uma vez em toda a vida da need", () => {
+    async function setup() {
+      const item = await createTestInventoryItem(orgId, owner.userId);
+      await db.insertInto("stockTransactions").values({ organizationId: orgId, itemId: item.id, type: "entrada", delta: 1000, createdByUserId: owner.userId }).execute();
+      const need = await createNeed(orgId, owner.userId, { itemId: item.id, quantityNeeded: 40 });
+      return { item, need };
+    }
+
+    function setStatus(needId: number, status: "aberta" | "atendida" | "cancelada") {
+      return postNeedsStatus(buildRequest("needs-status", { method: "POST", cookie: owner.cookie, body: { organizationId: orgId, needId, status } }));
+    }
+
+    it("aberta -> atendida -> aberta -> atendida: apenas 1 resolução e 1 baixa em todo o histórico", async () => {
+      const { item, need } = await setup();
+      await setStatus(need.id, "atendida");
+      await setStatus(need.id, "aberta");
+      const r = await setStatus(need.id, "atendida");
+
+      expect(r.status).toBe(200);
+      expect(await resolutionCount(need.id)).toBe(1);
+      expect(await saidaCount(item.id)).toBe(1);
+      expect(await stockBalance(item.id)).toBe(960);
+      const finalNeed = await db.selectFrom("needs").select(["status"]).where("id", "=", need.id).executeTakeFirstOrThrow();
+      expect(finalNeed.status).toBe("atendida");
+    });
+
+    it("atendida -> aberta -> cancelada -> atendida: apenas 1 resolução e 1 baixa", async () => {
+      const { item, need } = await setup();
+      await setStatus(need.id, "atendida");
+      await setStatus(need.id, "aberta");
+      await setStatus(need.id, "cancelada");
+      const r = await setStatus(need.id, "atendida");
+
+      expect(r.status).toBe(200);
+      expect(await resolutionCount(need.id)).toBe(1);
+      expect(await saidaCount(item.id)).toBe(1);
+    });
+
+    it("múltiplos ciclos administrativos (aberta<->atendida repetido 3x): continua 1 resolução e 1 baixa", async () => {
+      const { item, need } = await setup();
+      for (let i = 0; i < 3; i++) {
+        await setStatus(need.id, "atendida");
+        await setStatus(need.id, "aberta");
+      }
+      const r = await setStatus(need.id, "atendida");
+
+      expect(r.status).toBe(200);
+      expect(await resolutionCount(need.id)).toBe(1);
+      expect(await saidaCount(item.id)).toBe(1);
+      expect(await stockBalance(item.id)).toBe(960);
+    });
+
+    it("concorrência APÓS reabertura: duas tentativas simultâneas de reatender não duplicam resolução nem baixa", async () => {
+      const { item, need } = await setup();
+      await setStatus(need.id, "atendida");
+      await setStatus(need.id, "aberta");
+
+      const [a, b] = await Promise.all([setStatus(need.id, "atendida"), setStatus(need.id, "atendida")]);
+
+      expect(a.status).toBe(200);
+      expect(b.status).toBe(200);
+      expect(await resolutionCount(need.id)).toBe(1);
+      expect(await saidaCount(item.id)).toBe(1);
+      expect(await stockBalance(item.id)).toBe(960);
+    });
+
+    it("integridade: uma segunda linha em need_resolutions para a MESMA need é rejeitada pela constraint UNIQUE(need_id)", async () => {
+      const { need } = await setup();
+      await db.insertInto("needResolutions").values({ needId: need.id, stockTransactionId: null, createdByUserId: owner.userId }).execute();
+
+      await expect(
+        db.insertInto("needResolutions").values({ needId: need.id, stockTransactionId: null, createdByUserId: owner.userId }).execute()
+      ).rejects.toThrow(/need_resolutions_need_id_key/);
+    });
+
+    it("integridade: o mesmo stock_transaction_id em duas resoluções (de needs diferentes) é rejeitado pelo índice único parcial", async () => {
+      const item = await createTestInventoryItem(orgId, owner.userId);
+      await db.insertInto("stockTransactions").values({ organizationId: orgId, itemId: item.id, type: "entrada", delta: 100, createdByUserId: owner.userId }).execute();
+      const [tx] = await db.insertInto("stockTransactions").values({ organizationId: orgId, itemId: item.id, type: "saida", delta: -10, createdByUserId: owner.userId }).returning(["id"]).execute();
+      const needA = await createNeed(orgId, owner.userId, { itemId: item.id, quantityNeeded: 10 });
+      const needB = await createNeed(orgId, owner.userId, { itemId: item.id, quantityNeeded: 10 });
+
+      await db.insertInto("needResolutions").values({ needId: needA.id, stockTransactionId: tx.id, createdByUserId: owner.userId }).execute();
+
+      await expect(
+        db.insertInto("needResolutions").values({ needId: needB.id, stockTransactionId: tx.id, createdByUserId: owner.userId }).execute()
+      ).rejects.toThrow(/idx_need_resolutions_stock_transaction/);
+    });
+
+    it("integridade: need_resolutions é append-only — UPDATE e DELETE são bloqueados pelo trigger", async () => {
+      const { need } = await setup();
+      const [resolution] = await db
+        .insertInto("needResolutions")
+        .values({ needId: need.id, stockTransactionId: null, createdByUserId: owner.userId })
+        .returning(["id"])
+        .execute();
+
+      await expect(db.updateTable("needResolutions").set({ stockTransactionId: null }).where("id", "=", resolution.id).execute()).rejects.toThrow();
+      await expect(db.deleteFrom("needResolutions").where("id", "=", resolution.id).execute()).rejects.toThrow();
     });
   });
 });

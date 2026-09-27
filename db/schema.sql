@@ -242,6 +242,55 @@ CREATE TRIGGER needs_set_updated_at BEFORE UPDATE ON needs FOR EACH ROW EXECUTE 
 CREATE INDEX idx_needs_org ON needs(organization_id, status);
 
 -- ============================================================
+-- Fase 40 (0011) — need_resolutions: resolução ADMINISTRATIVA da própria
+-- need via needs-status_POST (consumo do estoque PRÓPRIO da organização,
+-- ou uma declaração puramente administrativa quando a need não tem item
+-- vinculado). NÃO é o Modelo B — need_fulfillments continua exclusivamente
+-- sobre recebimentos de doações da REDE Levora, sempre ligados a uma
+-- allocation; need_resolutions nunca tem allocation nenhuma, nunca é
+-- gerada pelo motor de matching.
+--
+-- Achado de auditoria (Fase 38, reproduzido deterministicamente): sem
+-- esta entidade, needs-status_POST só olhava o status IMEDIATAMENTE
+-- anterior para decidir se dava baixa de estoque — o ciclo
+-- aberta→atendida→aberta→atendida gerava uma SEGUNDA baixa de estoque
+-- próprio para a mesma necessidade, porque nada registrava "isto já
+-- aconteceu" de forma estrutural. Investigação da Fase 39 confirmou (pela
+-- documentação original da Fase 10) que a intenção sempre foi UMA
+-- resolução por necessidade, nunca uma por ciclo de status — o
+-- comportamento repetível era uma lacuna, não um design intencional.
+--
+-- UNIQUE(need_id): no máximo uma resolução por need, por toda a vida da
+-- necessidade — garante estruturalmente que reabrir e reatender
+-- (needs.status continua livre, nunca uma máquina de estados) nunca
+-- produz uma segunda baixa, não importa quantos ciclos administrativos
+-- aconteçam depois.
+--
+-- Multi-tenancy: sem organization_id redundante — need_id já aponta para
+-- uma need, que já pertence a uma organização (única fonte de verdade).
+--
+-- stock_transaction_id NULLABLE: NULL quando a need não tem item
+-- vinculado (resolução puramente declarativa); índice único parcial
+-- garante que o mesmo movimento físico nunca seja reaproveitado por duas
+-- resoluções.
+--
+-- Append-only (mesma trigger audit_log_block_mutation de
+-- audit_log/stock_transactions/need_fulfillments): uma resolução, uma vez
+-- criada, nunca é alterada nem apagada.
+-- ============================================================
+CREATE TABLE need_resolutions (
+  id SERIAL PRIMARY KEY,
+  need_id INTEGER NOT NULL REFERENCES needs(id) ON DELETE RESTRICT,
+  stock_transaction_id BIGINT REFERENCES stock_transactions(id) ON DELETE RESTRICT,
+  created_by_user_id INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (need_id)
+);
+CREATE UNIQUE INDEX idx_need_resolutions_stock_transaction ON need_resolutions(stock_transaction_id) WHERE stock_transaction_id IS NOT NULL;
+CREATE TRIGGER need_resolutions_no_update BEFORE UPDATE ON need_resolutions FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+CREATE TRIGGER need_resolutions_no_delete BEFORE DELETE ON need_resolutions FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+
+-- ============================================================
 -- Fase 3 — Oportunidades de doação (modelo legado por-organização,
 -- mantido por compatibilidade; substituído em uso real pelo
 -- Registro Central de Oportunidades da Fase 4)
