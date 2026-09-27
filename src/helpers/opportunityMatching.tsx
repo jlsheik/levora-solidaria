@@ -154,6 +154,7 @@ export async function runMatchingForOpportunity(
         "needs.id as needId",
         "needs.title as needTitle",
         "needs.quantityNeeded",
+        "needs.unit as needUnit",
         "needs.priority",
         "organizations.id as organizationId",
         "organizations.name as organizationName",
@@ -266,9 +267,29 @@ export async function runMatchingForOpportunity(
       if (categoriaScore === 0) continue; // sem relação nenhuma, nem candidato
 
       const needQty = Number(c.quantityNeeded);
-      const quantidadeScore = opportunity.quantity !== null
-        ? Math.max(0, Math.min(100, (Math.min(Number(opportunity.quantity), needQty) / needQty) * 100))
-        : 70;
+      // Nunca comparar numericamente quantidades de unidades incompatíveis
+      // (regra arquitetural já aprovada, achado de auditoria da Fase 34/35):
+      // "500 kg" e "500 caixas" nunca são o mesmo número comparável, mesmo
+      // com valores numéricos iguais. Sem opportunity.unit informado, também
+      // não há como confirmar compatibilidade — tratado como incompatível,
+      // nunca assumido compatível por omissão. Mesma técnica de comparação
+      // já usada em todo o projeto (normalize(): NFD + remoção de acento +
+      // minúsculas, sem conversão nem taxonomia de unidades) — o mesmo
+      // padrão que capacidade_armazenamento já usa (category+unit exigindo
+      // igualdade exata antes de comparar números). O caso
+      // `opportunity.quantity === null` ("quantidade não informada") é
+      // distinto e não é afetado por esta regra — continua com score fixo
+      // 70, comportamento pré-existente inalterado.
+      const unitsIncompatible = opportunity.quantity !== null && (opportunity.unit === null || normalize(opportunity.unit) !== normalize(c.needUnit));
+      const quantidadeCriterion: CriterionResult = opportunity.quantity === null
+        ? { score: 70, weight: 0.15, detail: "quantidade da oportunidade não informada" }
+        : unitsIncompatible
+          ? { score: null, weight: 0.15, detail: `nao_aplicavel: unidades incompativeis (oferecido em "${opportunity.unit ?? "unidade não informada"}", necessidade em "${c.needUnit}") — nunca comparado numericamente` }
+          : {
+              score: Math.round(Math.max(0, Math.min(100, (Math.min(Number(opportunity.quantity), needQty) / needQty) * 100)) * 100) / 100,
+              weight: 0.15,
+              detail: `oferecido ${opportunity.quantity}${opportunity.unit} vs necessário ${needQty}${c.needUnit}`,
+            };
 
       // Cidade E estado juntos — mesma correção já aplicada em
       // raio_atendimento (achado de auditoria): cidades homônimas em UFs
@@ -368,7 +389,7 @@ export async function runMatchingForOpportunity(
       const criteria: Record<string, CriterionResult> = {
         categoria: { score: categoriaScore, weight: 0.20, detail: categoriaDetail },
         necessidade_urgencia: { score: URGENCY_SCORE[c.priority], weight: 0.15, detail: `prioridade da necessidade: ${c.priority}` },
-        quantidade: { score: Math.round(quantidadeScore * 100) / 100, weight: 0.15, detail: opportunity.quantity !== null ? `oferecido ${opportunity.quantity}${opportunity.unit ?? ""} vs necessário ${needQty}` : "quantidade da oportunidade não informada" },
+        quantidade: quantidadeCriterion,
         proximidade: { score: localizacaoScore, weight: 0.15, detail: "aproximacao por cidade/estado da sede, nao e distancia em km" },
         capacidade_armazenamento: capacidadeArmazenamento,
         capacidade_logistica: capacidadeLogistica,

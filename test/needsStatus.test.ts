@@ -46,6 +46,22 @@ describe("POST /needs-status", () => {
     orgId = org.id;
   });
 
+  it("permite livremente qualquer transição entre aberta/atendida/cancelada (não é uma máquina de estados — decisão de produto ainda pendente, fora do escopo da Fase 35)", async () => {
+    // Sem item vinculado: nenhuma baixa de estoque entra no caminho, então
+    // este teste isola exatamente a permissividade de transição, que a trava
+    // FOR UPDATE (Fase 35) não deve restringir de forma nenhuma.
+    const need = await createNeed(orgId, owner.userId);
+    const setStatus = (status: "aberta" | "atendida" | "cancelada") =>
+      postNeedsStatus(buildRequest("needs-status", { method: "POST", cookie: owner.cookie, body: { organizationId: orgId, needId: need.id, status } }));
+
+    for (const status of ["aberta", "cancelada", "atendida", "aberta", "cancelada", "atendida"] as const) {
+      const response = await setStatus(status);
+      expect(response.status).toBe(200);
+      const data = await parseJson<{ need: { status: string } }>(response);
+      expect(data.need.status).toBe(status);
+    }
+  });
+
   it("atualiza o status da necessidade e grava evento de auditoria", async () => {
     const need = await createNeed(orgId, owner.userId);
 
@@ -188,6 +204,44 @@ describe("POST /needs-status", () => {
         buildRequest("needs-status", { method: "POST", cookie: owner.cookie, body: { organizationId: orgId, needId: need.id, status: "atendida" } })
       );
       expect(await stockBalance(item.id)).toBe(60);
+    });
+
+    it("concorrência: duas requisições simultâneas marcando a mesma necessidade como 'atendida' resultam em exatamente UMA baixa de estoque (Fase 35 — FOR UPDATE na linha da need)", async () => {
+      const item = await createTestInventoryItem(orgId, owner.userId);
+      await db.insertInto("stockTransactions").values({ organizationId: orgId, itemId: item.id, type: "entrada", delta: 100, createdByUserId: owner.userId }).execute();
+      const need = await createNeed(orgId, owner.userId, { itemId: item.id, quantityNeeded: 40 });
+
+      const [responseA, responseB] = await Promise.all([
+        postNeedsStatus(
+          buildRequest("needs-status", { method: "POST", cookie: owner.cookie, body: { organizationId: orgId, needId: need.id, status: "atendida" } })
+        ),
+        postNeedsStatus(
+          buildRequest("needs-status", { method: "POST", cookie: owner.cookie, body: { organizationId: orgId, needId: need.id, status: "atendida" } })
+        ),
+      ]);
+
+      // Sem a trava (FOR UPDATE), a race deterministicamente reproduzida na
+      // auditoria fazia as duas requisições lerem status="aberta" antes de
+      // qualquer commit e ambas darem baixa — saldo cairia para 20 (dupla
+      // baixa de 40) em vez de 60 (baixa única).
+      expect(await stockBalance(item.id)).toBe(60);
+
+      const stockOutCount = await db
+        .selectFrom("stockTransactions")
+        .select((eb) => eb.fn.countAll().as("count"))
+        .where("itemId", "=", item.id)
+        .where("type", "=", "saida")
+        .executeTakeFirstOrThrow();
+      expect(Number(stockOutCount.count)).toBe(1);
+
+      const finalNeed = await db.selectFrom("needs").select(["status"]).where("id", "=", need.id).executeTakeFirstOrThrow();
+      expect(finalNeed.status).toBe("atendida");
+
+      // As duas requisições respondem com sucesso (200) — a segunda observa a
+      // need já atendida e simplesmente não dá baixa de novo (idempotente sob
+      // concorrência, nunca um erro/409 nem uma segunda saída).
+      expect(responseA.status).toBe(200);
+      expect(responseB.status).toBe(200);
     });
   });
 });

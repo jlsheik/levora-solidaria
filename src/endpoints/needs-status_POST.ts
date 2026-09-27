@@ -28,11 +28,25 @@ export async function handle(request: Request) {
     }
 
     const result = await db.transaction().execute(async (trx) => {
+      // FOR UPDATE (achado de auditoria, Fase 35): trava a linha da need ANTES
+      // de decidir `willConsumeStock` a partir do seu status. Sem isso, duas
+      // requisições concorrentes marcando a MESMA need como "atendida" podiam
+      // ambas ler `status="aberta"` (READ COMMITTED, antes de qualquer commit)
+      // e ambas decidir dar baixa — baixa de estoque em dobro para a mesma
+      // necessidade, reproduzido deterministicamente na auditoria. Travar a
+      // linha aqui serializa as duas transações; quando a segunda finalmente
+      // adquire a trava (depois do commit da primeira), o Postgres reavalia
+      // FOR UPDATE contra a versão JÁ ATUALIZADA da linha — a segunda
+      // requisição enxerga `status="atendida"` de verdade, não a leitura
+      // obsoleta de antes de travar, e corretamente decide não dar baixa de
+      // novo (mesmo comportamento de idempotência já coberto por teste, agora
+      // também seguro sob concorrência real).
       const existing = await trx
         .selectFrom("needs")
         .select(["id", "status", "title", "itemId", "quantityNeeded", "unit"])
         .where("id", "=", input.needId)
         .where("organizationId", "=", input.organizationId)
+        .forUpdate()
         .executeTakeFirst();
 
       if (!existing) return { type: "not_found" as const };
