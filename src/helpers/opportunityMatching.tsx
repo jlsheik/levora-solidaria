@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { recordAuditLogEntry } from "./auditLog";
 import { flootAi, FlootAiOutOfCreditsError } from "./aiClient";
+import { getNeedFulfillmentBalanceBatch, computeNeedProgress } from "./needFulfillment";
 import { sql } from "kysely";
 import type { Transaction } from "kysely";
 import type { DB, Json, NeedPriority } from "./schema";
@@ -23,9 +24,21 @@ import type { DB, Json, NeedPriority } from "./schema";
  * capacidade/logística/área de atendimento (hoje, 100% delas) nunca mais
  * atingiria os limiares de confiança média/alta, travando o matching
  * automático até todo mundo preencher a configuração nova.
+ *
+ * ALGORITHM_VERSION 1.4 (Fase 43) — mudança real de comportamento, não só
+ * de rótulo: elegibilidade de need passa a exigir `needs.status='aberta'
+ * AND requiredRemaining>0` (antes: só o status), e o critério `quantidade`
+ * passa a comparar a oferta da oportunidade contra `requiredRemaining`
+ * (progresso real do Modelo B via getNeedFulfillmentBalanceBatch/
+ * computeNeedProgress — Fase 42), não mais contra `quantityNeeded`
+ * original. Pesos, thresholds, renormalização, desempate e todos os
+ * outros critérios permanecem exatamente como na 1.3 — só a fonte da
+ * quantidade-alvo e o filtro de elegibilidade mudaram. Avaliações
+ * (`match_evaluations`) já persistidas antes desta fase continuam com
+ * `algorithm_version='1.3'` — nunca reescritas retroativamente.
  */
 
-export const ALGORITHM_VERSION = "1.3";
+export const ALGORITHM_VERSION = "1.4";
 export const HIGH_CONFIDENCE_THRESHOLD = 90;
 export const MEDIUM_CONFIDENCE_THRESHOLD = 70;
 export const RESERVATION_MINUTES = 30;
@@ -165,10 +178,34 @@ export async function runMatchingForOpportunity(
       .where("organizations.status", "=", "ativa")
       .execute();
 
+    // Elegibilidade por progresso real (Fase 43, ALGORITHM_VERSION 1.4):
+    // "needs.status='aberta'" sozinho não basta mais — uma need já
+    // totalmente atendida pela rede (requiredRemaining=0), mesmo com
+    // status ainda "aberta" (status é uma decisão administrativa
+    // independente, Fase 37), não deve continuar pedindo a quantidade
+    // original inteira de novo. Progresso buscado em LOTE (uma única
+    // query GROUP BY via getNeedFulfillmentBalanceBatch, reaproveitando a
+    // mesma função já usada pela tela de Necessidades — Fase 42) para
+    // todas as needs candidatas de uma vez, nunca um SUM por candidato
+    // (mesmo princípio anti-N+1 já aplicado a capacidade/logística/área
+    // de atendimento logo abaixo). Nenhum risco de vazamento entre
+    // organizações: cada needId já pertence a exatamente uma
+    // organização (join acima), e o batch só devolve saldos para os
+    // needIds explicitamente pedidos — nunca dados de uma need que não
+    // esteja neste conjunto.
+    const candidateNeedIds = candidates.map((c) => c.needId);
+    const fulfillmentByNeedId = await getNeedFulfillmentBalanceBatch(trx, candidateNeedIds);
+    const remainingByNeedId = new Map<number, number>();
+    for (const c of candidates) {
+      const progress = computeNeedProgress(Number(c.quantityNeeded), fulfillmentByNeedId.get(c.needId) ?? 0);
+      remainingByNeedId.set(c.needId, progress.requiredRemaining);
+    }
+    const eligibleCandidates = candidates.filter((c) => (remainingByNeedId.get(c.needId) ?? 0) > 0);
+
     // Uma única busca em lote por tipo de dado, para todas as organizações
     // candidatas de uma vez — nunca uma query por candidato dentro do loop
     // de pontuação (risco de N+1 real com muitas organizações/oportunidades).
-    const candidateOrgIds = [...new Set(candidates.filter((c) => !existingOrgIds.has(c.organizationId)).map((c) => c.organizationId))];
+    const candidateOrgIds = [...new Set(eligibleCandidates.filter((c) => !existingOrgIds.has(c.organizationId)).map((c) => c.organizationId))];
 
     const [capacityRows, settingsRows, serviceAreaRows, stockUsageRows] = candidateOrgIds.length === 0
       ? [[], [], [], []]
@@ -238,9 +275,9 @@ export async function runMatchingForOpportunity(
 
     const evaluated: CandidateEvaluation[] = [];
     const weakKeyword: { needId: number; text: string }[] = [];
-    const byNeedId = new Map<number, (typeof candidates)[number]>();
+    const byNeedId = new Map<number, (typeof eligibleCandidates)[number]>();
 
-    for (const c of candidates) {
+    for (const c of eligibleCandidates) {
       if (existingOrgIds.has(c.organizationId)) continue;
       byNeedId.set(c.needId, c);
       const kwScore = keywordScore(opportunityText, c.needTitle);
@@ -248,12 +285,12 @@ export async function runMatchingForOpportunity(
     }
 
     const aiBatch = weakKeyword.slice(0, 20);
-    const hasStrongKeywordMatch = candidates.some((c) => !existingOrgIds.has(c.organizationId) && keywordScore(opportunityText, c.needTitle) > 0);
+    const hasStrongKeywordMatch = eligibleCandidates.some((c) => !existingOrgIds.has(c.organizationId) && keywordScore(opportunityText, c.needTitle) > 0);
     const { scores: aiScores, modelUsed } = !hasStrongKeywordMatch && aiBatch.length > 0
       ? await aiCategoryScores(opportunityText, aiBatch)
       : { scores: new Map<number, { score: number; reason: string }>(), modelUsed: null };
 
-    for (const c of candidates) {
+    for (const c of eligibleCandidates) {
       if (existingOrgIds.has(c.organizationId)) continue;
       const kwScore = keywordScore(opportunityText, c.needTitle);
       const ai = aiScores.get(c.needId);
@@ -266,7 +303,15 @@ export async function runMatchingForOpportunity(
 
       if (categoriaScore === 0) continue; // sem relação nenhuma, nem candidato
 
-      const needQty = Number(c.quantityNeeded);
+      // Fase 43 (ALGORITHM_VERSION 1.4): o alvo de quantidade passa a ser o
+      // que REALMENTE falta pela rede (requiredRemaining), não mais o
+      // quantityNeeded original — já filtrado > 0 pela elegibilidade acima
+      // (eligibleCandidates), então esta leitura nunca é 0 aqui. Isso
+      // também é o valor usado mais abaixo como teto de
+      // `quantityToAllocate`: não faz sentido pontuar o candidato contra
+      // "faltam 300" e depois oferecer alocação de até "500" (o
+      // quantityNeeded original) — os dois usos precisam da mesma fonte.
+      const needQty = remainingByNeedId.get(c.needId)!;
       // Nunca comparar numericamente quantidades de unidades incompatíveis
       // (regra arquitetural já aprovada, achado de auditoria da Fase 34/35):
       // "500 kg" e "500 caixas" nunca são o mesmo número comparável, mesmo
@@ -288,7 +333,7 @@ export async function runMatchingForOpportunity(
           : {
               score: Math.round(Math.max(0, Math.min(100, (Math.min(Number(opportunity.quantity), needQty) / needQty) * 100)) * 100) / 100,
               weight: 0.15,
-              detail: `oferecido ${opportunity.quantity}${opportunity.unit} vs necessário ${needQty}${c.needUnit}`,
+              detail: `oferecido ${opportunity.quantity}${opportunity.unit} vs restante ${needQty}${c.needUnit}`,
             };
 
       // Cidade E estado juntos — mesma correção já aplicada em

@@ -1924,6 +1924,101 @@ fronteira arquitetural conhecida e documentada (responsabilidade do
 futuro serviço de domínio que criar correction/reversal físicas), não
 uma inconsistência do ledger.
 
+## Fases 35-42 — resumo (auditadas/implementadas via relatório de chat, não detalhadas neste arquivo)
+
+Fase 35: corrigida race de dupla baixa em `needs-status_POST.ts` (`FOR
+UPDATE` na linha da need) e unidade ignorada no critério `quantidade` do
+Matching (unidades incompatíveis passam a gerar `score:null`, nunca
+comparadas numericamente). Fase 36: desenho de domínio (análise, sem
+implementação) de `needs.status`/`need_remaining`/over-fulfillment. Fase
+37: fechada a semântica — `needs.status` é decisão administrativa
+persistida, independente do ledger; `required_remaining`/`surplus`
+seriam derivados; reversal nunca altera `needs.status` automaticamente.
+Fase 38: auditoria comprovou que `needs-status_POST.ts` permitia baixa de
+estoque próprio repetível a cada ciclo `aberta→atendida`. Fase 39:
+definido que reabrir uma need nunca representa um novo ciclo físico — a
+resolução administrativa deve ser única na vida da need. Fase 40:
+implementada `need_resolutions` (`UNIQUE(need_id)`, índice único parcial
+em `stock_transaction_id`, append-only) — a baixa de estoque próprio
+passa a ser garantida única estruturalmente, preservando a liberdade de
+transição de `needs.status`. Fase 41: implantada a Central Visual do
+front-end (uso do preview interativo real do ambiente sobre a aplicação
+já existente — dashboard, abas por organização, `/plataforma` — sem
+duplicar a aplicação); corrigidos dois bugs visuais reais encontrados na
+primeira navegação (rótulo de papel sem acento + `text-transform`
+quebrando "membro(s)"; link de "Prestação de contas" ausente em 4 das 7
+páginas de organização). Fase 42: implementada a camada de progresso da
+need — `getNeedFulfillmentBalanceBatch`/`computeNeedProgress`
+(`fulfilled`/`requiredRemaining`/`surplus`, puramente derivados do
+Modelo B, nunca persistidos, nunca sincronizados com `needs.status` nem
+com `need_resolutions`), exposta em `GET /needs` e exibida na tela de
+Necessidades.
+
+## Fase 43 — Integração do progresso real ao Matching: `ALGORITHM_VERSION` 1.3→1.4 (CONCLUÍDA)
+
+Mudança real de comportamento do algoritmo (não só de rótulo): o
+Matching deixa de tratar uma need parcialmente/totalmente atendida pela
+rede como se ainda precisasse da quantidade original inteira.
+
+- [x] Elegibilidade de need no Matching passa a exigir
+      `needs.status='aberta' AND requiredRemaining>0` (antes: só o
+      status). Progresso calculado em LOTE
+      (`getNeedFulfillmentBalanceBatch`, Fase 42) para todas as needs
+      candidatas de uma só vez — nunca um `SUM` por candidato dentro do
+      loop de pontuação (mesmo princípio anti-N+1 já usado para
+      capacidade/logística/área de atendimento).
+- [x] Critério `quantidade` passa a comparar a oferta da oportunidade
+      contra `requiredRemaining`, não mais `quantityNeeded` — o mesmo
+      valor também é usado como teto de `quantityToAllocate` (não faz
+      sentido pontuar contra "faltam 300" e depois oferecer alocação de
+      até "500").
+- [x] Regra de unidade incompatível da Fase 35 preservada integralmente
+      (`quantityScore=null`, nunca descarte automático do candidato);
+      `is_countable`/Modelo B/`need_resolutions` inalterados — o
+      Matching só consome o resultado já pronto de
+      `computeNeedProgress`, nunca recalcula progresso por conta própria.
+- [x] Pesos, thresholds, renormalização (`applicableWeight`), desempate
+      (`organizationId`+`needId`) e todo o resto do algoritmo continuam
+      byte-idênticos à versão 1.3 — `git diff` do arquivo confirma que
+      só a origem da quantidade-alvo e o filtro de elegibilidade
+      mudaram.
+- [x] `ALGORITHM_VERSION` "1.3"→"1.4": avaliações (`match_evaluations`)
+      já persistidas continuam com `algorithm_version="1.3"`, nunca
+      reescritas; só novas avaliações desta fase em diante gravam "1.4"
+      (confirmado por teste dedicado, inserindo uma avaliação "1.3"
+      manual antes de rodar o motor).
+- [x] 15 testes novos (`test/opportunityMatchingRequiredRemaining.test.ts`):
+      sem fulfillment (candidata); parcial (candidata, score usa o
+      restante); exatamente atendida e over-fulfilled (`remaining=0`,
+      NÃO candidatas, confirmado por ausência de `match_evaluations`);
+      `status='atendida'` e `cancelada` continuam bloqueando o matching
+      mesmo com `remaining>0`; reversal total reabre o progresso (need
+      volta a ser candidata); non-countable não conta; unidade
+      compatível/incompatível; renormalização com `quantidade=null`;
+      mudança de score sem alterar pesos/thresholds; lote com múltiplas
+      needs; multi-tenancy (lote não cruza organizações);
+      `algorithm_version` novo vs. histórico preservado. 3 testes
+      pré-existentes tiveram sua asserção de versão atualizada de "1.3"
+      para "1.4" (mesmo padrão da Fase 26, quando 1.2→1.3).
+- [x] Suíte completa (297→312 testes) e `npx tsc --noEmit` confirmados
+      sem regressão. `git diff --stat` de `needs-status_POST.ts`,
+      `need_resolutions`, todo o lifecycle
+      (`allocations-receive_POST.ts`, `allocations-decide_POST.ts`,
+      `reopenOpportunity.tsx`, `concludeOpportunity.tsx`,
+      `expireReservations.tsx`) e do schema/migrations do Modelo B
+      permanece vazio.
+- [x] Central Visual verificada no preview real após a mudança: telas de
+      Necessidades, Configurações de Matching, `/plataforma` e Rede
+      Levora, em desktop e mobile (375×812) — nenhuma alteração visual
+      inesperada (o Matching é só backend; as telas continuam idênticas
+      à Fase 42).
+- [ ] **Não implementado nesta etapa, por instrução explícita**: `quantityToAllocate`
+      capado por `requiredRemaining` foi implementado (é a mesma
+      variável `needQty`, ver acima) — mas nenhuma política NOVA de
+      over-fulfillment, allocation manual→need, cooldown de recusa,
+      novo status persistido, cache/materialização de progresso, ou
+      alteração do Modelo B/`need_resolutions`.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

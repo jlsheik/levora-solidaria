@@ -78,8 +78,8 @@ describe("elegivel_sem_quantidade — candidato pontuado, sem quantidade restant
     expect(evalB.decision).toBe("elegivel_sem_quantidade");
     expect(evalB.allocationId).toBeNull();
     expect(Number(evalB.finalScore)).toBe(97.75); // score real calculado, nunca 0/null/genérico
-    expect(evalB.algorithmVersion).toBe("1.3");
-    expect(ALGORITHM_VERSION).toBe("1.3");
+    expect(evalB.algorithmVersion).toBe("1.4");
+    expect(ALGORITHM_VERSION).toBe("1.4");
 
     // Nenhuma allocation para B.
     const allocationsForB = await db.selectFrom("opportunityAllocations").select(["id"]).where("opportunityRegistryId", "=", opportunityId).where("organizationId", "=", b.orgId).execute();
