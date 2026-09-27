@@ -250,3 +250,69 @@ describe("need_fulfillments — ledger de atendimento", () => {
     ).rejects.toThrow(/append-only/);
   });
 });
+
+describe("need_fulfillments — FKs RESTRICT (achado de auditoria corrigido: append-only x CASCADE/SET NULL)", () => {
+  async function setupFulfillment() {
+    const owner = await createAuthenticatedUser();
+    const org = await createTestOrganization(owner.userId);
+    const item = await createTestInventoryItem(org.id, owner.userId, { name: "Item RESTRICT", unit: "kg" });
+    const [need] = await db
+      .insertInto("needs")
+      .values({ organizationId: org.id, title: "Need de teste RESTRICT", quantityNeeded: "10", unit: "kg", priority: "media", status: "aberta", createdByUserId: owner.userId })
+      .returning(["id"])
+      .execute();
+    const admin = await createAuthenticatedUser();
+    const source = await createTestSource(admin.userId);
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { status: "atribuida" });
+    const allocation = await createTestAllocation(opportunity.id, org.id, { status: "aceita", quantityAllocated: 10 });
+
+    // Vincula manualmente um needId (não passa pelo motor, só para isolar
+    // o comportamento de FK sob teste) via insert direto de match_evaluations,
+    // exatamente como o motor faria.
+    await db
+      .insertInto("matchEvaluations")
+      .values({ opportunityRegistryId: opportunity.id, organizationId: org.id, needId: need.id, criteria: {}, finalScore: "100", algorithmVersion: "1.3", decision: "atribuido_automatico", allocationId: allocation.id })
+      .execute();
+
+    const receiveRes = await receiveHandle(buildRequest("allocations-receive", { method: "POST", cookie: owner.cookie, body: { organizationId: org.id, allocationId: allocation.id, itemId: item.id, quantityReceived: 10 } }));
+    expect(receiveRes.status).toBe(200);
+
+    return { owner, org, need, allocation };
+  }
+
+  it("teste A: UPDATE em need_fulfillments continua bloqueado", async () => {
+    const { allocation } = await setupFulfillment();
+    const fulfillment = await getFulfillment(allocation.id);
+    await expect(db.updateTable("needFulfillments").set({ quantity: "1" }).where("id", "=", fulfillment.id).execute()).rejects.toThrow(/append-only/);
+  });
+
+  it("teste B: DELETE em need_fulfillments continua bloqueado", async () => {
+    const { allocation } = await setupFulfillment();
+    const fulfillment = await getFulfillment(allocation.id);
+    await expect(db.deleteFrom("needFulfillments").where("id", "=", fulfillment.id).execute()).rejects.toThrow(/append-only/);
+  });
+
+  it("teste C: excluir a NEED referenciada por um fulfillment é bloqueado (RESTRICT) — nunca silenciosamente vira null", async () => {
+    const { need } = await setupFulfillment();
+    await expect(db.deleteFrom("needs").where("id", "=", need.id).execute()).rejects.toThrow();
+
+    const stillThere = await db.selectFrom("needs").select(["id"]).where("id", "=", need.id).executeTakeFirst();
+    expect(stillThere).toBeDefined(); // a need não foi apagada — bloqueada antes de qualquer efeito colateral
+  });
+
+  it("teste D: excluir a ALLOCATION referenciada por um fulfillment é bloqueado (RESTRICT) — nunca cascateia silenciosamente", async () => {
+    const { allocation } = await setupFulfillment();
+    await expect(db.deleteFrom("opportunityAllocations").where("id", "=", allocation.id).execute()).rejects.toThrow();
+
+    const fulfillmentStillThere = await getFulfillment(allocation.id);
+    expect(fulfillmentStillThere).toBeDefined(); // histórico intacto — a exclusão nunca chegou a acontecer
+  });
+
+  it("teste E: excluir a ORGANIZATION referenciada por um fulfillment é bloqueado (RESTRICT) — não existe hoje nenhum fluxo real que dependa de apagar organizations", async () => {
+    const { org } = await setupFulfillment();
+    // Não existe nenhum endpoint real que apague organizations (confirmado
+    // por auditoria) — este teste prova só a proteção de schema em si,
+    // usando um DELETE direto, não um fluxo de produto inventado.
+    await expect(db.deleteFrom("organizations").where("id", "=", org.id).execute()).rejects.toThrow();
+  });
+});

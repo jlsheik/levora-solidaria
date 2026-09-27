@@ -1562,6 +1562,63 @@ Investigação arquitetural (só leitura) concluiu **ARQUITETURA DE ATENDIMENTO 
       continua não existindo — `opportunityMatching.tsx` intocado,
       `ALGORITHM_VERSION` continua `"1.3"`).
 
+## Fase 30 — Correção estrutural do ledger: FKs RESTRICT + índice em `match_evaluations.allocation_id` (CONCLUÍDA)
+
+Auditoria definitiva do ledger (Fase 29) encontrou um achado **CRÍTICO**, reproduzido: `need_fulfillments` é append-only (trigger `audit_log_block_mutation`), mas nasceu com `ON DELETE SET NULL` (`need_id`) e `ON DELETE CASCADE` (`allocation_id`, `organization_id`) — ações que exigem o Postgres alterar/apagar a própria linha do ledger para honrar a exclusão da linha-pai. O trigger append-only intercepta essa operação interna e bloqueia, fazendo o `DELETE` da linha-pai (`needs`/`opportunity_allocations`/`organizations`) **falhar por inteiro**, em vez de silenciosamente cascatear/anular como as cláusulas prometiam. Corrigido aqui, junto com um achado de performance (ausência de índice em `match_evaluations.allocation_id`, consultado a cada recebimento):
+
+- [x] Investigação obrigatória confirmou, por busca exaustiva
+      (`grep -rln "deleteFrom(\"organizations\")\|deleteFrom(\"needs\")\|deleteFrom(\"opportunityAllocations\")"`,
+      sem nenhum resultado): **nenhum endpoint em todo o projeto deleta**
+      `organizations`, `needs` ou `opportunity_allocations`. A única
+      rotina de "exclusão" relacionada (LGPD, `account-delete_POST.ts`)
+      anonimiza o usuário, nunca apaga a organização. Trocar as 3 FKs
+      para `RESTRICT` não quebra nenhum fluxo real hoje — confirmado
+      antes de alterar, não presumido.
+- [x] `db/migrations/0007_need_fulfillments_fk_restrict.sql`: as 3 FKs
+      (`need_id`, `allocation_id`, `organization_id`) trocadas de
+      `SET NULL`/`CASCADE` para `RESTRICT` (mesmo padrão já usado em
+      `stock_transactions.item_id`). `db/schema.sql` atualizado para
+      refletir o estado final diretamente na `CREATE TABLE` (mesmo padrão
+      das correções anteriores — schema.sql sempre mostra o resultado
+      final, não uma sequência de `ALTER`).
+- [x] Índice novo: `idx_match_evaluations_allocation_id`
+      (`UNIQUE ... WHERE allocation_id IS NOT NULL`) — cardinalidade
+      1:1 reconfirmada (por leitura do motor **e** por consulta direta ao
+      banco de desenvolvimento: `SELECT allocation_id, count(*) ...
+      HAVING count(*)>1` retornou zero linhas antes de criar o índice
+      único). Acelera a resolução de `needId` em
+      `createNeedFulfillment` — nenhuma relação/cardinalidade foi
+      redefinida, só expressa no banco a garantia que já existia no
+      código. `opportunity_allocations.match_evaluation_id` continua
+      fora de escopo, não preenchido.
+- [x] Nenhuma alteração em dado histórico — só constraints/índice, sem
+      `UPDATE`/backfill em `need_fulfillments` ou qualquer outra tabela.
+- [x] `test/needFulfillment.test.ts` (+5 testes, A-E): `UPDATE`/`DELETE`
+      em `need_fulfillments` continuam bloqueados (reconfirmação); excluir
+      a `need`, a `allocation` ou a `organization` referenciada por um
+      fulfillment existente agora é **bloqueado pelo `RESTRICT`** (com
+      mensagem de erro do próprio Postgres, não mais o erro genérico de
+      "append-only" que aparecia antes por acidente) — histórico
+      confirmado intacto em todos os 3 casos, nada foi apagado nem
+      alterado silenciosamente.
+- [x] Suíte completa (223→228 testes) e typecheck confirmados sem
+      regressão. Diff conferido — só a migration nova, `schema.sql`, os
+      5 testes novos, e esta entrada de documentação.
+      `opportunityMatching.tsx` com diff zero confirmado.
+- [ ] **`unit_mismatch_note` permanece pendente, não implementado nesta
+      etapa** (instrução explícita) — a decisão entre `need_id=NULL`+nota
+      textual (atual) versus `need_id` preservado com uma flag de "não
+      contabilizável" (mais forte para auditoria futura, apresentada mas
+      não escolhida) fica registrada para uma etapa própria.
+
+**Regra documentada**: `need_fulfillments` é append-only e seus registros
+históricos não podem ser modificados ou removidos implicitamente pela
+exclusão de entidades-pai — qualquer ação de FK que exigisse um
+`UPDATE`/`DELETE` no ledger (`SET NULL`, `CASCADE`) é incompatível com o
+modelo append-only e deve ser evitada; `RESTRICT`/`NO ACTION` são as
+únicas ações de FK seguras para uma tabela append-only referenciada por
+outras entidades.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

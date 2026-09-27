@@ -397,6 +397,11 @@ CREATE TABLE match_evaluations (
 );
 CREATE INDEX idx_match_evaluations_registry ON match_evaluations(opportunity_registry_id);
 CREATE INDEX idx_match_evaluations_org ON match_evaluations(organization_id);
+-- Único (não só indexado): confirmado por auditoria que uma allocation_id
+-- nunca aparece em mais de uma linha (gravado só no momento em que o
+-- motor cria aquela allocation específica) — acelera a resolução de
+-- needId em need_fulfillments (Fase 29) e expressa essa garantia real.
+CREATE UNIQUE INDEX idx_match_evaluations_allocation_id ON match_evaluations(allocation_id) WHERE allocation_id IS NOT NULL;
 
 ALTER TABLE opportunity_allocations
   ADD CONSTRAINT opportunity_allocations_match_evaluation_fk
@@ -404,13 +409,22 @@ ALTER TABLE opportunity_allocations
 
 -- ============================================================
 -- Fase 29 — Ledger de atendimento de necessidades (need_fulfillments)
--- Ver db/migrations/0006_need_fulfillments.sql para o comentário completo.
+-- Ver db/migrations/0006_need_fulfillments.sql para o comentário completo,
+-- e 0007_need_fulfillments_fk_restrict.sql para o motivo das 3 FKs abaixo
+-- serem RESTRICT (não CASCADE/SET NULL): need_fulfillments é append-only
+-- (trigger audit_log_block_mutation), e uma ação de FK que exigisse o
+-- Postgres alterar/apagar a própria linha do ledger para honrar a
+-- exclusão de uma need/allocation/organização seria bloqueada por esse
+-- mesmo trigger, fazendo o DELETE da linha-pai falhar por inteiro —
+-- confirmado por reprodução, não hipotético. RESTRICT torna essa
+-- incompatibilidade explícita na própria FK, em vez de deixar uma
+-- promessa (SET NULL/CASCADE) que nunca se cumpre de verdade.
 -- ============================================================
 CREATE TABLE need_fulfillments (
   id BIGSERIAL PRIMARY KEY,
-  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  need_id INTEGER REFERENCES needs(id) ON DELETE SET NULL,
-  allocation_id INTEGER NOT NULL REFERENCES opportunity_allocations(id) ON DELETE CASCADE,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT,
+  need_id INTEGER REFERENCES needs(id) ON DELETE RESTRICT,
+  allocation_id INTEGER NOT NULL REFERENCES opportunity_allocations(id) ON DELETE RESTRICT,
   stock_transaction_id BIGINT NOT NULL REFERENCES stock_transactions(id) ON DELETE RESTRICT,
   quantity NUMERIC(12,3) NOT NULL CHECK (quantity > 0),
   unit TEXT NOT NULL,
