@@ -1843,6 +1843,87 @@ necessidade de negócio comprovada foi explicitamente rejeitado.
       produto/arquitetura ainda pendente, não uma lacuna a fechar
       silenciosamente agora.
 
+## Fase 34 — Formalização do contrato arquitetural de `stock_transaction_id` e congelamento do núcleo do Modelo B (CONCLUÍDA — só documentação)
+
+Etapa de formalização, não de remodelagem: nenhuma migration, nenhum
+endpoint, nenhuma coluna nova. Objetivo era transformar o comportamento
+JÁ REAL (confirmado por auditoria de código, não alterado) em contrato
+arquitetural explícito, e decidir se o núcleo estrutural do Modelo B
+pode ser considerado congelado apesar da limitação física conhecida da
+Fase 33.
+
+- [x] Investigação de produtores de `need_fulfillments`: `createNeedFulfillment`
+      (`src/helpers/needFulfillment.tsx`) é o **único** produtor real no
+      código-base — busca por `insertInto("needFulfillments")` e
+      `INSERT INTO need_fulfillments` confirma isso. É chamado apenas por
+      `allocations-receive_POST.ts`. `opportunities-receive_POST.ts`
+      também cria um `stock_transaction`, mas para o fluxo LEGADO de
+      `donation_opportunities` — nunca cria `need_fulfillments`; irrelevante
+      para este ledger.
+- [x] Confirmado que `allocations-receive_POST.schema.ts` (schema Zod do
+      request) **não tem** campo `stock_transaction_id` — o único lugar
+      onde esse nome aparece no arquivo é no `OutputType` (resposta), não
+      no `schema` de entrada. Nenhum cliente pode enviar um
+      `stockTransactionId` arbitrário para este endpoint.
+- [x] Confirmado por leitura de `allocations-receive_POST.ts`: o
+      `stock_transaction` é criado dentro da mesma `db.transaction()`,
+      poucas linhas antes da chamada a `createNeedFulfillment`, e o `id`
+      recém-gerado (`tx.id`) é usado imediatamente — nunca um valor lido
+      de outro lugar ou recebido de fora.
+- [x] `src/helpers/needFulfillment.tsx`: comentário arquitetural expandido
+      (só comentários — `git diff` confirma zero linhas de código
+      executável alteradas) formalizando: o papel de `stock_transaction_id`
+      como lastro físico (nunca um id arbitrário escolhido por um
+      chamador); a fronteira banco×serviço de domínio; o contrato
+      obrigatório para um futuro endpoint de correction/reversal física
+      (criar o `stock_transaction` dentro da mesma transação, nunca
+      aceitar um id externo); que `correction.stock_transaction_id`
+      pode legitimamente ter `unit`/`quantity`/`is_countable` diferentes
+      do alvo (não deve exigir igualdade); que
+      `reversal.stock_transaction_id != NULL` é uma capacidade do schema
+      sem contrato de domínio definido (não exercitada, não proibida).
+- [x] Fronteira formalizada — o que o BANCO garante: existência do
+      `stock_transaction` referenciado; mesma organização (FK composta,
+      Fase 33); unicidade do `stock_transaction` usado no ledger; herança
+      de `organization_id`/`need_id` entre correction/reversal e o alvo
+      (Fase 32); herança total de `unit`/`quantity`/`is_countable` em
+      reversal; uma única reversal direta por alvo; append-only; grafo
+      sem ciclos nem referência a `reversal`; saldo contábil derivável
+      por fórmula pura. O que o SERVIÇO DE DOMÍNIO garante (não o banco):
+      que o `stock_transaction` recém-criado representa o movimento
+      físico correto para aquela operação; que os dados do movimento
+      (item/unidade/quantidade/direção) são os corretos; que uma
+      correction física gera seu próprio movimento em vez de reaproveitar
+      um alheio; que nenhum caminho aceita `stock_transaction_id` externo
+      por confiança.
+- [x] Suíte mantida em **268/268** (nenhum teste novo fabricado — a
+      instrução desta fase foi explícita em não criar testes só para
+      aumentar cobertura quando a regra já está coberta) e
+      `npx tsc --noEmit` confirmado limpo.
+- [x] `git diff --stat` revisado por completo: só `needFulfillment.tsx`
+      (comentários) e esta entrada de documentação — `opportunityMatching.tsx`,
+      lifecycle da oportunidade e o restante do ledger permanecem com
+      diff zero.
+- [ ] **Não corrigido nesta fase, por decisão explícita**: compatibilidade
+      física universal (item/unidade/quantidade/direção) entre um
+      `need_fulfillment` qualquer e um `stock_transaction` qualquer — não
+      é tratada como bug, porque a arquitetura atual já impede,
+      estruturalmente, que qualquer fluxo real aceite um
+      `stock_transaction_id` escolhido arbitrariamente de fora (único
+      produtor sempre cria seu próprio movimento na mesma transação). Se
+      um futuro fluxo violar esse contrato (aceitar um id externo sem
+      criar o movimento na mesma operação), a violação deve ser tratada
+      como uma regressão do contrato aqui formalizado, não como uma
+      lacuna nova a redescobrir.
+
+**Veredito registrado desta fase**: núcleo estrutural do Modelo B —
+isolamento multi-tenant (Fase 33), integridade do grafo
+correction/reversal (Fase 32), append-only, saldo contábil — está
+congelado. A limitação de compatibilidade física universal é uma
+fronteira arquitetural conhecida e documentada (responsabilidade do
+futuro serviço de domínio que criar correction/reversal físicas), não
+uma inconsistência do ledger.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo

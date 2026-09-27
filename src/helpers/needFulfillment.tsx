@@ -6,8 +6,9 @@ import { normalize } from "./opportunityMatching";
 /**
  * Ledger append-only de EVENTOS de atendimento de necessidades
  * (`need_fulfillments` — ver db/migrations/0006_need_fulfillments.sql,
- * 0007_need_fulfillments_fk_restrict.sql e
- * 0008_need_fulfillments_ledger_of_events.sql para o comentário
+ * 0007_need_fulfillments_fk_restrict.sql, 0008_need_fulfillments_ledger_of_events.sql,
+ * 0009_need_fulfillments_inheritance_rules.sql e
+ * 0010_need_fulfillments_stock_transaction_org_fk.sql para o comentário
  * arquitetural completo). Não transforma `needs.quantity_needed` num
  * contador mutável, não altera `needs.status`, e não toca no motor de
  * matching (`opportunityMatching.tsx` é só consultado aqui pela função
@@ -28,12 +29,65 @@ import { normalize } from "./opportunityMatching";
  * Chamado por `allocations-receive_POST.ts`, dentro da mesma transação do
  * recebimento, depois de a `stock_transaction` já existir (precisa do seu
  * `id`) e depois de a allocation já estar marcada `"recebida"`.
+ *
+ * CONTRATO ARQUITETURAL de `stock_transaction_id` (Fase 33/34 — formalizado
+ * após auditoria, não é uma regra nova de comportamento):
+ * `stock_transaction_id` representa o LASTRO FÍSICO daquele evento — nunca
+ * um identificador arbitrário que um chamador escolhe livremente. Hoje
+ * `need_fulfillments` tem um único produtor real neste código-base: esta
+ * função, chamada só por `allocations-receive_POST.ts`. Esse caminho NUNCA
+ * aceita um `stock_transaction_id` vindo do cliente — o schema de entrada
+ * do endpoint (`allocations-receive_POST.schema.ts`) não tem esse campo;
+ * o `stock_transaction` é sempre criado dentro da MESMA transação
+ * (`allocations-receive_POST.ts`, poucas linhas antes desta chamada) e seu
+ * `id` recém-gerado é passado aqui imediatamente. O banco garante hoje,
+ * estruturalmente (FK composta `need_fulfillments_stock_transaction_org_fkey`,
+ * migration 0010): que o `stock_transaction` referenciado existe e
+ * pertence à MESMA organização do fulfillment, e (`UNIQUE(stock_transaction_id)`)
+ * que um mesmo movimento físico só é usado por uma linha do ledger. O
+ * banco NÃO garante (e não tem hoje como garantir, por falta de uma fonte
+ * canônica de item/unidade/quantidade/direção na cadeia
+ * allocation→opportunity/need — ver comentário em db/schema.sql): que o
+ * `stock_transaction` referenciado é fisicamente coerente com o evento
+ * (mesmo item, mesma unidade, quantidade condizente, direção condizente).
+ * Isso é responsabilidade do SERVIÇO DE DOMÍNIO que cria o
+ * `stock_transaction` e o `need_fulfillment` juntos, na mesma operação —
+ * nunca de um `stock_transaction_id` recebido de fora e usado por
+ * confiança.
+ *
+ * Contrato obrigatório para um FUTURO endpoint de correction/reversal
+ * (não implementado nesta fase): se a correction/reversal tiver lastro
+ * físico próprio (`stock_transaction_id != NULL`), o fluxo deve
+ * conceitualmente (1) validar autorização/contexto, (2) determinar os
+ * dados físicos do novo movimento, (3) criar esse `stock_transaction`
+ * DENTRO da mesma transação, (4) usar o `id` recém-criado, (5) criar o
+ * `need_fulfillment` referenciando-o, (6) commit — nunca aceitar um
+ * `stock_transaction_id` externo e confiar que ele representa o
+ * movimento correto. Isso não elimina a necessidade de validar a lógica
+ * de negócio do movimento em si; só impede que o vínculo físico nasça de
+ * uma referência arbitrária.
+ *
+ * `correction.stock_transaction_id != NULL` representa uma correction com
+ * lastro físico PRÓPRIO — não precisa (nem deve) ser idêntico ao evento
+ * que ela referencia, porque `unit`/`quantity`/`is_countable` são
+ * legitimamente livres numa correction (Fase 32); a consistência entre os
+ * dois nasce do fluxo que os cria juntos, não de uma constraint de
+ * igualdade.
+ *
+ * `reversal.stock_transaction_id != NULL` é uma capacidade que o schema
+ * permite (nenhuma constraint proíbe) mas que NENHUM fluxo de aplicação
+ * usa hoje e para a qual não existe contrato de domínio definido — só
+ * `reversal.stock_transaction_id = NULL` (reversão puramente contábil,
+ * sem novo movimento físico) é um caso exercitado e suportado.
  */
 export interface CreateNeedFulfillmentInput {
   organizationId: number;
   allocationId: number;
   // stock_transactions.id é BIGSERIAL — o driver devolve como string (ver
-  // tipo `Int8` em schema.tsx), nunca um `number` JS de verdade.
+  // tipo `Int8` em schema.tsx), nunca um `number` JS de verdade. Precisa
+  // ser o id de um stock_transaction criado na MESMA transação que esta
+  // chamada (ver contrato de stock_transaction_id no comentário acima) —
+  // nunca um id recebido de fora sem essa garantia.
   stockTransactionId: string;
   quantity: number;
   unit: string;
