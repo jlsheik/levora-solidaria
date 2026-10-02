@@ -120,6 +120,7 @@ export default function ImpactReportPage() {
               {reportQuery.data.itemMovements.length === 0 ? (
                 <p className={styles.emptyText}>Nenhuma movimentação de estoque neste período.</p>
               ) : (
+                <div className={styles.tableScroll}>
                 <table className={styles.table}>
                   <thead>
                     <tr>
@@ -144,6 +145,7 @@ export default function ImpactReportPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
 
               <h3 className={styles.sectionTitle}>Doações recebidas no período</h3>

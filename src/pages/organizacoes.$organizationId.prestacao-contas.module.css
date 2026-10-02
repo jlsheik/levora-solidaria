@@ -9,7 +9,7 @@
 .title { display: flex; align-items: center; gap: var(--spacing-2); font-family: var(--font-family-display); font-size: 1.5rem; font-weight: 600; margin: 0 0 var(--spacing-1) 0; }
 .subtitle { color: var(--muted-foreground); font-size: 0.875rem; margin: 0; max-width: 36rem; line-height: 1.5; }
 .notAllowed { display: flex; flex-direction: column; align-items: center; gap: var(--spacing-3); padding: var(--spacing-12); text-align: center; color: var(--muted-foreground); }
-.filters { display: flex; gap: var(--spacing-4); margin-bottom: var(--spacing-6); }
+.filters { display: flex; gap: var(--spacing-4); margin-bottom: var(--spacing-6); flex-wrap: wrap; }
 .filterLabel { display: block; font-size: 0.75rem; color: var(--muted-foreground); margin-bottom: var(--spacing-1); }
 .reportSkeleton { height: 24rem; border-radius: var(--radius-lg); }
 .report { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--spacing-8); }
@@ -21,6 +21,7 @@
 .summaryLabel { font-size: 0.75rem; color: var(--muted-foreground); }
 .sectionTitle { font-family: var(--font-family-display); font-size: 1.0625rem; font-weight: 600; margin: var(--spacing-8) 0 var(--spacing-3) 0; color: var(--card-foreground); }
 .emptyText { color: var(--muted-foreground); font-size: 0.875rem; }
+.tableScroll { max-width: 100%; overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
 .table th { text-align: left; padding: var(--spacing-2); border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-weight: 500; }
 .table td { padding: var(--spacing-2); border-bottom: 1px solid var(--border); font-family: var(--font-family-monospace); color: var(--card-foreground); }

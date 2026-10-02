@@ -24,6 +24,20 @@ $ErrorActionPreference = "Continue"
 . "$PSScriptRoot\staging-common.ps1"
 Set-Location $script:StagingRoot
 
+# Fase 69 - uma subida por vez. Duas execuções próximas (duplo clique, dois
+# terminais) viam "nenhum cloudflared" ao mesmo tempo e criavam dois túneis
+# e dois `docker compose up` concorrentes. O lock é um arquivo aberto em
+# modo exclusivo; o SO o libera sozinho se o script morrer, e o cloudflared
+# (ShellExecute, sem herança de handles) nunca o segura.
+Ensure-RuntimeDir
+try {
+  $script:UpLock = [System.IO.File]::Open((Join-Path $script:RuntimeDir "staging-up.lock"),
+    [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+} catch {
+  Write-Host "Outra execução de staging-up.ps1 já está em andamento. Aguarde ela terminar (nada foi feito)." -ForegroundColor Yellow
+  exit 3
+}
+
 Write-Host "=== 1. Verificando Docker ===" -ForegroundColor Cyan
 if (-not (Test-DockerRunning)) {
   Write-Host "Docker não está respondendo. Tentando iniciar o Docker Desktop..." -ForegroundColor Yellow
@@ -105,13 +119,19 @@ if ($existing) {
     exit 1
   }
   Remove-Item $script:CloudflaredLog -ErrorAction SilentlyContinue
-  $stdoutDiscard = Join-Path $script:RuntimeDir "cloudflared.stdout.log"
-  # cloudflared escreve o log real (incluindo a URL) em stderr, não stdout -
-  # os dois precisam ir para arquivos DIFERENTES (Start-Process recusa o
-  # mesmo arquivo para ambos).
-  $proc = Start-Process -FilePath $cloudflared.Source -ArgumentList "tunnel","--url","http://localhost:8088" `
-    -RedirectStandardError $script:CloudflaredLog -RedirectStandardOutput $stdoutDiscard `
-    -WindowStyle Hidden -PassThru
+  Remove-Item (Join-Path $script:RuntimeDir "cloudflared.stdout.log") -ErrorAction SilentlyContinue
+  # Fase 69 - causa raiz do script "preso" quando encadeado (| Select-Object,
+  # captura por outro processo etc.): Start-Process COM -RedirectStandard*
+  # cria o filho com herança de handles, e o cloudflared herdava o handle de
+  # escrita do pipe de stdout do PowerShell pai. Quem lia esse pipe só via
+  # EOF quando o túnel morria (reproduzido: 24s com redirect contra 0,2s sem
+  # ele, para um filho de 25s). Correção: NÃO redirecionar nada; o próprio
+  # cloudflared grava o log (incluindo a URL) em --logfile. Sem redirect, o
+  # Start-Process usa ShellExecute, que não herda handles do pai.
+  $proc = Start-Process -FilePath $cloudflared.Source -ArgumentList @(
+      "tunnel", "--no-autoupdate", "--url", "http://localhost:8088",
+      "--logfile", "`"$($script:CloudflaredLog)`"", "--loglevel", "info"
+    ) -WindowStyle Hidden -PassThru
   $proc.Id | Out-File -Encoding utf8 $script:CloudflaredPidFile
   Write-Host "cloudflared iniciado (PID $($proc.Id)). Aguardando a URL pública..."
   $url = $null
@@ -127,9 +147,46 @@ if ($existing) {
 }
 
 $url = Get-TunnelUrl
+
+# Fase 69 - o nome *.trycloudflare.com só passa a existir no DNS alguns
+# segundos DEPOIS de o cloudflared registrá-lo no log. Entregar a URL antes
+# disso faz a primeira tentativa de abrir falhar ("nome remoto não pôde ser
+# resolvido") - exatamente o que acontece numa demonstração. Espera-se aqui,
+# consultando um resolvedor PÚBLICO via DoH (nunca o resolvedor local, para
+# não deixar um cache negativo na própria máquina), e confirma-se o túnel
+# ponta a ponta pela borda da Cloudflare com curl --resolve. Se não confirmar
+# a tempo, apenas avisa: o túnel pode estar certo e só atrasado.
+$tunnelReady = $false
+if ($url) {
+  $tunnelHost = $url -replace "^https://", ""
+  Write-Host "Aguardando a URL propagar no DNS publico (alguns segundos, no maximo ~90s)..."
+  $edgeIp = $null
+  for ($i = 0; $i -lt 30 -and -not $edgeIp; $i++) {
+    try {
+      $doh = Invoke-RestMethod -Uri "https://cloudflare-dns.com/dns-query?name=$tunnelHost&type=A" -Headers @{ accept = "application/dns-json" } -TimeoutSec 5
+      if ($doh.Status -eq 0 -and $doh.Answer) {
+        $edgeIp = ($doh.Answer | Where-Object { $_.type -eq 1 } | Select-Object -First 1).data
+      }
+    } catch { }
+    if (-not $edgeIp) { Start-Sleep -Seconds 3 }
+  }
+  if ($edgeIp) {
+    for ($i = 0; $i -lt 10 -and -not $tunnelReady; $i++) {
+      $code = curl.exe -s -o NUL -w "%{http_code}" --max-time 10 --resolve "${tunnelHost}:443:${edgeIp}" "https://$tunnelHost/_api/__health"
+      if ($code -eq "200") { $tunnelReady = $true } else { Start-Sleep -Seconds 3 }
+    }
+  }
+}
+
 Write-Host "`n=== STAGING NO AR ===" -ForegroundColor Green
 Write-Host "STAGING URL:"
 Write-Host "  $url" -ForegroundColor Yellow
+if ($tunnelReady) {
+  Write-Host "Verificada pela borda da Cloudflare (HTTPS, /_api/__health = 200): pode abrir." -ForegroundColor Green
+} else {
+  Write-Host "ATENCAO: nao consegui confirmar a URL pela borda da Cloudflare a tempo." -ForegroundColor Red
+  Write-Host "O tunel pode so estar atrasado: aguarde ~1 minuto e rode .\scripts\staging-status.ps1." -ForegroundColor Red
+}
 Write-Host "Local:"
 Write-Host "  http://127.0.0.1:8088"
 Write-Host ""

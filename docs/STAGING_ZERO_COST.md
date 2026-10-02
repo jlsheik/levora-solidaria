@@ -13,7 +13,7 @@
 ## A. Arquitetura zero-cost
 
 ```
-Internet (real, testado de fora da rede local)
+Internet (real; acessada pela borda da Cloudflare — ver §P e a ressalva da Fase 70)
    │  HTTPS (TLS terminado pela borda da Cloudflare)
    ▼
 Cloudflare (Quick Tunnel, trycloudflare.com)
@@ -305,6 +305,13 @@ um celular). Essa verificação adicional — recomendada, não bloqueante —
 fica para o dono do projeto fazer com um dispositivo em outra rede,
 apontando para a mesma URL enquanto o túnel estiver ativo.
 
+> **Estado em 2026-10-02 (Fase 70):** essa verificação continua **não
+> realizada**. A disponibilidade pública foi validada pela própria máquina
+> hospedeira através da borda Cloudflare (Fases 61, 68 e 69), mas ainda não
+> houve validação independente por celular/outra rede. Qualquer frase deste
+> documento ou do plano que pareça dizer o contrário deve ser lida à luz
+> desta ressalva.
+
 ## Q. Central Visual
 
 Através da URL pública real (nunca `localhost`, nunca Vite dev server):
@@ -426,3 +433,14 @@ rota que tocasse o banco indefinidamente. Corrigido com um pool separado
 e dedicado só para o scheduler (`max: 5`, nunca compartilhado) — detalhe
 completo, com reprodução e verificação, em `docs/STAGING_OPERATIONS.md`,
 seção 17.
+
+## Atualização (Fase 68) — dataset sintético de demonstração
+
+O staging deixou de depender de dados cadastrados à mão: o comando
+`.\scripts\staging-seed.ps1` (após `staging-reset`) cria uma organização
+fictícia completa — usuários, organizações, estoque por movimentações,
+necessidades em quatro estados, oportunidades em sete estados do lifecycle
+(inclusive uma concluída por recebimento real e duas avaliadas pelo
+Matching 1.4) e histórico de tarefas — usando os mesmos endpoints da
+aplicação. Detalhes, credenciais temporárias e a guarda de ambiente em
+`docs/STAGING_DEMO.md`. Custo adicional: zero (nenhum serviço novo).

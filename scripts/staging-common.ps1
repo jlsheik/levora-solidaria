@@ -50,6 +50,21 @@ function Get-CloudflaredPid {
       }
     }
   }
+  # Fase 69 - PID file ausente ou obsoleto, mas o túnel DESTE staging pode
+  # estar rodando (órfão). Identifica pela linha de comando exata
+  # (tunnel --url http://localhost:8088) - nunca por nome de processo, para
+  # nunca tocar num cloudflared de outra finalidade.
+  $orphan = Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match "tunnel" -and $_.CommandLine -match "--url\s+http://localhost:8088" } |
+    Select-Object -First 1
+  if ($orphan) {
+    $proc = Get-Process -Id $orphan.ProcessId -ErrorAction SilentlyContinue
+    if ($proc) {
+      Ensure-RuntimeDir
+      $proc.Id | Out-File -Encoding utf8 $script:CloudflaredPidFile
+      return $proc
+    }
+  }
   return $null
 }
 

@@ -3031,10 +3031,14 @@ provedor pago, nenhum cartão, nenhuma conta nova.
 - [x] SIGTERM real (`docker stop`, ~303ms, saída limpa) e restart
       limpos — reconfirma o achado da Fase 59 (nunca `npm start` como
       entrypoint) num ambiente novo.
-- [x] Acesso externo real confirmado via navegador rodando num ambiente
-      isolado, genuinamente fora da rede local — Central Visual completo
-      (login, dashboard, fallback de SPA, mobile) pela URL pública do
-      Cloudflare Tunnel, nunca por `localhost`.
+- [x] Acesso pela URL pública do Cloudflare Tunnel (nunca por
+      `localhost`) confirmado via navegador de um ambiente isolado — Central
+      Visual completo (login, dashboard, fallback de SPA, mobile).
+      **Ressalva (corrigida na Fase 70):** o IP de origem desse teste estava
+      na mesma faixa pública do próprio host (ver
+      `docs/STAGING_ZERO_COST.md` §P), então ele prova a cadeia
+      Cloudflare → túnel → nginx → app, mas **não** um acesso a partir de
+      uma rede fisicamente distinta; essa verificação segue pendente.
 - [x] Segurança confirmada: Postgres e Express sem porta publicada no
       host, `JWT_SECRET` de staging gerado fresco e nunca commitado,
       `.env` real nunca tocado, cookies com `HttpOnly`/`Secure`/
@@ -3451,6 +3455,72 @@ correção de pool da Fase 62) mostrou o risco. Sem funcionalidade nova.
 - `docs/DEVELOPMENT.md`: commitar antes de operações destrutivas e o risco
   do `git checkout --`.
 - O commit de checkpoint só é criado com autorização explícita; sem push.
+
+## Fase 68 — Dataset sintético idempotente para staging e demonstração (CONCLUÍDA)
+
+Objetivo: depois de `staging-reset` + seed, abrir a Levora e demonstrar uma
+organização fictícia completa em poucos minutos, usando as mesmas regras do
+domínio (sem saldo artificial, sem matching falsificado, sem lifecycle
+forçado).
+
+- `db/seedStagingGuard.ts` — guarda pura e conservadora (declaração
+  explícita `LEVORA_ENVIRONMENT=staging`, banco `*_staging`/`*_demo`, host
+  em lista fechada); roda antes de qualquer conexão. `NODE_ENV` sozinho
+  não distingue staging de produção. Provada com testes que executam o CLI
+  real.
+- `db/seedStaging.ts` — chama o `handle()` dos endpoints reais; únicas
+  escritas SQL diretas: promover o admin sintético, redefinir senhas e
+  sessões internas. Idempotente por chaves naturais; um segundo run faz 0
+  escritas e não gera auditoria.
+- `db/seed-staging.ts` + `npm run seed:staging` +
+  `scripts/staging-seed.ps1`; o `db:seed` quebrado (`db/seed.ts` nunca
+  existiu) foi removido.
+- Matching 1.4 intocado: uma oportunidade foi atribuída automaticamente e
+  outra, fora de qualquer área de atendimento, permaneceu aguardando
+  destinação — ambas por avaliação real.
+- Testes permanentes: `test/seedStagingGuard.test.ts`,
+  `test/seedStaging.test.ts`. Documentação: `docs/STAGING_DEMO.md`.
+
+## Fase 69 — Qualificação final do staging público de demonstração (CONCLUÍDA)
+
+Fase operacional, sem mudança de domínio.
+
+- **`staging-up.ps1` preso quando encadeado:** causa raiz reproduzida
+  (24,4 s contra 0,2 s): `Start-Process` com `-RedirectStandard*` faz o
+  `cloudflared` herdar o handle do pipe de stdout do PowerShell pai.
+  Corrigido sem redirecionar nada e usando `cloudflared --logfile`.
+- **Sem túnel duplicado:** lock exclusivo de subida e detecção de túnel
+  órfão pela linha de comando exata (nunca por nome de processo).
+- **URL só anunciada quando funciona:** espera de propagação de DNS via DoH
+  e confirmação pela borda da Cloudflare (`curl --resolve`) antes de
+  imprimir "Verificada".
+- **Overflow mobile investigado, não presumido:** era real em 4 pontos
+  (faixa de abas de 4 páginas, textos longos na trilha de auditoria,
+  prestação de contas e o diálogo compartilhado); corrigido em CSS/markup
+  dos componentes afetados. Validado em 375, 390 e 768 px. O `Input`
+  (`content-box`) não foi alterado: mudaria a altura de todos os campos.
+- Validação pública pela URL do Quick Tunnel (HTTPS), reset → seed → down →
+  up (dados preservados, URL nova, scheduler com execução real do cron).
+- `docs/STAGING_DEMO.md` ganhou o procedimento de demonstração e as
+  limitações operacionais.
+
+## Fase 70 — Freeze do staging e checkpoint das Fases 68–69 (CONCLUÍDA)
+
+Fase de congelamento: nenhuma funcionalidade, nenhuma mudança de domínio,
+migrations, matching, autenticação, RBAC ou arquitetura do staging.
+
+- Auditoria do working tree (somente Fases 68–69; nada escondido),
+  verificação dos mecanismos dos scripts de staging, varredura de segredos
+  sobre o conteúdo exato do commit e do índice Git, e conferência de
+  coerência entre scripts, documentação e comportamento real.
+- Correção de documentação: duas frases da Fase 61 afirmavam acesso "de fora
+  da rede local", contradizendo a limitação honesta do próprio
+  `STAGING_ZERO_COST.md` §P (IP de origem na mesma faixa do host).
+- `graphify-out/` (saída gerada por ferramenta) passou a ser ignorado pelo Git.
+- **Pendência explícita, não é defeito conhecido:** a disponibilidade pública
+  foi validada pela própria máquina hospedeira através da borda Cloudflare,
+  mas ainda não houve validação independente por celular/outra rede
+  (`docs/STAGING_DEMO.md` §7.1).
 
 ## Limitação registrada: proximidade não é distância real
 

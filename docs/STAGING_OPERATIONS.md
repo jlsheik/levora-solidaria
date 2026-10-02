@@ -168,6 +168,8 @@ nenhum dado de produção.
 | Login (ou qualquer rota que toque o banco) trava indefinidamente, nunca responde | **Achado real desta fase, já corrigido**: o pool de conexões do scheduler podia esgotar o pool da aplicação inteira (`src/helpers/db.tsx`) quando tarefas agendadas se sobrepunham. Corrigido com um pool separado só para o scheduler. Se isso voltar a acontecer, é um bug novo, não o mesmo — investigar `pg_stat_activity` no Postgres de staging | `docker exec levora-solidaria-postgres-1 psql -U postgres -d levora_staging -c "SELECT pid,state,query FROM pg_stat_activity WHERE datname='levora_staging';"` |
 | `staging-up.ps1` roda `db:migrate` num volume que já tem dados | Não deveria acontecer — o script checa `schema_migrations` antes de decidir | Se acontecer, é um bug: abra uma investigação, não ignore |
 | URL pública para de responder sozinha | Quick Tunnel é efêmero por natureza — pode cair se a conexão de internet oscilar | `.\scripts\staging-status.ps1` para ver se o `cloudflared` ainda está rodando; se não, `.\scripts\staging-up.ps1` de novo gera uma URL nova |
+| URL recém-impressa dá "nome remoto não pôde ser resolvido" | O nome do Quick Tunnel só existe no DNS alguns segundos depois de criado (Fase 69) | O `staging-up.ps1` já espera e só diz "Verificada" quando a borda da Cloudflare responde; se avisar que não confirmou, aguarde ~1 min e rode `staging-status.ps1`. Uma URL de um `up` anterior não vale mais |
+| `staging-up.ps1` diz "Outra execução ... em andamento" (exit 3) | Há outro `staging-up.ps1` rodando (lock `.staging-runtime/staging-up.lock`) | Espere terminar; o lock é liberado sozinho se o processo morrer |
 | `nginx` sobe mas a página carrega em branco | `dist/` desatualizado ou ausente | Rode `npm run build` no host antes de `staging-up.ps1` — o nginx monta `dist/` direto do host, não rebuilda sozinho |
 
 ## 13. Demonstração (para investidores ou terceiros)
@@ -182,18 +184,28 @@ nenhum dado de produção.
 Não há landing page nem UI nova criada para isso — a própria aplicação já
 é a demonstração.
 
-## 14. Dados de demonstração (estado atual)
+## 14. Dados de demonstração (Fase 68)
 
-Não existem fixtures/seeds automáticos: `package.json` referencia um
-script `db:seed` (`tsx db/seed.ts`), mas o arquivo `db/seed.ts` **não
-existe** no repositório — inconsistência pré-existente, não introduzida
-nesta fase, registrada aqui em vez de escondida. No momento em que este
-documento foi escrito, o volume de staging tinha **1 usuário de teste**
-(criado durante a validação da Fase 61/62, `fase61-teste@example.com`,
-senha de teste) e **0 organizações** — nenhum dado real. Se for necessário
-popular o staging com dados de demonstração mais ricos no futuro, isso é
-trabalho novo (criar `db/seed.ts` ou cadastrar manualmente pela própria
-aplicação) — não construído nesta fase por não ser necessário agora.
+O staging tem agora um seed sintético, idempotente e criado pelas regras do
+domínio real: `.\scripts\staging-seed.ps1` (ou
+`npm run seed:staging` dentro do container `app`). Dataset, usuários,
+credenciais temporárias, roteiro de demonstração, limitações e a guarda de
+ambiente estão em **`docs/STAGING_DEMO.md`**.
+
+Ciclo completo para um ambiente demo limpo:
+
+```powershell
+.\scripts\staging-reset.ps1 -Confirm   # frase APAGAR STAGING
+.\scripts\staging-seed.ps1             # senhas temporárias exibidas só no terminal
+```
+
+- O seed recusa rodar fora de staging (guarda em `db/seedStagingGuard.ts`);
+  é **exclusivo de staging** e nunca faz parte do processo de produção.
+- Rodar de novo não duplica nada nem gera auditoria (provado por teste).
+- `-ResetPasswords` gera novas senhas temporárias para os usuários demo.
+- Histórico: até a Fase 67 o `package.json` apontava `db:seed` para um
+  `db/seed.ts` que nunca existiu; o script quebrado foi removido e
+  substituído por `seed:staging`.
 
 ## 15. Segurança
 
@@ -407,3 +419,30 @@ conexões de health-check de infraestrutura) deve ser somada no momento
 da contratação, mas o tamanho dessa margem depende de quais ferramentas
 operacionais forem efetivamente usadas então — não presumido aqui por
 não haver dado concreto ainda.
+
+## 20. Qualificação do staging público (Fase 69)
+
+Fase de operação, sem mudança de domínio. Resumo do que foi achado e corrigido; o procedimento de demonstração está em `docs/STAGING_DEMO.md`.
+
+### 20.1 `staging-up.ps1` preso quando encadeado — causa raiz
+
+Reproduzido com um filho de 25 s: **24,4 s** com `Start-Process -RedirectStandardOutput/-RedirectStandardError` contra **0,2 s** sem redirecionamento. Com redirect, o `Start-Process` cria o filho com herança de handles; o `cloudflared` herdava o handle de escrita do pipe de stdout do PowerShell pai, e quem lia esse pipe (`| Select-Object`, uma ferramenta que captura a saída etc.) só via EOF quando o túnel morria. Em uso interativo (console) isso nunca aparecia.
+
+**Correção:** o `cloudflared` é iniciado **sem redirecionar nada** e grava o próprio log com `--logfile` (a URL continua sendo lida desse arquivo). Sem redirect, o `Start-Process` usa ShellExecute, que não herda handles. Resultado medido: `staging-up | Select-Object` volta em 39-85 s (build, migrations, health, túnel) com o túnel vivo; antes ficava preso até o limite da ferramenta.
+
+### 20.2 Sem túnel duplicado
+
+- **Lock de subida:** `.staging-runtime/staging-up.lock`, aberto em modo exclusivo; uma segunda execução simultânea sai com código 3 sem fazer nada (testado com duas subidas a 0,7 s de distância: um único `cloudflared`).
+- **Órfão:** `Get-CloudflaredPid` agora também acha o túnel deste staging pela linha de comando exata (`tunnel --url http://localhost:8088`) se o PID file sumiu, e o readota. Nunca mata por nome de processo; `staging-down.ps1` só encerra o processo identificado assim.
+
+### 20.3 URL só é anunciada quando funciona
+
+O nome `*.trycloudflare.com` leva alguns segundos para existir no DNS. O script agora consulta um resolvedor público via DoH (sem usar o resolvedor local, para não criar cache negativo na máquina) e confirma `https://<host>/_api/__health = 200` pela borda com `curl --resolve` antes de imprimir "Verificada pela borda da Cloudflare". Se não confirmar em ~90 s, avisa em vermelho em vez de afirmar. Achado real: um smoke feito imediatamente após o `up` falhava com "nome remoto não pôde ser resolvido".
+
+### 20.4 Overflow mobile (375 px) — era real, em 4 pontos
+
+Medido, não presumido (`innerWidth` chegava a 638 e o `scrollWidth` a 638 contra `clientWidth` 375): (1) a faixa de abas de 4 páginas (`inventario`, `necessidades`, `oportunidades` e a visão geral da organização) era `display:flex` sem `flex-wrap` e sem rolagem, empurrando 4 abas para fora da tela — corrigido com `flex-wrap: wrap`, o padrão que `atribuicoes`, `matching` e `prestacao-contas` já usavam; (2) códigos de ação da trilha de auditoria e e-mails de membros sem quebra de linha — `overflow-wrap: anywhere`; (3) prestação de contas: filtros de data e tabela de estoque (335 px) sem contêiner — `flex-wrap` nos filtros e `overflow-x: auto` em volta da tabela; (4) o diálogo compartilhado media 385,5 px em 375 px (`max-width: 90vw` somado ao padding) — o `max-width` passa a descontar o padding; no desktop continua 560 px. O componente `Input` (`width: 100%` com `content-box`) faz os campos de um diálogo ultrapassarem a borda em ~2 px; corrigir isso mudaria a altura de todos os campos do app, então **não foi alterado** (limitação cosmética registrada). Validado em 375, 390 e 768 px.
+
+### 20.5 O que NÃO foi validado (Fase 70)
+
+A disponibilidade pública foi validada pela própria máquina hospedeira através da borda Cloudflare, mas ainda não houve validação independente por celular/outra rede. Não é um defeito conhecido; é um teste pendente, descrito em `docs/STAGING_DEMO.md` §7.1. Loopback, outra aba ou outro navegador da mesma máquina não substituem uma segunda origem.

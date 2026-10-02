@@ -15,7 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:migrate": "tsx db/migrate.ts",
     "db:migrate:incremental": "tsx db/run-migrations.ts",
-    "db:seed": "tsx db/seed.ts",
+    "seed:staging": "node dist-server/db/seed-staging.js",
     "client:dev": "vite",
     "test": "vitest run",
     "test:watch": "vitest",

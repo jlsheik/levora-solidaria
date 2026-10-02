@@ -26,6 +26,7 @@
   gap: var(--spacing-1);
   border-bottom: 1px solid var(--border);
   margin-bottom: var(--spacing-6);
+  flex-wrap: wrap;
 }
 
 .tabNavItem,
