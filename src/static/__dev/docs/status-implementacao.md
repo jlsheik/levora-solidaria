@@ -1,3 +1,10 @@
+> **DOCUMENTO HISTÓRICO** — retrata o estado do projeto em 24/09 (import
+> inicial, "fase 4 concluída"). **Não é o estado atual**: várias coisas que
+> a seção "O que ainda não existe" lista como ausentes foram construídas
+> depois (matching, logística, convites, agendador, dupla autorização,
+> prestação de contas…). O estado atual está em `docs/ROADMAP_ATUAL.md`
+> (divergências mapeadas na seção 7). O texto original abaixo foi preservado.
+
 # Status de implementação — Levora Solidária
 
 Última atualização: fase 4 concluída (Discovery Engine e Registro Central).

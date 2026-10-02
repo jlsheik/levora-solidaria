@@ -1,5 +1,12 @@
 # Plano de implementação — Levora Solidária
 
+> **Registro histórico (Fase 72).** Este arquivo documenta cada fase na
+> ordem em que aconteceu, com os achados e decisões da época; **não foi
+> reescrito**. O **estado atual** (o que está concluído, parcial, pendente,
+> adiado ou bloqueado) está em `docs/ROADMAP_ATUAL.md`, e a seção 7 desse
+> documento mapeia, linha a linha, onde este arquivo diverge da realidade
+> (títulos "EM ANDAMENTO", caixas `[ ]` já resolvidas, "Fases seguintes").
+
 Este documento traduz o MASTER PROMPT V2.1 (fornecido pelo proprietário do
 projeto) em fases executáveis dentro do ambiente Floot. Cada fase só é
 considerada concluída quando testada de ponta a ponta — nenhuma tela ou botão
@@ -20,6 +27,11 @@ negociável, isso exige hospedagem fora do Floot — a decisão fica registrada
 aqui para o proprietário confirmar antes de prosseguirmos além da fase 1.
 
 ## Fase 1 — Fundação (EM ANDAMENTO)
+
+> Nota (Fase 72): título histórico. Todos os itens abaixo foram concluídos
+> (convites na Fase 9, painel de plataforma na Fase 4). O ciclo de vida dos
+> membros (alterar papel, desativar, sair) segue **pendente** e está
+> especificado em `docs/MEMBROS_ESPECIFICACAO.md`.
 
 - [x] Autenticação por e-mail/senha (provisionada pelo Floot: `users`,
       `sessions`, `user_passwords`, `login_attempts`).
@@ -164,6 +176,11 @@ depois da fase 3. Auditoria completa das 7 perguntas em
       continua rotulada como heurística, não IA.
 
 ## Fase 5 — Motor de tarefas e Motor de correspondência (EM ANDAMENTO)
+
+> Nota (Fase 72): título histórico. O motor de tarefas e o matching foram
+> concluídos nas Fases 12, 22–26 e 43 (hoje Matching 1.4). Caixas `[ ]` desta
+> seção que ainda aparecem abertas estão classificadas em
+> `docs/ROADMAP_ATUAL.md` §7.
 
 Decisão revista pelo proprietário: o agendamento e o matching automático
 NÃO ficam para depois — são construídos agora, mesmo sem fontes externas
@@ -3522,6 +3539,31 @@ migrations, matching, autenticação, RBAC ou arquitetura do staging.
   mas ainda não houve validação independente por celular/outra rede
   (`docs/STAGING_DEMO.md` §7.1).
 
+## Fase 71 — Retomada pós-freeze e auditoria do roadmap (CONCLUÍDA — só auditoria, read-only)
+
+Confirmou o baseline `dbc4fe3` (407/407), reconstruiu o estado real do
+produto cruzando roadmap e código e identificou a lacuna do ciclo de vida
+dos membros como próximo bloco. Relatório entregue no chat, não neste arquivo.
+
+## Fase 72 — Reconciliação do roadmap e especificação do ciclo de membros (CONCLUÍDA — só documentação)
+
+Fase de reconciliação e especificação; nenhum código, migration, tabela,
+endpoint, componente, permissão ou sessão foi alterado.
+
+- `docs/ROADMAP_ATUAL.md` (novo): estado atual verdadeiro, em
+  CONCLUÍDO / PARCIAL / PRÓXIMO / DECISÃO DE PRODUTO PENDENTE / PENDENTE /
+  ADIADO / BLOQUEADO, com o mapa linha a linha das divergências deste arquivo.
+  Os documentos históricos receberam apenas um aviso no topo.
+- `docs/MEMBROS_ESPECIFICACAO.md` (novo): especificação de alterar papel,
+  desativar membro e sair, com invariante "sempre ao menos um proprietário
+  ativo", protocolo de locks, cinco cenários de concorrência, auditoria,
+  RBAC, interface e plano de testes.
+- Dois achados novos que a especificação trata: a regra de "único
+  proprietário" da exclusão de conta roda fora da transação e sem lock, e o
+  aceite de convite sobrescreve papel/status sem olhar o estado atual.
+- Correção à Fase 71: `membership_status = inativo` já é escrito pela
+  exclusão de conta; o que falta é um fluxo de gestão.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo
@@ -3536,6 +3578,10 @@ cálculo geográfico real.
 
 
 ## Fases seguintes (não iniciadas — dependem da fase 1 estar estável)
+
+> Nota (Fase 72): seção **histórica**, escrita no início do projeto. A maior
+> parte dos itens 2–8 foi implementada ao longo das Fases 2–70. O que resta,
+> com estado real e dependências, está em `docs/ROADMAP_ATUAL.md`.
 
 Cada uma será um domínio implementado e testado isoladamente, seguindo a
 ordem de prioridade do master prompt (segurança > automação; controle de
@@ -3567,7 +3613,9 @@ risco > automação total; isolamento > velocidade):
 ## Como cada fase deve ser entregue
 
 1. Ler o que já existe antes de mudar.
-2. Atualizar este arquivo e `status-implementacao.md`.
+2. Atualizar este arquivo e `status-implementacao.md` (a partir da Fase 72,
+   o estado atual vive em `docs/ROADMAP_ATUAL.md`; `status-implementacao.md`
+   é histórico).
 3. Implementar o domínio (banco → helpers de autorização/auditoria →
    endpoints → interface).
 4. Testar o fluxo real (não apenas checar tipos).

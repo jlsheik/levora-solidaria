@@ -1,3 +1,9 @@
+> **DOCUMENTO HISTÓRICO** — auditoria feita **antes** de implementar a Fase 4
+> (24/09). O contrato `SourceConnector` hoje está em
+> `src/helpers/connectorsTypes.tsx` (aqui: `helpers/connectors/types.tsx`) e
+> continua sem nenhum conector real além do manual. Estado atual em
+> `docs/ROADMAP_ATUAL.md`. Texto original preservado abaixo.
+
 # Auditoria — Discovery Engine e Registro Central de Oportunidades
 
 Resposta às 7 perguntas do pedido de correção de arquitetura, antes de
