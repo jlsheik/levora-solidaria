@@ -1,7 +1,7 @@
-import { db } from "../helpers/db";
-import { hashInviteToken } from "../helpers/organizationInvites";
-import { schema } from "./organization-invites-lookup_GET.schema";
-import { checkRateLimit, getClientIp, rateLimitResponse } from "../helpers/rateLimit";
+import { db } from "../helpers/db.js";
+import { hashInviteToken } from "../helpers/organizationInvites.js";
+import { schema } from "./organization-invites-lookup_GET.schema.js";
+import { checkRateLimit, getClientIp, rateLimitResponse } from "../helpers/rateLimit.js";
 import superjson from "superjson";
 
 // Endpoint público, sem sessão: é a maior superfície de força bruta de

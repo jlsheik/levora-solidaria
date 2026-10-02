@@ -1,12 +1,12 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePermission } from "../helpers/organizationAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { storageAdapter } from "../helpers/storageAdapter";
-import { schema, FILE_MAX_SIZE_BYTES } from "./files-upload_POST.schema";
-import { checkRateLimit, rateLimitResponse } from "../helpers/rateLimit";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePermission } from "../helpers/organizationAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { storageAdapter } from "../helpers/storageAdapter.js";
+import { schema, FILE_MAX_SIZE_BYTES } from "./files-upload_POST.schema.js";
+import { checkRateLimit, rateLimitResponse } from "../helpers/rateLimit.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 // Por usuário: protege o storage de abuso (upload em massa) por uma conta
 // autenticada — o risco aqui é volume/custo de armazenamento, não bot

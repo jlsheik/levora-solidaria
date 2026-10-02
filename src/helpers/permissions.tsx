@@ -1,4 +1,4 @@
-import type { MembershipRole } from "./schema";
+import type { MembershipRole } from "./schema.js";
 
 /**
  * RBAC granular (master prompt, seção 10) — catálogo real das permissões

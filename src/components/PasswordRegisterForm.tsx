@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import * as z from "zod";
 import {
   Form,
@@ -14,7 +13,6 @@ import { Input } from "./Input";
 import { Button } from "./Button";
 import { Spinner } from "./Spinner";
 import styles from "./PasswordRegisterForm.module.css";
-import { useAuth } from "../helpers/useAuth";
 import {
   schema,
   postRegister,
@@ -25,19 +23,26 @@ export type RegisterFormData = z.infer<typeof schema>;
 interface PasswordRegisterFormProps {
   className?: string;
   defaultValues?: Partial<RegisterFormData>;
-  /** Para onde navegar após o cadastro. Padrão "/" (mantém o comportamento existente). */
-  redirectTo?: string;
+  /** Chamado depois de um envio bem-sucedido (sem distinguir conta nova de
+   * já existente — ver nota da Fase 51 acima). Usado por páginas como
+   * convites.$token.tsx para trocar para a aba "Entrar" em vez de deixar
+   * a pessoa parada numa tela sem próximo passo óbvio. */
+  onSubmitted?: () => void;
 }
 
 export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
   className,
   defaultValues,
-  redirectTo = "/",
+  onSubmitted,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { onLogin } = useAuth();
-  const navigate = useNavigate();
+  // Fase 51 (SEC-03): o cadastro não loga mais automaticamente nem
+  // distingue "e-mail novo" de "e-mail já cadastrado" — a resposta do
+  // servidor é sempre a mesma mensagem (ver register_with_password_POST.ts
+  // e docs/SECURITY.md). Esta tela só confirma o envio e direciona para a
+  // aba "Entrar"; logar de verdade acontece ali, como qualquer login.
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const form = useForm({
     schema,
@@ -50,31 +55,26 @@ export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
 
   const handleSubmit = async (data: z.infer<typeof schema>) => {
     setError(null);
+    setSuccessMessage(null);
     setIsLoading(true);
 
     try {
       const result = await postRegister(data);
-      console.log("Registration successful for:", data.email);
-      onLogin(result.user);
-      navigate(redirectTo);
+      setSuccessMessage(result.message);
+      form.setValues({ email: "", password: "", displayName: "" });
+      onSubmitted?.();
     } catch (err) {
       console.error("Registration error:", err);
 
       if (err instanceof Error) {
         const errorMessage = err.message;
-
-        if (errorMessage.toLowerCase().includes("e-mail já está em uso") || errorMessage.toLowerCase().includes("email already in use")) {
-          setError(
-            "Este e-mail já está cadastrado. Tente entrar em vez de criar uma nova conta."
-          );
-        } else if (errorMessage.toLowerCase().includes("nome")) {
+        if (errorMessage.toLowerCase().includes("nome")) {
           setError("Informe um nome válido.");
         } else {
-          setError(errorMessage || "Não foi possível criar a conta. Tente novamente.");
+          setError(errorMessage || "Não foi possível processar o cadastro. Tente novamente.");
         }
       } else {
-        console.log("Unknown error type:", err);
-        setError("Não foi possível criar a conta. Tente novamente.");
+        setError("Não foi possível processar o cadastro. Tente novamente.");
       }
     } finally {
       setIsLoading(false);
@@ -83,6 +83,7 @@ export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
 
   return (
     <Form {...form}>
+      {successMessage && <div className={styles.successMessage}>{successMessage}</div>}
       {error && <div className={styles.errorMessage}>{error}</div>}
       <form
         onSubmit={form.handleSubmit((data) =>

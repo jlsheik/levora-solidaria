@@ -1,8 +1,8 @@
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePlatformAdmin } from "../helpers/platformAccess";
-import { verifyAuditLogChain } from "../helpers/verifyAuditChain";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePlatformAdmin } from "../helpers/platformAccess.js";
+import { verifyAuditLogChain } from "../helpers/verifyAuditChain.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 // A cadeia de hash é global (não por organização, ver auditLog.tsx) —
 // verificá-la é uma operação de plataforma, não de uma organização

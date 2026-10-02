@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db } from "./db.js";
 
 /**
  * Erro lançado quando o usuário autenticado não é operador de plataforma

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import superjson from "superjson";
-import type { OrganizationType, OrganizationStatus } from "../helpers/schema";
+import type { OrganizationType, OrganizationStatus } from "../helpers/schema.js";
 
 export const schema = z.object({});
 

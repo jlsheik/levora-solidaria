@@ -28,6 +28,37 @@ hoje, honestamente, e as que ainda não existem.
   dois sempre casam — confirmado com o servidor real (`iat`/`exp`
   decodificados do JWT emitido, diferença de exatos 604800s) e testado
   (`test/auth.test.ts`).
+- ~~SEC-04 (timing side-channel no login)~~ — **corrigida na Fase 51**.
+  Medido com 150 amostras por cenário (metodologia: criar uma conta nova
+  por amostra, para nunca acionar o próprio bloqueio por e-mail do
+  sistema, que mascarava a diferença real numa primeira tentativa de
+  medição): usuário inexistente respondia ~59ms mais rápido que senha
+  incorreta (desvio-padrão <2ms nos dois cenários — diferença real, não
+  ruído), porque só o segundo caminho chamava `bcrypt.compare`. Corrigido
+  com um hash bcrypt fixo e pré-computado (nunca gerado por request,
+  mesmo custo — `saltRounds: 10` — de `generatePasswordHash.tsx`),
+  comparado (resultado descartado) quando o e-mail não existe. Depois da
+  correção: diferença de média 0.00ms. Ver
+  `src/endpoints/auth/login_with_password_POST.ts`.
+- ~~SEC-03 (enumeração de e-mail no cadastro)~~ — **corrigida na Fase 51**.
+  `register_with_password_POST.ts` respondia 409 "Este e-mail já está em
+  uso" quando o e-mail já tinha conta — um oráculo de enumeração direto e
+  público. Não existia reset de senha nem verificação de e-mail para
+  construir uma confirmação assíncrona genuína (`docs/DEPLOYMENT.md`
+  continua sem esses fluxos), então a correção escolhida (Estratégia A,
+  avaliada contra B e C) foi tornar a resposta pública IDÊNTICA
+  (status 200, mesmo corpo, nunca `Set-Cookie`) tanto para um e-mail novo
+  quanto para um já existente — o que exigiu remover o login automático
+  após cadastro (login continua existindo, só deixou de ser automático):
+  sem isso, a PRESENÇA do cookie de sessão seria, sozinha, um sinal
+  distinguível mesmo com corpo/status idênticos. O hash da senha também
+  passou a ser calculado SEMPRE (descartado quando o e-mail já existe),
+  pelo mesmo motivo do SEC-04 acima: sem isso, o TEMPO de resposta vazaria
+  a mesma informação que a mensagem escondia. Cadastro duplicado nunca
+  sobrescreve nome/senha da conta existente. Ver
+  `src/endpoints/auth/register_with_password_POST.ts`,
+  `src/components/PasswordRegisterForm.tsx` e
+  `test/authEnumeration.test.ts`.
 
 ## Autorização
 
@@ -99,6 +130,62 @@ primeiro caso.
 Ver [`docs/UPLOAD_DE_ARQUIVOS.md`](UPLOAD_DE_ARQUIVOS.md). Privado por
 padrão (disco fora de diretório estático, ou S3 com download sempre
 mediado pelo servidor autenticado) — nunca URL pública direta.
+
+## Security headers HTTP (Fase 50)
+
+Fecha o achado SEC-05 da auditoria de segurança. Valores centralizados em
+[`src/helpers/securityHeaders.ts`](../src/helpers/securityHeaders.ts) — um
+único lugar, nunca duas cópias divergentes entre a API e o front-end.
+
+- **API** (`server/index.ts`, `API_SECURITY_HEADERS`): `X-Content-Type-
+  Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
+  `Permissions-Policy` restritiva (desabilita câmera/microfone/
+  geolocalização/pagamento/USB/bluetooth/sensores/MIDI/picture-in-picture/
+  captura de tela/autoplay — nenhum uso real encontrado em `src/` —, mas
+  permite `clipboard-write=(self)`, usado de verdade em "copiar link de
+  convite"), `X-Frame-Options: DENY`, e `Content-Security-Policy:
+  default-src 'none'; frame-ancestors 'none'` (máximo possível: esta API só
+  devolve JSON, nunca HTML renderizável). Aplicado por um middleware que é
+  o PRIMEIRO do pipeline Express — cobre toda rota real, o 404 explícito
+  (ver abaixo) e o catch de erro 500.
+  - **Achado de regressão corrigido nesta mesma fase**: o 404 padrão do
+    Express (`finalhandler`) sobrescrevia o `Content-Security-Policy` desta
+    aplicação com um valor próprio mais curto (sem `frame-ancestors`) ao
+    renderizar sua página de erro HTML — descoberto reproduzindo um 404
+    real e comparando os headers. Corrigido adicionando um handler 404
+    explícito que devolve JSON (consistente com o resto desta API, que
+    nunca devolve HTML), coberto por teste de regressão
+    (`test/securityHeaders.test.ts`).
+- **Documento HTML do front-end** (`vite.config.ts` + `index.html`):
+  `server/index.ts` nunca serve o HTML do cliente (ver
+  `docs/DEPLOYMENT.md`), então a CSP do documento vai como `<meta
+  http-equiv="Content-Security-Policy">`, injetada SÓ na build de produção
+  (`vite build`) por um plugin próprio (`transformIndexHtml`) — nunca no
+  dev server, porque o preâmbulo inline do React Fast Refresh (injetado
+  pelo próprio Vite em todo request de dev, confirmado lendo a resposta
+  real do dev server) exigiria `'unsafe-inline'` em `script-src`,
+  enfraquecendo a política real sem necessidade.
+  `style-src` inclui `'unsafe-inline'` deliberadamente: Radix UI (usado em
+  Dialog/Select/Popover/Tooltip em todo o front-end) posiciona elementos
+  via `style` inline calculado em JS, e uma dependência transitiva
+  (`react-style-singleton`, via `react-remove-scroll-bar`) injeta uma tag
+  `<style>` para compensar a largura da scrollbar — sem essa permissão,
+  todo diálogo do sistema quebraria. `style-src`/`font-src` também liberam
+  Google Fonts (`fonts.googleapis.com`/`fonts.gstatic.com`, único recurso
+  de terceiros carregado pelo navegador, via `@import` em `src/base.css`).
+  `frame-ancestors` não é suportado em `<meta>` (a spec do CSP ignora essa
+  diretiva nesse contexto) — por isso não entra na build; a variante com
+  `frame-ancestors` (`DOCUMENT_CSP_WITH_FRAME_ANCESTORS`) é usada só como
+  header HTTP real em `vite preview` e documentada em
+  `docs/DEPLOYMENT.md` para a camada estática de produção.
+- **HSTS**: deliberadamente NÃO configurado em nenhum processo deste
+  repositório. `server/index.ts` só serve `/_api/*`, nunca sabe se está
+  atrás de um proxy que termina TLS, e o front-end nunca é servido por um
+  processo Node controlado aqui (ver `docs/DEPLOYMENT.md`) — fabricar esse
+  header sem controlar a camada que termina TLS seria, na melhor das
+  hipóteses, um no-op, e na pior, uma falsa garantia de HTTPS que este
+  repositório não pode cumprir. Registrado como dependência operacional da
+  camada de proxy reverso/CDN de produção, não como algo "esquecido".
 
 ## Segredos
 

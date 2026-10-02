@@ -1,6 +1,6 @@
 import type { Transaction } from "kysely";
 import { sql } from "kysely";
-import type { DB } from "./schema";
+import type { DB } from "./schema.js";
 
 /**
  * Saldo atual de um item de estoque: soma de stock_transactions.delta.

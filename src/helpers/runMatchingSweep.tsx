@@ -1,7 +1,7 @@
-import { db } from "./db";
-import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks";
-import { runMatchingForOpportunity } from "./opportunityMatching";
-import { withScheduledTaskLock } from "./scheduledTaskLock";
+import { db } from "./db.js";
+import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks.js";
+import { runMatchingForOpportunity } from "./opportunityMatching.js";
+import { withScheduledTaskLock } from "./scheduledTaskLock.js";
 
 /**
  * Tarefa agendada: rede de segurança do matching automático. Toda entrada

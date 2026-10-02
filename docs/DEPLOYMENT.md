@@ -48,6 +48,55 @@ npm run build:server   # tsc -p tsconfig.server.json → dist-server/
 NODE_ENV=production node dist-server/server/index.js
 ```
 
+## Security headers na camada estática (Fase 50)
+
+A API (`server/index.ts`) já aplica seus próprios security headers por
+conta própria (ver `docs/SECURITY.md`) — não precisa de nenhuma ação aqui.
+Mas o HTML do cliente é servido por uma camada que **este repositório não
+controla** (ver "Visão geral" acima), então dois headers do documento só
+podem ser garantidos de verdade ali, na configuração real de produção
+(nginx, Cloudflare, etc.):
+
+```
+Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+X-Frame-Options: DENY
+X-Content-Type-Options: nosniff
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), bluetooth=(), midi=(), picture-in-picture=(), display-capture=(), fullscreen=(), autoplay=(), clipboard-write=(self)
+```
+
+(Mesmos valores de `src/helpers/securityHeaders.ts` — reproduzidos aqui
+porque a camada que precisa aplicá-los está fora deste repositório. A
+build (`dist/index.html`) já injeta a mesma CSP via `<meta>` como primeira
+camada de defesa, mas `<meta>` não suporta `frame-ancestors` nem `sandbox`
+— só um header HTTP real cobre isso, por isso a lista acima precisa ser
+configurada na camada estática de verdade, não só "esperada" do build.)
+`vite preview` (ver `.claude/launch.json`, config `"preview"`) já aplica
+esses headers localmente — é a referência viva para conferir o
+comportamento antes de configurar o servidor de produção.
+
+### HSTS — dependência operacional, não configuração deste repositório
+
+`Strict-Transport-Security` **não é definido em nenhum lugar deste
+código** (nem na API, nem no build do cliente) — de propósito. Esta
+aplicação não controla a camada que termina TLS em produção (não se sabe
+ainda se será a mesma camada que serve `dist/`, um load balancer separado,
+ou um CDN), e um header HSTS cego nesse código seria, na melhor das
+hipóteses, ignorado (navegadores só honram HSTS em resposta já servida via
+HTTPS) e, na pior, uma garantia falsa.
+
+**Antes de abrir a aplicação para produção real**, quem configurar a
+camada de TLS precisa adicionar, na resposta HTTPS do domínio público:
+
+```
+Strict-Transport-Security: max-age=31536000
+```
+
+Começar sem `includeSubDomains` nem `preload` — essas duas exigem auditar
+TODOS os subdomínios/propriedades sob o mesmo domínio raiz antes de ativar
+(um subdomínio sem HTTPS pronto ficaria inacessível), decisão que não pode
+ser tomada de dentro deste repositório.
+
 ## Variáveis de ambiente obrigatórias
 
 Ver `.env.example` para a lista completa comentada. As que não têm valor
@@ -116,5 +165,8 @@ horizontalmente saber o que ainda precisa de atenção.
 - Infraestrutura como código (Terraform, etc.) — não existe neste
   repositório; a escolha de onde hospedar (Railway, Fly.io, um VPS, etc.)
   não foi tomada.
-- CI/CD — não há pipeline configurado (ver `docs/TESTING.md`, "o que ainda
-  falta").
+- **CD** (deploy automático) — não há pipeline configurado: nenhum deploy
+  dispara sozinho ao mergear na `master`, nenhuma infraestrutura como
+  código. **CI** (integração contínua) existe e é diferente disso —
+  `.github/workflows/ci.yml` roda a cada push/PR: `npm ci` → typecheck →
+  testes → build → `npm audit` (Fase 54, SEC-08) — ver `docs/TESTING.md`.

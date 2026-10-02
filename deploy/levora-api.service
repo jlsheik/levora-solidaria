@@ -1,0 +1,81 @@
+# Unit systemd de referência para o backend Express da Levora Solidária.
+#
+# Contexto e decisões (Fase 56/58, ver docs/PRODUCTION_READINESS.md e
+# docs/DEPLOYMENT_RUNBOOK.md):
+#   - Processo único (não PM2 cluster): o rate limiter em
+#     src/helpers/rateLimit.tsx é um Map em memória por processo — múltiplas
+#     instâncias dividiriam o estado e quebrariam os limites reais. Scaling
+#     horizontal exigiria primeiro migrar o rate limiter para um backend
+#     compartilhado (Redis/Postgres) — não implementado nesta fase.
+#   - systemd, não PM2: o projeto já tem graceful shutdown nativo via
+#     SIGTERM (server/index.ts, Fase 56) — systemd entrega SIGTERM de
+#     verdade em "systemctl stop/restart", sem dependências extras.
+#   - SIGTERM/TimeoutStopSec: server/index.ts dá até 10s para fechar
+#     conexões em andamento e o pool do Postgres antes de forçar saída
+#     (GRACEFUL_SHUTDOWN_TIMEOUT_MS). TimeoutStopSec aqui é maior (15s) só
+#     para dar margem ao systemd antes de ele mesmo enviar SIGKILL — a
+#     aplicação deve sempre terminar por conta própria primeiro. Validado
+#     de verdade em container Linux na Fase 58 (SIGTERM via "docker stop"
+#     -> log "Encerrado graciosamente." em ~0,4s — a limitação documentada
+#     na Fase 56 é específica do Windows, não existe no Linux real).
+#
+# Instalação: copiar para /etc/systemd/system/levora-api.service, ajustar
+# User/WorkingDirectory/EnvironmentFile para o caminho real do servidor,
+# depois `systemctl daemon-reload && systemctl enable --now levora-api`.
+
+[Unit]
+Description=Levora Solidaria - API Express
+Documentation=file:///opt/levora-solidaria/docs/DEPLOYMENT_RUNBOOK.md
+After=network-online.target
+Wants=network-online.target
+# Se o Postgres rodar no mesmo host (não é o caso do modelo gerenciado
+# decidido na Fase 56, mas documentado aqui para ambientes que optarem por
+# isso): descomente a linha abaixo.
+# After=postgresql.service
+
+[Service]
+Type=simple
+User=levora
+Group=levora
+WorkingDirectory=/opt/levora-solidaria
+
+# Segredos nunca inline aqui (ficariam visíveis em `systemctl show` e em
+# /proc para qualquer leitor do unit file) - sempre via EnvironmentFile,
+# um arquivo KEY=VALUE com permissao 600, dono levora:levora, fora do
+# repositorio git (ver docs/DEPLOYMENT_RUNBOOK.md, secao "Secrets").
+EnvironmentFile=/etc/levora-solidaria/levora.env
+
+ExecStart=/usr/bin/node dist-server/server/index.js
+
+# Reinicia em falha real (crash, exceção não tratada), mas não entra em
+# loop instantâneo — RestartSec dá tempo do Postgres/rede se recuperarem
+# entre tentativas.
+Restart=on-failure
+RestartSec=5
+
+# Deve bater com o tempo que server/index.ts já usa para se encerrar por
+# conta própria (10s) mais uma margem - nunca menor que isso, ou o systemd
+# manda SIGKILL antes do shutdown gracioso terminar.
+TimeoutStopSec=15
+KillSignal=SIGTERM
+
+# Superfície de privilégio mínima: usuário dedicado sem shell de login,
+# sem acesso de escrita fora do necessário.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# Diretório de upload (storage/uploads, fora de dist/, ver
+# docs/DEPLOYMENT_RUNBOOK.md secao "Armazenamento") e o diretorio de logs
+# do Node, se algum for usado além do stdout/journald - unica exceção à
+# raiz somente-leitura.
+ReadWritePaths=/opt/levora-solidaria/storage
+
+# stdout/stderr vao para o journald (ver `journalctl -u levora-api`) - sem
+# pilha ELK/Grafana nesta fase.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=levora-api
+
+[Install]
+WantedBy=multi-user.target

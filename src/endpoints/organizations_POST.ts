@@ -1,8 +1,8 @@
-import { db } from "../helpers/db";
-import { schema } from "./organizations_POST.schema";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { db } from "../helpers/db.js";
+import { schema } from "./organizations_POST.schema.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 import superjson from "superjson";
 
 function slugify(name: string): string {

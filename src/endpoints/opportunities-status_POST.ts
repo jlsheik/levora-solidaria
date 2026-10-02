@@ -1,10 +1,10 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePermission } from "../helpers/organizationAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { schema } from "./opportunities-status_POST.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePermission } from "../helpers/organizationAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { schema } from "./opportunities-status_POST.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse, ConflictError } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
   try {
@@ -43,7 +43,7 @@ export async function handle(request: Request) {
       // exige item e quantidade reais e gera a entrada de estoque
       // correspondente — nunca por uma simples troca de status.
       if (existing.status === "recebida") {
-        throw new Error("Esta oportunidade já foi recebida e não pode ter o status alterado por aqui");
+        throw new ConflictError("Esta oportunidade já foi recebida e não pode ter o status alterado por aqui");
       }
 
       const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -90,6 +90,15 @@ export async function handle(request: Request) {
     });
   } catch (error: unknown) {
     console.error("Erro ao atualizar oportunidade:", error);
-    return buildErrorResponse(error, "Não foi possível atualizar a oportunidade", (msg) => (msg.includes("recebida") ? 409 : undefined));
+    // Fase 65: trocado o `msg.includes("recebida") ? 409 : undefined` (o
+    // mesmo padrão frágil de comparar TEXTO de mensagem que este arquivo
+    // documenta no topo como já tendo sido eliminado — não tinha sido,
+    // neste único lugar) por ConflictError, reconhecido por tipo em
+    // buildErrorResponse. Também corrige uma quebra real que essa
+    // comparação de texto teria sofrido com a correção desta mesma fase
+    // (erros não tipados não expõem mais `error.message` ao cliente, então
+    // "recebida" nunca mais apareceria na mensagem pública para o
+    // `.includes()` encontrar).
+    return buildErrorResponse(error, "Não foi possível atualizar a oportunidade");
   }
 }

@@ -18,10 +18,12 @@
  * para dar, não a string exata "/api/" vs "/_api/".
  */
 import "dotenv/config";
-import express, { type Request as ExpressRequest, type Response as ExpressResponse } from "express";
+import express, { type Request as ExpressRequest, type Response as ExpressResponse, type NextFunction } from "express";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { API_SECURITY_HEADERS } from "../src/helpers/securityHeaders.js";
+import { closeDbPool } from "../src/helpers/db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENDPOINTS_DIR = path.resolve(__dirname, "../src/endpoints");
@@ -44,8 +46,11 @@ function discoverEndpoints(dir: string, baseDir: string = dir): DiscoveredEndpoi
       found.push(...discoverEndpoints(full, baseDir));
       continue;
     }
-    const match = entry.name.match(/^(.*)_(GET|POST)\.ts$/);
-    if (!match) continue; // skip *.schema.ts and anything else
+    // Em dev (tsx) os arquivos são .ts; em produção (dist-server, após
+    // tsc) são .js — o descobridor precisa casar os dois para não ficar
+    // com zero endpoints registrados quando roda a partir do build compilado.
+    const match = entry.name.match(/^(.*)_(GET|POST)\.(ts|js)$/);
+    if (!match) continue; // skip *.schema.ts/.js e qualquer outro arquivo
     const [, name, method] = match;
     const relDir = path.relative(baseDir, dir);
     const route = (relDir ? `${relDir}/${name}` : name).replace(/\\/g, "/");
@@ -110,8 +115,27 @@ async function buildExpressHandler(absPath: string) {
   };
 }
 
-async function main() {
+// Fase 50 (SEC-05): aplicado em TODA resposta desta API, incluindo 404 de
+// rota não encontrada e o catch de erro 500 dentro de buildExpressHandler
+// — é o primeiro middleware do pipeline (app.use sem path = roda para
+// qualquer requisição, antes de qualquer rota casar), e os endpoints
+// portados nunca definem esses 5 nomes de header nos próprios Response,
+// então não há conflito de sobrescrita. Ver src/helpers/securityHeaders.ts
+// para os valores e a justificativa de cada um.
+function securityHeadersMiddleware(_req: ExpressRequest, res: ExpressResponse, next: NextFunction) {
+  for (const [key, value] of Object.entries(API_SECURITY_HEADERS)) {
+    res.setHeader(key, value);
+  }
+  next();
+}
+
+// Extraído de main() para ser testável sem abrir uma porta de verdade nem
+// iniciar o agendador (test/securityHeaders.test.ts sobe isto numa porta
+// efêmera com app.listen(0)).
+export async function buildApp(): Promise<express.Express> {
   const app = express();
+
+  app.use(securityHeadersMiddleware);
 
   // Em produção atrás de um proxy reverso/load balancer de verdade
   // (nginx, Cloudflare, etc.), configure TRUST_PROXY=1 (ou o número de
@@ -156,13 +180,63 @@ async function main() {
     res.json({ status: "ok", endpoints: endpoints.length, apiVersion: "v1" });
   });
 
-  app.listen(PORT, () => {
-    console.log(`Levora Solidária — servidor de API rodando em http://localhost:${PORT}`);
-    console.log(`Rotas montadas: ${endpoints.map((e) => `${e.method} ${API_VERSION_PREFIX}/${e.route}`).join(", ")}`);
+  // Fase 50: sem isto, uma rota não encontrada cairia no handler padrão do
+  // Express (finalhandler), que define o PRÓPRIO Content-Security-Policy
+  // ("default-src 'none'", sem frame-ancestors) na página HTML de erro —
+  // sobrescrevendo o header mais completo que securityHeadersMiddleware já
+  // tinha definido (confirmado reproduzindo um 404 real e comparando os
+  // headers). Esta API é só JSON; um 404 em HTML nunca fez sentido aqui.
+  app.use((_req, res) => {
+    res.status(404).json({ message: "Rota não encontrada" });
   });
 
-  const { startScheduler } = await import("../src/helpers/scheduler");
+  return app;
+}
+
+// Fase 56 (arquitetura-alvo de produção): a topologia escolhida roda o
+// processo atrás de um gerenciador (systemd/orquestrador de containers)
+// que envia SIGTERM em todo deploy/restart — sem tratamento, uma
+// requisição em andamento no exato momento do sinal era cortada sem
+// resposta (achado da Fase 55, agora corrigido porque a arquitetura
+// escolhida torna isso uma necessidade real, não hipotética).
+// `server.close()` para de aceitar conexões NOVAS mas deixa as já abertas
+// terminarem; `GRACEFUL_SHUTDOWN_TIMEOUT_MS` é o limite antes de forçar o
+// encerramento (nunca travar o processo indefinidamente esperando um
+// cliente lento). SIGINT coberto pelo mesmo motivo (Ctrl+C em dev/systemd
+// também o usa).
+const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 10_000;
+
+async function main() {
+  const app = await buildApp();
+
+  const server = app.listen(PORT, () => {
+    console.log(`Levora Solidária — servidor de API rodando em http://localhost:${PORT}`);
+  });
+
+  const { startScheduler } = await import("../src/helpers/scheduler.js");
   startScheduler();
+
+  let shuttingDown = false;
+  async function shutdown(signal: string) {
+    if (shuttingDown) return; // um segundo SIGTERM durante o shutdown não reinicia o processo
+    shuttingDown = true;
+    console.log(`${signal} recebido — encerrando graciosamente (até ${GRACEFUL_SHUTDOWN_TIMEOUT_MS}ms para requisições em andamento)...`);
+
+    const forceExit = setTimeout(() => {
+      console.error("Graceful shutdown excedeu o tempo limite — encerrando à força.");
+      process.exit(1);
+    }, GRACEFUL_SHUTDOWN_TIMEOUT_MS);
+    forceExit.unref();
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await closeDbPool();
+    clearTimeout(forceExit);
+    console.log("Encerrado graciosamente.");
+    process.exit(0);
+  }
+
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
 // express.raw() puts the Buffer on req.body; downstream handlers were written
@@ -178,7 +252,15 @@ function wrapRawBody(handler: (req: ExpressRequest, res: ExpressResponse) => Pro
   };
 }
 
-main().catch((error) => {
-  console.error("Falha ao iniciar o servidor:", error);
-  process.exit(1);
-});
+// Guarda de entrypoint ESM (equivalente a `if __name__ == "__main__"`):
+// sem isso, test/securityHeaders.test.ts importar `buildApp` deste módulo
+// também disparia main() — abrindo uma porta real e iniciando o
+// agendador (src/helpers/scheduler.tsx) dentro da suíte de testes, o que
+// nunca deveria acontecer.
+const isEntrypoint = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+if (isEntrypoint) {
+  main().catch((error) => {
+    console.error("Falha ao iniciar o servidor:", error);
+    process.exit(1);
+  });
+}

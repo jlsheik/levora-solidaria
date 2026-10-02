@@ -1,12 +1,12 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePermission } from "../helpers/organizationAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { createApprovalRequest } from "../helpers/approvals";
-import { getItemStockBalance } from "../helpers/stockBalance";
-import { schema } from "./stock-transactions_POST.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePermission } from "../helpers/organizationAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { createApprovalRequest } from "../helpers/approvals.js";
+import { getItemStockBalance } from "../helpers/stockBalance.js";
+import { schema } from "./stock-transactions_POST.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 // Ajuste negativo (redução de estoque sem uma saída rastreável por
 // distribuição/entrega) é o vetor de fraude mais óbvio deste sistema —

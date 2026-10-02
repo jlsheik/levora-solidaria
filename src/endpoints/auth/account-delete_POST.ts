@@ -1,11 +1,23 @@
-import { db } from "../../helpers/db";
-import { getServerUserSession } from "../../helpers/getServerUserSession";
-import { recordAuditLogEntry } from "../../helpers/auditLog";
-import { clearServerSession } from "../../helpers/getSetServerSession";
-import { schema } from "./account-delete_POST.schema";
+import { db } from "../../helpers/db.js";
+import { getServerUserSession } from "../../helpers/getServerUserSession.js";
+import { recordAuditLogEntry } from "../../helpers/auditLog.js";
+import { clearServerSession } from "../../helpers/getSetServerSession.js";
+import { schema } from "./account-delete_POST.schema.js";
 import { compare } from "bcryptjs";
+import { checkRateLimit, rateLimitResponse } from "../../helpers/rateLimit.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../../helpers/errorResponse";
+import { buildErrorResponse } from "../../helpers/errorResponse.js";
+
+// Fase 52 (SEC-07): achado da varredura "qualquer endpoint com bcrypt" —
+// este endpoint comparava a senha (bcrypt.compare) sem nenhum limite,
+// diferente de login_with_password_POST (que já tem bloqueio por e-mail +
+// por IP). A barreira de autenticação (precisa já ter uma sessão válida)
+// reduz o risco — não é um endpoint público —, mas não o elimina: uma
+// sessão comprometida (XSS, dispositivo compartilhado) poderia tentar
+// senhas repetidamente sem throttling. Por usuário (não por IP): quem
+// ataca aqui já está autenticado como essa pessoa, então o identificador
+// natural é o próprio user id, não o IP de origem.
+const USER_RATE_LIMIT = { limit: 5, windowMs: 15 * 60 * 1000 };
 
 /**
  * Exclusão de conta (LGPD, art. 18 — direito de eliminação). Ver
@@ -24,6 +36,12 @@ import { buildErrorResponse } from "../../helpers/errorResponse";
 export async function handle(request: Request) {
   try {
     const { user } = await getServerUserSession(request);
+
+    const userLimit = checkRateLimit({ bucket: "account-delete", identifier: String(user.id), ...USER_RATE_LIMIT });
+    if (!userLimit.allowed) {
+      return rateLimitResponse(userLimit.retryAfterSeconds, "Muitas tentativas de confirmar a senha em pouco tempo. Aguarde antes de tentar de novo.");
+    }
+
     const json = superjson.parse(await request.text());
     const input = schema.parse(json);
 

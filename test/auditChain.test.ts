@@ -130,6 +130,139 @@ describe("hash encadeado da trilha de auditoria", () => {
     expect(idsComProblema).toContain(String(Number(row.id) + 1));
   });
 
+  it("Fase 53 — caso 2: hash atual alterado isoladamente (previous_event_hash correto, event_hash forjado) é detectado como 'hash_nao_bate', nunca como quebra de predecessor", async () => {
+    const owner = await createAuthenticatedUser();
+    const org = await createTestOrganization(owner.userId);
+    await recordAuditLogEntry({ organizationId: org.id, actorUserId: owner.userId, action: "teste.base_caso2", entityType: "teste" });
+
+    const last = await db.selectFrom("auditLog").select(["eventHash"]).orderBy("id", "desc").limit(1).executeTakeFirstOrThrow();
+
+    const [forged] = await db
+      .insertInto("auditLog")
+      .values({
+        organizationId: org.id,
+        actorUserId: owner.userId,
+        action: "teste.hash_atual_forjado",
+        entityType: "teste",
+        entityId: "caso2",
+        metadata: {},
+        previousEventHash: last.eventHash, // correto — continua a cadeia de verdade
+        eventHash: "hash-atual-forjado-nao-corresponde-ao-conteudo",
+      })
+      .returning(["id"])
+      .execute();
+
+    const result = await verifyAuditLogChain();
+    expect(result.integra).toBe(false);
+    const divergencia = result.divergencias.find((d) => d.id === String(forged.id));
+    expect(divergencia?.reason).toBe("hash_nao_bate");
+  });
+
+  it("Fase 53 — caso 3/6: previous_event_hash alterado (mas internamente consistente com o próprio event_hash) é detectado como quebra de predecessor, nunca como 'hash_nao_bate' da própria linha", async () => {
+    const owner = await createAuthenticatedUser();
+    const org = await createTestOrganization(owner.userId);
+    await recordAuditLogEntry({ organizationId: org.id, actorUserId: owner.userId, action: "teste.base_caso3", entityType: "teste" });
+
+    // previousEventHash forjado (não é o hash real do evento anterior), mas
+    // o eventHash É calculado corretamente EM CIMA desse valor forjado —
+    // a linha é "consistente consigo mesma", só desconectada da cadeia real.
+    const fakeCreatedAt = new Date();
+    const fakePreviousHash = "previous-hash-forjado-nao-e-o-real";
+    const selfConsistentHash = computeAuditEventHash({
+      organizationId: org.id,
+      actorUserId: owner.userId,
+      action: "teste.predecessor_forjado",
+      entityType: "teste",
+      entityId: "caso3",
+      metadata: {},
+      createdAt: fakeCreatedAt,
+      previousEventHash: fakePreviousHash,
+    });
+
+    const [forged] = await db
+      .insertInto("auditLog")
+      .values({
+        organizationId: org.id,
+        actorUserId: owner.userId,
+        action: "teste.predecessor_forjado",
+        entityType: "teste",
+        entityId: "caso3",
+        metadata: {},
+        createdAt: fakeCreatedAt,
+        previousEventHash: fakePreviousHash,
+        eventHash: selfConsistentHash,
+      })
+      .returning(["id"])
+      .execute();
+
+    const result = await verifyAuditLogChain();
+    expect(result.integra).toBe(false);
+    const divergencia = result.divergencias.find((d) => d.id === String(forged.id));
+    expect(divergencia?.reason).toBe("previous_hash_nao_bate_com_evento_anterior");
+    // Nenhuma divergência "hash_nao_bate" para esta mesma linha — o hash
+    // dela bate exatamente com o conteúdo dela, só o predecessor é falso.
+    expect(result.divergencias.filter((d) => d.id === String(forged.id) && d.reason === "hash_nao_bate")).toHaveLength(0);
+  });
+
+  it("Fase 53 — caso 4: conteúdo coberto pelo hash alterado (metadata não corresponde ao que gerou o event_hash) é detectado como 'hash_nao_bate'", async () => {
+    const owner = await createAuthenticatedUser();
+    const org = await createTestOrganization(owner.userId);
+    await recordAuditLogEntry({ organizationId: org.id, actorUserId: owner.userId, action: "teste.base_caso4", entityType: "teste" });
+
+    const last = await db.selectFrom("auditLog").select(["eventHash"]).orderBy("id", "desc").limit(1).executeTakeFirstOrThrow();
+    const createdAt = new Date();
+    // Hash calculado para UM metadata, mas o conteúdo gravado é outro —
+    // simula alteração do conteúdo coberto pelo hash (nunca possível via
+    // UPDATE real, append-only bloqueia — só via INSERT direto forjado,
+    // igual aos outros casos desta fase).
+    const hashParaOutroConteudo = computeAuditEventHash({
+      organizationId: org.id,
+      actorUserId: owner.userId,
+      action: "teste.conteudo_original",
+      entityType: "teste",
+      entityId: "caso4",
+      metadata: { valorReal: true },
+      createdAt,
+      previousEventHash: last.eventHash,
+    });
+
+    const [forged] = await db
+      .insertInto("auditLog")
+      .values({
+        organizationId: org.id,
+        actorUserId: owner.userId,
+        action: "teste.conteudo_adulterado", // conteúdo diferente do que gerou o hash acima
+        entityType: "teste",
+        entityId: "caso4",
+        metadata: { valorReal: false },
+        createdAt,
+        previousEventHash: last.eventHash,
+        eventHash: hashParaOutroConteudo,
+      })
+      .returning(["id"])
+      .execute();
+
+    const result = await verifyAuditLogChain();
+    expect(result.integra).toBe(false);
+    const divergencia = result.divergencias.find((d) => d.id === String(forged.id));
+    expect(divergencia?.reason).toBe("hash_nao_bate");
+  });
+
+  it("Fase 53 — caso 5: remoção de registro é estruturalmente impossível (não 'tratada pela verificação' — bloqueada antes disso, pelo próprio trigger append-only)", async () => {
+    const owner = await createAuthenticatedUser();
+    const org = await createTestOrganization(owner.userId);
+    await recordAuditLogEntry({ organizationId: org.id, actorUserId: owner.userId, action: "teste.nao_pode_ser_removido", entityType: "teste" });
+
+    const row = await db.selectFrom("auditLog").select(["id"]).where("action", "=", "teste.nao_pode_ser_removido").executeTakeFirstOrThrow();
+
+    await expect(db.deleteFrom("auditLog").where("id", "=", row.id).execute()).rejects.toThrow(/append-only/);
+
+    // A linha continua lá e a cadeia continua íntegra — não há "remoção
+    // tratada", porque não há remoção possível pela aplicação nenhuma.
+    const result = await verifyAuditLogChain();
+    expect(result.integra).toBe(true);
+  });
+
   it("linhas antigas sem event_hash (pré-migração) não contam como corrupção", async () => {
     const owner = await createAuthenticatedUser();
     const org = await createTestOrganization(owner.userId);

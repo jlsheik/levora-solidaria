@@ -9,5 +9,17 @@
     "noEmit": false,
     "jsx": "react-jsx"
   },
-  "include": ["src/endpoints", "src/helpers", "server", "db"]
+  "include": ["src/endpoints", "src/helpers", "server", "db"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-server",
+    "src/helpers/useScrollReveal.tsx",
+    "src/helpers/useIsMobile.tsx",
+    "src/helpers/useMediaQuery.tsx",
+    "src/helpers/useAuth.tsx",
+    "src/helpers/themeMode.tsx",
+    "src/helpers/connectorsManual.tsx",
+    "src/helpers/connectorsTypes.tsx"
+  ]
 }

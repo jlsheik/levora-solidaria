@@ -1,10 +1,10 @@
-import { db } from "./db";
-import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks";
-import { recordAuditLogEntry } from "./auditLog";
-import { runMatchingForOpportunity } from "./opportunityMatching";
-import { withScheduledTaskLock } from "./scheduledTaskLock";
-import { reopenOpportunityIfNoActiveAllocations } from "./reopenOpportunity";
-import { concludeOpportunityIfAllTerminalAndReceived } from "./concludeOpportunity";
+import { db } from "./db.js";
+import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks.js";
+import { recordAuditLogEntry } from "./auditLog.js";
+import { runMatchingForOpportunity } from "./opportunityMatching.js";
+import { withScheduledTaskLock } from "./scheduledTaskLock.js";
+import { reopenOpportunityIfNoActiveAllocations } from "./reopenOpportunity.js";
+import { concludeOpportunityIfAllTerminalAndReceived } from "./concludeOpportunity.js";
 
 /**
  * Tarefa agendada: libera atribuições propostas automaticamente (confiança

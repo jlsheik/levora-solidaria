@@ -1,6 +1,6 @@
 import { z } from "zod";
 import superjson from "superjson";
-import type { Json } from "../helpers/schema";
+import type { Json } from "../helpers/schema.js";
 
 export const schema = z.object({
   opportunityId: z.coerce.number().int().positive(),

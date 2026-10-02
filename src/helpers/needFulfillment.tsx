@@ -1,7 +1,7 @@
 import type { Kysely, Transaction } from "kysely";
 import { sql } from "kysely";
-import type { DB } from "./schema";
-import { normalize } from "./opportunityMatching";
+import type { DB } from "./schema.js";
+import { normalize } from "./opportunityMatching.js";
 
 /**
  * Ledger append-only de EVENTOS de atendimento de necessidades

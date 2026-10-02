@@ -1,6 +1,6 @@
-import { db } from "./db";
-import type { MembershipRole } from "./schema";
-import { roleHasPermission, type Permission } from "./permissions";
+import { db } from "./db.js";
+import type { MembershipRole } from "./schema.js";
+import { roleHasPermission, type Permission } from "./permissions.js";
 
 /**
  * Erro lançado quando o usuário autenticado não é membro ativo da

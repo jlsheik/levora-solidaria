@@ -1,6 +1,6 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 import superjson from "superjson";
 
 export async function handle(request: Request) {

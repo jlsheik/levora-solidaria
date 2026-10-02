@@ -1,5 +1,5 @@
 import type { Transaction } from "kysely";
-import type { DB } from "./schema";
+import type { DB } from "./schema.js";
 
 /**
  * Decide, de forma segura sob concorrência, se uma oportunidade deve virar

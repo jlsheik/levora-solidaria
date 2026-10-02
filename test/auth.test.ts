@@ -12,7 +12,12 @@ function decodeJwtExpirationSeconds(setCookieHeader: string): { iat: number; exp
 }
 
 describe("cadastro e login por senha", () => {
-  it("cadastra um novo usuário e já retorna uma sessão autenticada (cookie de sessão)", async () => {
+  // Fase 51 (SEC-03): register_with_password_POST não cria mais sessão
+  // nem devolve dado de usuário — devolve sempre a mesma mensagem genérica,
+  // que o e-mail já tivesse conta ou não (ver
+  // src/endpoints/auth/register_with_password_POST.ts e
+  // docs/SECURITY.md). Entrar continua sendo um passo separado, via login.
+  it("cadastra um novo usuário (resposta genérica, sem sessão) e o login funciona em seguida com a senha definida", async () => {
     const response = await postRegister(
       buildRequest("auth/register_with_password", {
         method: "POST",
@@ -20,25 +25,67 @@ describe("cadastro e login por senha", () => {
       })
     );
     expect(response.status).toBe(200);
-    expect(response.headers.get("Set-Cookie")).toContain("floot_built_app_session=");
-    const data = await parseJson<{ user: { email: string } }>(response);
-    expect(data.user.email).toBe("nova@example.com");
+    expect(response.headers.get("Set-Cookie")).toBeNull();
+    const data = await parseJson<{ message: string }>(response);
+    expect(typeof data.message).toBe("string");
+    expect(data.message.length).toBeGreaterThan(0);
+
+    const loginResponse = await postLogin(
+      buildRequest("auth/login_with_password", {
+        method: "POST",
+        body: { email: "nova@example.com", password: "senha-valida-123" },
+      })
+    );
+    expect(loginResponse.status).toBe(200);
+    expect(loginResponse.headers.get("Set-Cookie")).toContain("floot_built_app_session=");
   });
 
-  it("recusa cadastro com e-mail já em uso (409)", async () => {
-    await postRegister(
+  it("recadastro com e-mail já em uso devolve exatamente a mesma resposta pública do cadastro novo (SEC-03: nunca revela se a conta já existia)", async () => {
+    const first = await postRegister(
       buildRequest("auth/register_with_password", {
         method: "POST",
         body: { email: "duplicado@example.com", password: "senha-valida-123", displayName: "Primeira" },
       })
     );
-    const response = await postRegister(
+    const second = await postRegister(
       buildRequest("auth/register_with_password", {
         method: "POST",
+        ip: "ip-recadastro-duplicado",
         body: { email: "duplicado@example.com", password: "outra-senha-123", displayName: "Segunda" },
       })
     );
-    expect(response.status).toBe(409);
+
+    expect(second.status).toBe(first.status);
+    expect(second.status).toBe(200);
+    const firstBody = await parseJson<{ message: string }>(first);
+    const secondBody = await parseJson<{ message: string }>(second);
+    expect(secondBody.message).toBe(firstBody.message);
+
+    // E o mais importante: a segunda tentativa NÃO criou uma segunda conta
+    // nem alterou a senha da primeira — login continua funcionando só com
+    // a senha original.
+    const loginComSenhaOriginal = await postLogin(
+      buildRequest("auth/login_with_password", {
+        method: "POST",
+        body: { email: "duplicado@example.com", password: "senha-valida-123" },
+      })
+    );
+    expect(loginComSenhaOriginal.status).toBe(200);
+
+    const loginComSenhaDaTentativaDuplicada = await postLogin(
+      buildRequest("auth/login_with_password", {
+        method: "POST",
+        body: { email: "duplicado@example.com", password: "outra-senha-123" },
+      })
+    );
+    expect(loginComSenhaDaTentativaDuplicada.status).toBe(401);
+
+    const rows = await db
+      .selectFrom("users")
+      .select("id")
+      .where("email", "=", "duplicado@example.com")
+      .execute();
+    expect(rows.length).toBe(1);
   });
 
   it("autentica com e-mail e senha corretos", async () => {
@@ -167,11 +214,21 @@ describe("cadastro e login por senha", () => {
     });
   });
 
+  // Fase 51: o cookie de sessão só é emitido no LOGIN (register não cria
+  // mais sessão — ver SEC-03 acima), então as duas propriedades abaixo
+  // (expiração do JWT interno, atributos do cookie) passaram a ser
+  // testadas via login, não via register como antes desta fase.
   it("o JWT interno da sessão expira em 7 dias, batendo com o Max-Age do cookie (não em 1 dia)", async () => {
-    const response = await postRegister(
+    await postRegister(
       buildRequest("auth/register_with_password", {
         method: "POST",
         body: { email: "expiracao@example.com", password: "senha-valida-123", displayName: "Pessoa" },
+      })
+    );
+    const response = await postLogin(
+      buildRequest("auth/login_with_password", {
+        method: "POST",
+        body: { email: "expiracao@example.com", password: "senha-valida-123" },
       })
     );
     const setCookie = response.headers.get("Set-Cookie")!;
@@ -191,10 +248,16 @@ describe("cadastro e login por senha", () => {
   // trava a propriedade que sustenta essa análise (SameSite=Lax) para que
   // uma mudança futura não a rebaixe silenciosamente sem que ninguém perceba.
   it("cookie de sessão é HttpOnly + Secure + SameSite=Lax — a base da resistência a CSRF deste app", async () => {
-    const response = await postRegister(
+    await postRegister(
       buildRequest("auth/register_with_password", {
         method: "POST",
         body: { email: "csrf-cookie@example.com", password: "senha-valida-123", displayName: "Pessoa" },
+      })
+    );
+    const response = await postLogin(
+      buildRequest("auth/login_with_password", {
+        method: "POST",
+        body: { email: "csrf-cookie@example.com", password: "senha-valida-123" },
       })
     );
     const setCookie = response.headers.get("Set-Cookie")!;

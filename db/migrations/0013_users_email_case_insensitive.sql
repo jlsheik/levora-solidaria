@@ -1,0 +1,25 @@
+-- Fase 48 — fecha o achado SEC-02 da auditoria de segurança (Fase 47):
+-- `users.email` tinha só um UNIQUE btree case-SENSÍVEL, então
+-- "Teste@x.com" e "teste@x.com" podiam coexistir como duas identidades
+-- diferentes, enquanto o login já normalizava e-mail para minúsculas
+-- (LOWER(users.email) ... LIMIT 1) — um SELECT sem ORDER BY contra duas
+-- linhas candidatas não é determinístico sobre qual delas o Postgres
+-- devolve.
+--
+-- Verificado no banco de desenvolvimento antes desta migration:
+-- 0 grupos duplicados por LOWER(email), 0 registros afetados (ver
+-- relatório da Fase 48 — nenhum valor de e-mail foi impresso).
+--
+-- Índice único funcional sobre LOWER(email): mesmo padrão já usado em
+-- organization_invites (idx_organization_invites_pending_unique, ver
+-- db/schema.sql) para o mesmo problema nesse outro contexto. O Postgres
+-- aceita um índice único sobre uma expressão, não só sobre colunas —
+-- não precisa de citext nem de uma coluna nova para o valor normalizado.
+--
+-- O UNIQUE(email) existente (users_email_key, case-sensível) é mantido
+-- de propósito: ele fica estruturalmente redundante a partir desta
+-- migration (toda violação dele também violaria o índice abaixo, que é
+-- mais estrito), mas removê-lo não traz benefício nenhum e esta fase é
+-- sobre adicionar uma proteção, não sobre redesenhar o schema de
+-- usuários — menor mudança estrutural possível para o problema real.
+CREATE UNIQUE INDEX idx_users_email_lower ON users (LOWER(email));

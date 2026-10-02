@@ -1,6 +1,6 @@
 import { z } from "zod";
 import superjson from "superjson";
-import { SourceTypeArrayValues } from "../helpers/schema";
+import { SourceTypeArrayValues } from "../helpers/schema.js";
 
 export const schema = z.object({
   name: z.string().min(2, "Informe o nome da fonte"),

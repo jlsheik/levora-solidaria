@@ -1,7 +1,7 @@
-import { db } from "./db";
-import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks";
-import { recordAuditLogEntry } from "./auditLog";
-import { withScheduledTaskLock } from "./scheduledTaskLock";
+import { db } from "./db.js";
+import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks.js";
+import { recordAuditLogEntry } from "./auditLog.js";
+import { withScheduledTaskLock } from "./scheduledTaskLock.js";
 
 export const APPROVAL_REQUEST_EXPIRATION_DAYS = Number(process.env.APPROVAL_REQUEST_EXPIRATION_DAYS ?? 7);
 

@@ -4,6 +4,8 @@ dist-server/
 .env
 .env.test
 storage/
+backups/
+.staging-runtime/
 .claude/
 .claude-flow/
 *.log

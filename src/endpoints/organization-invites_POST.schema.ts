@@ -1,9 +1,12 @@
 import { z } from "zod";
 import superjson from "superjson";
 
+// Fase 51: trim() consistente com register_with_password_POST.schema.ts e
+// login_with_password_POST.schema.ts — ver comentário lá para a
+// justificativa completa.
 export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),
-  email: z.string().email("Informe um e-mail válido"),
+  email: z.string().trim().email("Informe um e-mail válido"),
   // Não faz sentido convidar alguém direto como "proprietário" por e-mail —
   // esse papel só existe hoje por ter criado a organização; convite cria
   // administrador, operador ou voluntário.

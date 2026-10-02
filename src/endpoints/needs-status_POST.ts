@@ -1,12 +1,12 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePermission, OrganizationAccessError } from "../helpers/organizationAccess";
-import { roleHasPermission } from "../helpers/permissions";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { getItemStockBalance } from "../helpers/stockBalance";
-import { schema } from "./needs-status_POST.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePermission, OrganizationAccessError } from "../helpers/organizationAccess.js";
+import { roleHasPermission } from "../helpers/permissions.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { getItemStockBalance } from "../helpers/stockBalance.js";
+import { schema } from "./needs-status_POST.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
   try {

@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [master]
 
+# Fase 54 (SEC-08): princípio do menor privilégio — este workflow só faz
+# checkout, instala dependências e roda scripts locais (typecheck, testes,
+# build, audit). Nunca escreve no repositório, nunca publica nada, nunca
+# comenta em PR — não precisa de "contents: write" nem de nenhuma outra
+# permissão além de ler o próprio código.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -48,3 +56,49 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      # Fase 54: build do cliente (tsc + vite build) — confirmado
+      # localmente que não exige nenhuma variável de ambiente (DATABASE_URL,
+      # JWT_SECRET, etc.): é puramente frontend estático.
+      - name: Build
+        run: npm run build
+
+      # Fase 66 — gate real do artefato de produção do backend. O
+      # comentário que existia aqui antes ("já coberto pelo typecheck
+      # acima") estava errado: a Fase 58 descobriu, executando
+      # `build:server` pela primeira vez nesta sessão, 535 erros em 109
+      # arquivos que `npm run typecheck` (tsconfig.json, moduleResolution
+      # Bundler) nunca detectava, porque tsconfig.server.json usa
+      # moduleResolution NodeNext — exige extensão `.js` explícita em
+      # import relativo, regra que o typecheck do frontend não aplica.
+      # `npm test`/`typecheck`/`build` verdes não garantiam, sozinhos, que
+      # o artefato que `npm start` roda em produção (dist-server/)
+      # sequer compilava. Determinismo confirmado localmente (Fase 66):
+      # duas builds limpas em sequência produzem a mesma lista de
+      # arquivos e os mesmos hashes SHA-256 byte a byte.
+      - name: Build server (production backend artifact)
+        run: npm run build:server
+
+      # Fase 66 — verificação mínima e não frágil do artefato: confere
+      # que as três coisas que já quebraram de verdade (Fases 58/59)
+      # continuam presentes, sem fixar uma contagem exata de arquivos
+      # (frágil a qualquer novo endpoint legítimo).
+      - name: Verify server build artifact
+        run: |
+          test -f dist-server/server/index.js
+          test -f dist-server/src/static/__dev/scheduled-jobs.json
+          endpoint_count=$(find dist-server/src/endpoints -name "*_GET.js" -o -name "*_POST.js" | wc -l)
+          echo "Endpoints no artefato compilado: $endpoint_count"
+          if [ "$endpoint_count" -eq 0 ]; then
+            echo "Nenhum endpoint encontrado em dist-server/src/endpoints — artefato vazio ou corrompido."
+            exit 1
+          fi
+
+      # Fase 54 (fecha SEC-08): política de severidade deliberada —
+      # "moderate" ou mais bloqueia o pipeline; "low"/"info" não (ruído
+      # comum em dependências transitivas, não justifica travar todo PR).
+      # Esta política teria bloqueado a própria vulnerabilidade corrigida
+      # na Fase 49 (react-router, severidade moderate) se ela tivesse sido
+      # introduzida depois deste gate existir. Ver docs/SECURITY.md.
+      - name: Dependency audit (fails on moderate+ severity)
+        run: npm audit --audit-level=moderate

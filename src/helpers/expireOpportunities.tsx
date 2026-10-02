@@ -1,8 +1,8 @@
-import { db } from "./db";
-import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks";
-import { recordAuditLogEntry } from "./auditLog";
-import type { OpportunityRegistryStatus } from "./schema";
-import { withScheduledTaskLock } from "./scheduledTaskLock";
+import { db } from "./db.js";
+import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks.js";
+import { recordAuditLogEntry } from "./auditLog.js";
+import type { OpportunityRegistryStatus } from "./schema.js";
+import { withScheduledTaskLock } from "./scheduledTaskLock.js";
 
 const TERMINAL_STATUSES: OpportunityRegistryStatus[] = ["concluida", "recusada", "expirada", "cancelada", "bloqueada", "duplicada"];
 

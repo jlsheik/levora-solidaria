@@ -1,9 +1,9 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requireOrganizationMembership } from "../helpers/organizationAccess";
-import { schema } from "./organization-matching-config_GET.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requireOrganizationMembership } from "../helpers/organizationAccess.js";
+import { schema } from "./organization-matching-config_GET.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 /**
  * Leitura aberta a qualquer membro ativo (mesmo papel voluntário) — é

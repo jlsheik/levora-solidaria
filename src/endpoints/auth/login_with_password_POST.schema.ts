@@ -1,9 +1,12 @@
 import { z } from "zod";
-import { User } from "../../helpers/User";
+import { User } from "../../helpers/User.js";
 import superjson from "superjson";
 
+// Fase 51: trim() consistente com register_with_password_POST.schema.ts e
+// organization-invites_POST.schema.ts — ver comentário lá para a
+// justificativa completa.
 export const schema = z.object({
-  email: z.string().email("Informe um e-mail válido"),
+  email: z.string().trim().email("Informe um e-mail válido"),
   password: z.string().min(1, "Informe a senha"),
 });
 

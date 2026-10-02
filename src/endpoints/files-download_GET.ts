@@ -1,11 +1,11 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requireOrganizationMembership } from "../helpers/organizationAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { storageAdapter } from "../helpers/storageAdapter";
-import { schema } from "./files-download_GET.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requireOrganizationMembership } from "../helpers/organizationAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { storageAdapter } from "../helpers/storageAdapter.js";
+import { schema } from "./files-download_GET.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 // Arquivo privado por padrão (master prompt, seção sobre armazenamento):
 // nunca uma URL pública direta. Este endpoint É o "signed URL" — a

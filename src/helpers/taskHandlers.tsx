@@ -1,7 +1,8 @@
-import { runMatchingSweep } from "./runMatchingSweep";
-import { expireReservations } from "./expireReservations";
-import { expireOpportunities } from "./expireOpportunities";
-import { expireApprovalRequests } from "./expireApprovalRequests";
+import { runMatchingSweep } from "./runMatchingSweep.js";
+import { expireReservations } from "./expireReservations.js";
+import { expireOpportunities } from "./expireOpportunities.js";
+import { expireApprovalRequests } from "./expireApprovalRequests.js";
+import { verifyAuditChainScheduled } from "./verifyAuditChainTask.js";
 
 /**
  * Único ponto de verdade para o mapeamento nome-da-tarefa → função que a
@@ -20,4 +21,5 @@ export const TASK_HANDLERS: Record<string, () => Promise<void>> = {
   expireReservations,
   expireOpportunities,
   expireApprovalRequests,
+  verifyAuditChain: verifyAuditChainScheduled,
 };

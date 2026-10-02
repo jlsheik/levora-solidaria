@@ -1,6 +1,6 @@
 import { z } from "zod";
 import superjson from "superjson";
-import type { NeedPriority, NeedStatus } from "../helpers/schema";
+import type { NeedPriority, NeedStatus } from "../helpers/schema.js";
 
 export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),

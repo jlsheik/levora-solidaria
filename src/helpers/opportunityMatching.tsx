@@ -1,10 +1,10 @@
-import { db } from "./db";
-import { recordAuditLogEntry } from "./auditLog";
-import { flootAi, FlootAiOutOfCreditsError } from "./aiClient";
-import { getNeedFulfillmentBalanceBatch, computeNeedProgress } from "./needFulfillment";
+import { db } from "./db.js";
+import { recordAuditLogEntry } from "./auditLog.js";
+import { flootAi, FlootAiOutOfCreditsError, AiTimeoutError } from "./aiClient.js";
+import { getNeedFulfillmentBalanceBatch, computeNeedProgress } from "./needFulfillment.js";
 import { sql } from "kysely";
 import type { Transaction } from "kysely";
-import type { DB, Json, NeedPriority } from "./schema";
+import type { DB, Json, NeedPriority } from "./schema.js";
 
 /**
  * Motor de correspondência — determinístico + IA como apoio, nunca como
@@ -103,9 +103,18 @@ async function aiCategoryScores(
     for (const p of parsed) scores.set(p.needId, { score: Math.max(0, Math.min(100, p.score)), reason: p.reason });
     return { scores, modelUsed: "gpt-5.6-luna" };
   } catch (err) {
-    // IA nunca bloqueia o matching — se falhar (crédito, rede, formato),
-    // o motor segue só com o escore por palavra-chave.
-    console.error("Falha ao consultar IA para matching (seguindo sem IA):", err);
+    // IA nunca bloqueia o matching — se falhar (crédito, rede, formato,
+    // timeout — ver AI_CHAT_TIMEOUT_MS em aiClient.tsx), o motor segue só
+    // com o escore por palavra-chave. Distinguir timeout no log (sem mudar
+    // o comportamento) ajuda a diferenciar "IA lenta/provedor com
+    // problema" de outras falhas ao investigar depois.
+    const isTimeout = err instanceof AiTimeoutError;
+    console.error(
+      isTimeout
+        ? "Timeout ao consultar IA para matching (seguindo sem IA):"
+        : "Falha ao consultar IA para matching (seguindo sem IA):",
+      err
+    );
     return { scores: new Map(), modelUsed: null };
   }
 }

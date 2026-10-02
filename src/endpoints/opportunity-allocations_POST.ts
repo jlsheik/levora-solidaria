@@ -1,12 +1,12 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePlatformAdmin } from "../helpers/platformAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { getNeedFulfillmentBalance, computeNeedProgress } from "../helpers/needFulfillment";
-import { schema } from "./opportunity-allocations_POST.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePlatformAdmin } from "../helpers/platformAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { getNeedFulfillmentBalance, computeNeedProgress } from "../helpers/needFulfillment.js";
+import { schema } from "./opportunity-allocations_POST.schema.js";
 import { sql } from "kysely";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 const ALLOCATABLE_STATUSES = ["validada", "aguardando_destinacao", "reservada"];
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import superjson from "superjson";
-import type { OpportunityRegistryStatus, OpportunityUrgency } from "../helpers/schema";
+import type { OpportunityRegistryStatus, OpportunityUrgency } from "../helpers/schema.js";
 
 export const schema = z.object({
   status: z.string().optional(),
