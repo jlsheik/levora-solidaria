@@ -6,6 +6,12 @@ import { getOrganizationMembers } from "../endpoints/organization-members_GET.sc
 import { getOrganizationInvites } from "../endpoints/organization-invites_GET.schema";
 import { postOrganizationInvites } from "../endpoints/organization-invites_POST.schema";
 import { postOrganizationInvitesRevoke } from "../endpoints/organization-invites-revoke_POST.schema";
+import { postOrganizationMembersRole } from "../endpoints/organization-members-role_POST.schema";
+import { postOrganizationMembersDeactivate } from "../endpoints/organization-members-deactivate_POST.schema";
+import { postOrganizationMembersLeave } from "../endpoints/organization-members-leave_POST.schema";
+import { useAuth } from "../helpers/useAuth";
+import type { MembershipRole } from "../helpers/schema";
+import type { OutputType as MembersOutput } from "../endpoints/organization-members_GET.schema";
 import { getAuditLog } from "../endpoints/audit-log_GET.schema";
 import { Badge } from "../components/Badge";
 import { Skeleton } from "../components/Skeleton";
@@ -21,7 +27,14 @@ import {
   DialogTrigger,
 } from "../components/Dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/Select";
-import { ArrowLeft, ShieldAlert, Users, ScrollText, UserPlus, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "../components/DropdownMenu";
+import { ArrowLeft, ShieldAlert, Users, ScrollText, UserPlus, X, MoreVertical, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import styles from "./organizacoes.$organizationId.module.css";
 
@@ -51,6 +64,28 @@ const invitableRoles: Array<{ value: "administrador" | "operador" | "voluntario"
   { value: "voluntario", label: "Voluntário" },
 ];
 
+type Member = MembersOutput["members"][number];
+
+type MemberDialog =
+  | { type: "role"; member: Member; role: MembershipRole }
+  | { type: "deactivate"; member: Member }
+  | { type: "leave" };
+
+const ALL_ROLES: MembershipRole[] = ["administrador", "operador", "voluntario", "proprietario"];
+const ROLE_RANK: Record<MembershipRole, number> = { voluntario: 0, operador: 1, administrador: 2, proprietario: 3 };
+
+// Espelha a matriz do servidor (docs/MEMBROS_ESPECIFICACAO.md, seção 3.1): o
+// servidor é quem decide; aqui só se evita oferecer o que seria recusado.
+function assignableRoles(actorRole: MembershipRole, target: Member): MembershipRole[] {
+  if (target.status !== "ativo") return [];
+  if (actorRole !== "proprietario" && target.role === "proprietario") return [];
+  return ALL_ROLES.filter((role) => {
+    if (role === target.role) return false;
+    if (role === "proprietario" && actorRole !== "proprietario") return false;
+    return true;
+  });
+}
+
 export default function OrganizationDetailPage() {
   const params = useParams<{ organizationId: string }>();
   const organizationId = Number(params.organizationId);
@@ -59,6 +94,9 @@ export default function OrganizationDetailPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"administrador" | "operador" | "voluntario">("operador");
+  const [memberDialog, setMemberDialog] = useState<MemberDialog | null>(null);
+  const { authState } = useAuth();
+  const myUserId = authState.type === "authenticated" ? authState.user.id : null;
 
   const orgsQuery = useQuery({
     queryKey: ["organizations"],
@@ -121,6 +159,51 @@ export default function OrganizationDetailPage() {
     onError: (err) => toast.error(err instanceof Error ? err.message : "Falha ao revogar convite"),
   });
 
+  const refreshTeam = () => {
+    queryClient.invalidateQueries({ queryKey: ["organization-members", organizationId] });
+    queryClient.invalidateQueries({ queryKey: ["organizations"] });
+    queryClient.invalidateQueries({ queryKey: ["audit-log", organizationId] });
+  };
+
+  const handleMemberError = (err: unknown, fallback: string) => {
+    toast.error(err instanceof Error ? err.message : fallback);
+    toast.info("A equipe pode ter sido alterada por outra pessoa; atualizamos a lista.");
+    refreshTeam();
+    setMemberDialog(null);
+  };
+
+  const changeRoleMutation = useMutation({
+    mutationFn: (vars: { membershipId: number; role: MembershipRole }) =>
+      postOrganizationMembersRole({ organizationId, ...vars }),
+    onSuccess: () => {
+      refreshTeam();
+      toast.success("Papel alterado");
+      setMemberDialog(null);
+    },
+    onError: (err) => handleMemberError(err, "Falha ao alterar o papel"),
+  });
+
+  const deactivateMutation = useMutation({
+    mutationFn: (membershipId: number) => postOrganizationMembersDeactivate({ organizationId, membershipId }),
+    onSuccess: () => {
+      refreshTeam();
+      toast.success("Acesso desativado");
+      setMemberDialog(null);
+    },
+    onError: (err) => handleMemberError(err, "Falha ao desativar o acesso"),
+  });
+
+  const leaveMutation = useMutation({
+    mutationFn: () => postOrganizationMembersLeave({ organizationId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      toast.success("Você saiu da organização");
+      setMemberDialog(null);
+      navigate("/");
+    },
+    onError: (err) => handleMemberError(err, "Falha ao sair da organização"),
+  });
+
   if (orgsQuery.isFetching && !orgsQuery.data) {
     return (
       <div className={styles.page}>
@@ -143,6 +226,11 @@ export default function OrganizationDetailPage() {
       </div>
     );
   }
+
+  const members = membersQuery.data?.members ?? [];
+  const formerMembers = members.filter((m) => m.status !== "ativo");
+  const activeOwnerCount = members.filter((m) => m.role === "proprietario" && m.status === "ativo").length;
+  const isOnlyOwner = org?.myRole === "proprietario" && activeOwnerCount <= 1;
 
   return (
     <div className={styles.page}>
@@ -256,25 +344,94 @@ export default function OrganizationDetailPage() {
           </div>
           {membersQuery.isFetching && !membersQuery.data ? (
             <Skeleton className={styles.listSkeleton} />
-          ) : membersQuery.data && membersQuery.data.members.length > 0 ? (
+          ) : membersQuery.data && membersQuery.data.members.some((m) => m.status === "ativo") ? (
             <ul className={styles.memberList}>
-              {membersQuery.data.members.map((m) => (
-                <li key={m.membershipId} className={styles.memberRow}>
-                  <div>
-                    <div className={styles.memberName}>{m.displayName}</div>
-                    <div className={styles.memberEmail}>{m.email}</div>
-                  </div>
-                  <div className={styles.memberBadges}>
-                    <Badge variant="outline">{membershipRoleLabels[m.role]}</Badge>
-                    <Badge variant={m.status === "ativo" ? "success" : "secondary"}>
-                      {membershipStatusLabels[m.status]}
-                    </Badge>
-                  </div>
-                </li>
-              ))}
+              {membersQuery.data.members
+                .filter((m) => m.status === "ativo")
+                .map((m) => {
+                  const isMe = m.userId === myUserId;
+                  const myRole = org?.myRole;
+                  const roleOptions = myRole && canManageMembers && !isMe ? assignableRoles(myRole, m) : [];
+                  const canDeactivate =
+                    canManageMembers && !isMe && !(myRole !== "proprietario" && m.role === "proprietario");
+                  return (
+                    <li key={m.membershipId} className={styles.memberRow}>
+                      <div>
+                        <div className={styles.memberName}>
+                          {m.displayName}
+                          {isMe ? " (você)" : ""}
+                        </div>
+                        <div className={styles.memberEmail}>{m.email}</div>
+                      </div>
+                      <div className={styles.memberBadges}>
+                        <Badge variant="outline">{membershipRoleLabels[m.role]}</Badge>
+                        <Badge variant="success">{membershipStatusLabels[m.status]}</Badge>
+                        {(roleOptions.length > 0 || canDeactivate) && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button type="button" className={styles.actionButton} aria-label={`Ações para ${m.displayName}`}>
+                                <MoreVertical size={16} />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {roleOptions.length > 0 && (
+                                <DropdownMenuItem
+                                  onSelect={() => setMemberDialog({ type: "role", member: m, role: roleOptions.find((role) => role !== "proprietario") ?? roleOptions[0] })}
+                                >
+                                  Alterar papel
+                                </DropdownMenuItem>
+                              )}
+                              {roleOptions.length > 0 && canDeactivate && <DropdownMenuSeparator />}
+                              {canDeactivate && (
+                                <DropdownMenuItem onSelect={() => setMemberDialog({ type: "deactivate", member: m })}>
+                                  Desativar acesso
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
             </ul>
           ) : (
             <p className={styles.emptyText}>Nenhum membro encontrado.</p>
+          )}
+
+          {org && myUserId !== null && (
+            <div className={styles.leaveRow}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isOnlyOwner}
+                onClick={() => setMemberDialog({ type: "leave" })}
+              >
+                <LogOut size={14} /> Sair da organização
+              </Button>
+              {isOnlyOwner && <p className={styles.leaveHint}>Promova outro proprietário antes de sair.</p>}
+            </div>
+          )}
+
+          {canManageMembers && formerMembers.length > 0 && (
+            <details className={styles.formerMembers}>
+              <summary>Ex-membros ({formerMembers.length})</summary>
+              <ul className={styles.memberList}>
+                {formerMembers.map((m) => (
+                  <li key={m.membershipId} className={styles.memberRow}>
+                    <div>
+                      <div className={styles.memberName}>{m.displayName}</div>
+                      <div className={styles.memberEmail}>{m.email}</div>
+                    </div>
+                    <div className={styles.memberBadges}>
+                      <Badge variant="outline">{membershipRoleLabels[m.role]}</Badge>
+                      <Badge variant="secondary">{membershipStatusLabels[m.status]}</Badge>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className={styles.formerHint}>Para voltar, envie um novo convite.</p>
+            </details>
           )}
 
           {canManageMembers && invitesQuery.data && invitesQuery.data.invites.filter((i) => i.status === "pendente").length > 0 && (
@@ -311,6 +468,90 @@ export default function OrganizationDetailPage() {
             </>
           )}
         </section>
+
+        <Dialog open={memberDialog !== null} onOpenChange={(open) => !open && setMemberDialog(null)}>
+          <DialogContent>
+            {memberDialog?.type === "role" && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Alterar papel</DialogTitle>
+                  <DialogDescription>
+                    {memberDialog.member.displayName} passa de {membershipRoleLabels[memberDialog.member.role]} para o
+                    papel escolhido, com efeito imediato.
+                    {(memberDialog.role === "proprietario" ||
+                      memberDialog.member.role === "proprietario" ||
+                      ROLE_RANK[memberDialog.role] < ROLE_RANK[memberDialog.member.role]) &&
+                      " Esta mudança é um rebaixamento ou envolve proprietário: confirme com atenção."}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className={styles.inviteFormField}>
+                  <label className={styles.inviteFormLabel}>Novo papel</label>
+                  <Select
+                    value={memberDialog.role}
+                    onValueChange={(v) => setMemberDialog({ ...memberDialog, role: v as MembershipRole })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(org ? assignableRoles(org.myRole, memberDialog.member) : []).map((role) => (
+                        <SelectItem key={role} value={role}>
+                          {membershipRoleLabels[role]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <DialogFooter>
+                  <Button
+                    disabled={changeRoleMutation.isPending}
+                    onClick={() =>
+                      changeRoleMutation.mutate({ membershipId: memberDialog.member.membershipId, role: memberDialog.role })
+                    }
+                  >
+                    {changeRoleMutation.isPending ? "Salvando..." : "Confirmar"}
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+            {memberDialog?.type === "deactivate" && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Desativar acesso</DialogTitle>
+                  <DialogDescription>
+                    {memberDialog.member.displayName} perde o acesso imediatamente. Os registros dessa pessoa continuam
+                    no histórico. Para voltar, será preciso um novo convite.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    variant="destructive"
+                    disabled={deactivateMutation.isPending}
+                    onClick={() => deactivateMutation.mutate(memberDialog.member.membershipId)}
+                  >
+                    {deactivateMutation.isPending ? "Desativando..." : "Desativar acesso"}
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+            {memberDialog?.type === "leave" && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Sair da organização</DialogTitle>
+                  <DialogDescription>
+                    Você perde o acesso imediatamente. Os seus registros continuam no histórico. Para voltar, será
+                    preciso um novo convite.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button variant="destructive" disabled={leaveMutation.isPending} onClick={() => leaveMutation.mutate()}>
+                    {leaveMutation.isPending ? "Saindo..." : "Sair da organização"}
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
 
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>

@@ -252,3 +252,54 @@
   text-align: center;
   color: var(--muted-foreground);
 }
+
+.actionButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.actionButton:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.leaveRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-4);
+}
+
+.leaveHint,
+.formerHint {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.formerMembers {
+  margin-top: var(--spacing-4);
+  font-size: 0.875rem;
+}
+
+.formerMembers summary {
+  cursor: pointer;
+  color: var(--muted-foreground);
+  margin-bottom: var(--spacing-3);
+}
+
+@media (max-width: 480px) {
+  .memberRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

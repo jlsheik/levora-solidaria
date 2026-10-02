@@ -49,7 +49,7 @@ DOCUMENTAÇÃO DESATUALIZADA**.
 
 | Item | Estado real | Evidência | Próximo passo |
 |---|---|---|---|
-| Equipe da organização | Convida, aceita, revoga, lista. **Não altera papel, não desativa, não sai.** | 13 endpoints `organization-*`; só `organization-members_GET` lê membros | **Seção 3** |
+| Equipe da organização | Convida, aceita, revoga, lista, **altera papel, desativa membro e sai da organização** (Fase 73). Falta: botão direto de reativação (hoje é novo convite) e encerrar/arquivar organização | `organization-members-{role,deactivate,leave}_POST`; `test/membershipLifecycle.test.ts` | Decisões P-5/P-6 (seção 4) |
 | Ledger de atendimento | Só linhas `original` são criadas; o schema aceita `correction`/`reversal` mas nenhum código as produz | `grep` em `endpoints/` e `helpers/`: nenhum produtor | Seção 4 |
 | Discovery / conectores | Contrato `SourceConnector` + conector `manual`; nenhum conector real e **nenhum código chama `run()`** | `helpers/connectors*.tsx` (excluídos do build do servidor) | Seção 6 |
 | IA | Apoio opcional no matching; sem chave configurada; agentes dos documentos (Scout, Outreach…) não existem | `aiClient.tsx` usado só em `opportunityMatching.tsx` | Seção 6 |
@@ -57,12 +57,15 @@ DOCUMENTAÇÃO DESATUALIZADA**.
 | Edição de dados | Cria, mas não edita: organização, necessidade (título/quantidade/prioridade), item de inventário, fonte | Inventário completo de endpoints (Fase 71) | Sem decisão registrada; levar ao dono quando surgir demanda |
 | Autenticação de conta | Sem troca/redefinição de senha | `docs/SECURITY.md`, `docs/RATE_LIMITING.md` já registram | Seção 6 (depende de SMTP) |
 
-## 3. PRÓXIMO — gestão de membros
+## 3. CONCLUÍDO (Fase 73) — gestão de membros
 
-Especificação completa em **`docs/MEMBROS_ESPECIFICACAO.md`** (Fase 72).
-Alterar papel, desativar membro e sair da organização, com invariante de
-"sempre ao menos um proprietário ativo". Não depende de nada externo e não
-toca nas decisões congeladas (seção 8).
+Implementada conforme **`docs/MEMBROS_ESPECIFICACAO.md`** (Fase 72): alterar
+papel, desativar membro e sair da organização, com a invariante "sempre ao
+menos um proprietário ativo" garantida sob lock da organização, nova
+permissão `propriedade.gerencie` (só proprietário), aceite de convite que não
+sobrescreve membro ativo (A2) e exclusão de conta com a regra de proprietário
+único dentro da transação (A1). **PRÓXIMO**: plataforma de agentes, ver
+`docs/AGENTES_ESPECIFICACAO.md` (Fase 1 daquela especificação).
 
 ## 4. DECISÃO DE PRODUTO PENDENTE
 

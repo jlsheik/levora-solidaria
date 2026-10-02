@@ -6,7 +6,8 @@ import { schema } from "./account-delete_POST.schema.js";
 import { compare } from "bcryptjs";
 import { checkRateLimit, rateLimitResponse } from "../../helpers/rateLimit.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../../helpers/errorResponse.js";
+import { ConflictError, buildErrorResponse } from "../../helpers/errorResponse.js";
+import { lockOrganizationsInOrder } from "../../helpers/membershipAdmin.js";
 
 // Fase 52 (SEC-07): achado da varredura "qualquer endpoint com bcrypt" —
 // este endpoint comparava a senha (bcrypt.compare) sem nenhum limite,
@@ -66,46 +67,49 @@ export async function handle(request: Request) {
       });
     }
 
-    // Organização cujo único proprietário ativo é esta pessoa ficaria sem
-    // ninguém capaz de administrá-la (não existe ainda um fluxo de
-    // transferência de propriedade, ver docs/CONVITE_DE_MEMBROS.md) —
-    // bloqueia a exclusão nesse caso em vez de deixar a organização órfã.
-    // Uma query só (NOT EXISTS correlacionado), não uma por organização
-    // possuída — quem é dono de N organizações não gera N idas ao banco.
-    const blockingOrgs = await db
-      .selectFrom("memberships")
-      .innerJoin("organizations", "organizations.id", "memberships.organizationId")
-      .select(["organizations.id", "organizations.name"])
-      .where("memberships.userId", "=", user.id)
-      .where("memberships.role", "=", "proprietario")
-      .where("memberships.status", "=", "ativo")
-      .where((eb) =>
-        eb.not(
-          eb.exists(
-            eb
-              .selectFrom("memberships as otherOwner")
-              .select("otherOwner.id")
-              .whereRef("otherOwner.organizationId", "=", "memberships.organizationId")
-              .where("otherOwner.role", "=", "proprietario")
-              .where("otherOwner.status", "=", "ativo")
-              .where("otherOwner.userId", "!=", user.id)
+    await db.transaction().execute(async (trx) => {
+      // Organização cujo único proprietário ativo é esta pessoa ficaria sem
+      // ninguém capaz de administrá-la — bloqueia a exclusão nesse caso. A
+      // verificação roda DENTRO da transação, depois de travar (em ordem
+      // crescente de id) todas as organizações em que a pessoa é membro ativa:
+      // sem isso, dois co-proprietários excluindo a conta ao mesmo tempo
+      // deixariam a organização sem proprietário (docs/MEMBROS_ESPECIFICACAO.md, A1).
+      const memberships = await trx
+        .selectFrom("memberships")
+        .select("organizationId")
+        .where("userId", "=", user.id)
+        .where("status", "=", "ativo")
+        .execute();
+      await lockOrganizationsInOrder(trx, memberships.map((row) => row.organizationId));
+
+      const blockingOrgs = await trx
+        .selectFrom("memberships")
+        .innerJoin("organizations", "organizations.id", "memberships.organizationId")
+        .select(["organizations.id", "organizations.name"])
+        .where("memberships.userId", "=", user.id)
+        .where("memberships.role", "=", "proprietario")
+        .where("memberships.status", "=", "ativo")
+        .where((eb) =>
+          eb.not(
+            eb.exists(
+              eb
+                .selectFrom("memberships as otherOwner")
+                .select("otherOwner.id")
+                .whereRef("otherOwner.organizationId", "=", "memberships.organizationId")
+                .where("otherOwner.role", "=", "proprietario")
+                .where("otherOwner.status", "=", "ativo")
+                .where("otherOwner.userId", "!=", user.id)
+            )
           )
         )
-      )
-      .execute();
+        .execute();
 
-    const blockingOrganizations = blockingOrgs.map((org) => org.name);
+      const blockingOrganizations = blockingOrgs.map((org) => org.name);
 
-    if (blockingOrganizations.length > 0) {
-      return new Response(
-        superjson.stringify({
-          message: `Você é o único proprietário d${blockingOrganizations.length === 1 ? "a organização" : "estas organizações"}: ${blockingOrganizations.join(", ")}. Não é possível excluir sua conta sem deixá-la(s) sem administração — entre em contato com a equipe da Levora Solidária para transferir a titularidade antes de excluir sua conta.`,
-        }),
-        { status: 409, headers: { "Content-Type": "application/json" } }
-      );
-    }
+      if (blockingOrganizations.length > 0) {
+        throw new ConflictError(`Você é o único proprietário d${blockingOrganizations.length === 1 ? "a organização" : "estas organizações"}: ${blockingOrganizations.join(", ")}. Não é possível excluir sua conta sem deixá-la(s) sem administração — promova outro proprietário (aba Equipe) antes de excluir sua conta.`);
+      }
 
-    await db.transaction().execute(async (trx) => {
       await recordAuditLogEntry(
         {
           organizationId: null,

@@ -36,19 +36,19 @@ export const ALL_PERMISSIONS = [
   "auditoria.leia",
   "relatorios.leia",
   "organizacao.gerencie",
+  "propriedade.gerencie",
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
 
-// proprietario e administrador têm exatamente o mesmo conjunto de
-// permissões hoje — a distinção entre os dois papéis, no sistema atual,
-// não é de capacidade, e sim de quem criou a organização (ver
-// docs/CONVITE_DE_MEMBROS.md: convite não pode nomear "proprietario"). Se
-// no futuro um fluxo exigir uma ação exclusiva de proprietário (ex.:
-// transferir propriedade, excluir a organização), a diferença nasce aqui,
-// numa permissão que só `proprietario` tem — não como um caso especial
-// espalhado pelos endpoints.
-const ADMIN_PERMISSIONS = new Set<Permission>(ALL_PERMISSIONS);
+// proprietario tem todas as permissões; administrador tem todas MENOS
+// `propriedade.gerencie`, a única ação exclusiva de proprietário (alterar,
+// desativar ou promover quem é proprietário — ver
+// docs/MEMBROS_ESPECIFICACAO.md, [T-7], e docs/RBAC_PERMISSOES.md). A
+// diferença nasce aqui, numa permissão que só `proprietario` tem, não como
+// caso especial espalhado pelos endpoints.
+const OWNER_PERMISSIONS = new Set<Permission>(ALL_PERMISSIONS);
+const ADMIN_PERMISSIONS = new Set<Permission>(ALL_PERMISSIONS.filter((permission) => permission !== "propriedade.gerencie"));
 
 const OPERATOR_PERMISSIONS = new Set<Permission>([
   "membros.leia",
@@ -77,7 +77,7 @@ const VOLUNTEER_PERMISSIONS = new Set<Permission>([
 ]);
 
 export const ROLE_PERMISSIONS: Record<MembershipRole, ReadonlySet<Permission>> = {
-  proprietario: ADMIN_PERMISSIONS,
+  proprietario: OWNER_PERMISSIONS,
   administrador: ADMIN_PERMISSIONS,
   operador: OPERATOR_PERMISSIONS,
   voluntario: VOLUNTEER_PERMISSIONS,

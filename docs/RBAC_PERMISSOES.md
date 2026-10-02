@@ -40,14 +40,16 @@ igual à leitura de inventário/necessidades.
 
 Definido uma vez em `ROLE_PERMISSIONS` (`src/helpers/permissions.tsx`):
 
-- **proprietario** e **administrador**: todas as permissões. Os dois papéis
-  têm exatamente o mesmo conjunto hoje — a distinção entre eles no sistema
-  atual não é de capacidade, é de quem criou a organização (convite não
-  pode nomear "proprietario", ver `docs/CONVITE_DE_MEMBROS.md`). Se um
-  fluxo futuro precisar de uma ação exclusiva de proprietário (transferir
-  propriedade, excluir a organização), a diferença nasce como uma nova
-  permissão que só `proprietario` tem — não como caso especial espalhado
-  pelos endpoints.
+- **proprietario**: todas as permissões, inclusive `propriedade.gerencie`.
+- **administrador**: todas as permissões **exceto `propriedade.gerencie`**,
+  a única ação exclusiva de proprietário: qualquer operação de gestão de
+  membros em que o alvo ou o novo papel seja `proprietario` (alterar,
+  desativar ou promover). A diferença nasce numa permissão que só
+  `proprietario` tem — não como caso especial espalhado pelos endpoints
+  (ver `docs/MEMBROS_ESPECIFICACAO.md`, [T-7]). Convite continua sem poder
+  nomear "proprietario"; o caminho para haver mais de um proprietário é a
+  promoção por outro proprietário. Os dois papéis deixaram de ter o mesmo
+  conjunto de propósito: `test/permissions.test.ts` agora fixa a diferença.
 - **operador**: todas as permissões operacionais (`*.leia`, `*.lance`,
   `*.gerencie`, `atribuicoes.decida`, `arquivos.envie`) — mas nenhuma
   administrativa (`membros.gerencie`, `aprovacoes.*`, `auditoria.leia`,
