@@ -215,15 +215,33 @@ export async function getNeedFulfillmentBalance(trx: Transaction<DB> | Kysely<DB
  * nenhuma linha no ledger simplesmente não aparecem no Map — o chamador
  * trata a ausência como saldo 0 (`?? 0`), nunca como erro.
  */
-export async function getNeedFulfillmentBalanceBatch(trx: Transaction<DB> | Kysely<DB>, needIds: number[]): Promise<Map<number, number>> {
+/**
+ * Janela de tempo OPCIONAL da fórmula do saldo (Fase 85, Prestação de Contas). Sem janela = todo o histórico
+ * (comportamento anterior, usado por `needs_GET`). `before`: eventos com `created_at < before` ("acumulado até o
+ * fim"). `from`/`to`: eventos com `created_at >= from` e `< to` (semiaberto — "movimentação do período").
+ * A fórmula (± quantity, is_countable) continua escrita AQUI, uma única vez.
+ */
+export interface NeedFulfillmentWindow {
+  before?: Date;
+  from?: Date;
+  to?: Date;
+}
+
+export async function getNeedFulfillmentBalanceBatch(
+  trx: Transaction<DB> | Kysely<DB>,
+  needIds: number[],
+  window: NeedFulfillmentWindow = {}
+): Promise<Map<number, number>> {
   if (needIds.length === 0) return new Map();
-  const rows = await trx
+  let query = trx
     .selectFrom("needFulfillments")
     .select(["needId", () => sql<string>`coalesce(sum(case when entry_type = 'reversal' then -quantity else quantity end), 0)`.as("total")])
     .where("needId", "in", needIds)
-    .where("isCountable", "=", true)
-    .groupBy("needId")
-    .execute();
+    .where("isCountable", "=", true);
+  if (window.before) query = query.where("createdAt", "<", window.before);
+  if (window.from) query = query.where("createdAt", ">=", window.from);
+  if (window.to) query = query.where("createdAt", "<", window.to);
+  const rows = await query.groupBy("needId").execute();
 
   const balances = new Map<number, number>();
   for (const row of rows) {
