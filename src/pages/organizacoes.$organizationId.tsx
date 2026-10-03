@@ -10,6 +10,7 @@ import { postOrganizationMembersRole } from "../endpoints/organization-members-r
 import { postOrganizationMembersDeactivate } from "../endpoints/organization-members-deactivate_POST.schema";
 import { postOrganizationMembersLeave } from "../endpoints/organization-members-leave_POST.schema";
 import { useAuth } from "../helpers/useAuth";
+import { ApiRequestError } from "../helpers/apiRequestError";
 import type { MembershipRole } from "../helpers/schema";
 import type { OutputType as MembersOutput } from "../endpoints/organization-members_GET.schema";
 import { getAuditLog } from "../endpoints/audit-log_GET.schema";
@@ -165,11 +166,36 @@ export default function OrganizationDetailPage() {
     queryClient.invalidateQueries({ queryKey: ["audit-log", organizationId] });
   };
 
+  // Mapeia o status HTTP da falha (Fase 73). 409 é conflito de estado (a
+  // equipe mudou); 403 pode ser papel rebaixado ou acesso perdido — a lista de
+  // organizações é recarregada e, se o acesso acabou, a página cai no estado
+  // "não é membro". Texto de 5xx nunca é mostrado: mensagem genérica.
   const handleMemberError = (err: unknown, fallback: string) => {
-    toast.error(err instanceof Error ? err.message : fallback);
-    toast.info("A equipe pode ter sido alterada por outra pessoa; atualizamos a lista.");
-    refreshTeam();
     setMemberDialog(null);
+    const status = err instanceof ApiRequestError ? err.status : null;
+    const serverMessage = err instanceof ApiRequestError ? err.message : fallback;
+
+    if (status === 401) {
+      toast.error("Sua sessão expirou. Entre novamente.");
+      // Mesmo reset que o logout do app faz (helpers/useAuth.tsx): sem ele, quem
+      // entrar a seguir nesta aba veria o cache (papel, ações de gestão) do usuário anterior.
+      queryClient.resetQueries();
+      navigate("/login");
+    } else if (status === 403) {
+      toast.error(serverMessage);
+      refreshTeam();
+    } else if (status === 404) {
+      toast.error("Este membro não faz mais parte da equipe.");
+      refreshTeam();
+    } else if (status === 409) {
+      toast.error(serverMessage);
+      toast.info("A equipe pode ter sido alterada por outra pessoa; atualizamos a lista.");
+      refreshTeam();
+    } else if (status === 429) {
+      toast.error(serverMessage);
+    } else {
+      toast.error("Não foi possível concluir a ação. Tente novamente em instantes.");
+    }
   };
 
   const changeRoleMutation = useMutation({
@@ -283,7 +309,7 @@ export default function OrganizationDetailPage() {
             {canManageMembers && (
               <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm">
+                  <Button size="sm" className={styles.touchTarget}>
                     <UserPlus size={14} /> Convidar
                   </Button>
                 </DialogTrigger>
@@ -376,6 +402,7 @@ export default function OrganizationDetailPage() {
                             <DropdownMenuContent align="end">
                               {roleOptions.length > 0 && (
                                 <DropdownMenuItem
+                                  className={styles.touchTarget}
                                   onSelect={() => setMemberDialog({ type: "role", member: m, role: roleOptions.find((role) => role !== "proprietario") ?? roleOptions[0] })}
                                 >
                                   Alterar papel
@@ -383,7 +410,10 @@ export default function OrganizationDetailPage() {
                               )}
                               {roleOptions.length > 0 && canDeactivate && <DropdownMenuSeparator />}
                               {canDeactivate && (
-                                <DropdownMenuItem onSelect={() => setMemberDialog({ type: "deactivate", member: m })}>
+                                <DropdownMenuItem
+                                  className={styles.touchTarget}
+                                  onSelect={() => setMemberDialog({ type: "deactivate", member: m })}
+                                >
                                   Desativar acesso
                                 </DropdownMenuItem>
                               )}
@@ -404,6 +434,7 @@ export default function OrganizationDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
+                className={styles.touchTarget}
                 disabled={isOnlyOwner}
                 onClick={() => setMemberDialog({ type: "leave" })}
               >
@@ -490,7 +521,7 @@ export default function OrganizationDetailPage() {
                     value={memberDialog.role}
                     onValueChange={(v) => setMemberDialog({ ...memberDialog, role: v as MembershipRole })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={styles.touchTarget}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -504,6 +535,7 @@ export default function OrganizationDetailPage() {
                 </div>
                 <DialogFooter>
                   <Button
+                    className={styles.touchTarget}
                     disabled={changeRoleMutation.isPending}
                     onClick={() =>
                       changeRoleMutation.mutate({ membershipId: memberDialog.member.membershipId, role: memberDialog.role })
@@ -526,6 +558,7 @@ export default function OrganizationDetailPage() {
                 <DialogFooter>
                   <Button
                     variant="destructive"
+                    className={styles.touchTarget}
                     disabled={deactivateMutation.isPending}
                     onClick={() => deactivateMutation.mutate(memberDialog.member.membershipId)}
                   >
@@ -544,7 +577,12 @@ export default function OrganizationDetailPage() {
                   </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
-                  <Button variant="destructive" disabled={leaveMutation.isPending} onClick={() => leaveMutation.mutate()}>
+                  <Button
+                    variant="destructive"
+                    className={styles.touchTarget}
+                    disabled={leaveMutation.isPending}
+                    onClick={() => leaveMutation.mutate()}
+                  >
                     {leaveMutation.isPending ? "Saindo..." : "Sair da organização"}
                   </Button>
                 </DialogFooter>

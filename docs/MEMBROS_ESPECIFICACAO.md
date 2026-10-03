@@ -1,5 +1,13 @@
 # Especificação — ciclo de vida dos membros da organização
 
+> **Status (Fase 73): IMPLEMENTADO.** Decisões de produto confirmadas:
+> **P-1 = SIM** (uma organização pode ter mais de um proprietário e um
+> proprietário pode promover outro) e **P-2 = SIM** (um administrador pode
+> alterar o papel de outro administrador). P-3 a P-7 seguem os padrões da
+> seção 12. O comportamento efetivamente implementado, o que a auditoria da
+> Fase 73 corrigiu e as evidências estão na **seção 13**. O restante deste
+> documento é a especificação original da Fase 72, preservada.
+
 Fase 72. **Especificação, não implementação.** Nenhum código, migration,
 tabela, endpoint, componente, permissão ou sessão foi alterado. Escrita
 sobre o checkpoint `dbc4fe3` para que a fase seguinte possa implementar
@@ -433,3 +441,123 @@ proprietário (alterar papel entre administrador/operador/voluntário,
 desativar e sair para esses papéis). P-1 e P-2 definem as regras de
 proprietário e de hierarquia e devem ser confirmadas antes de começar; os
 padrões acima são consistentes com o código e a documentação existentes.
+
+## 13. Implementação (Fase 73) — comportamento final e evidências
+
+### 13.1 Decisões confirmadas
+
+| ID | Decisão | Efeito implementado |
+|---|---|---|
+| **P-1 = SIM** | Mais de um proprietário; proprietário promove outro | `organization-members-role_POST` aceita `proprietario` como novo papel quando o ator tem `propriedade.gerencie`. Transferir propriedade = promover o sucessor e depois rebaixar-se ou sair |
+| **P-2 = SIM** | Administrador altera outro administrador | Administrador altera/desativa operador, voluntário e outro administrador; **nunca** toca em proprietário (403) |
+| P-3 a P-7 | Padrões da seção 12 | Ex-membros só para quem tem `membros.gerencie`; gestão bloqueada com a organização não `ativa`, exceto "Sair"; reativação só por novo convite; sem campo de motivo |
+
+### 13.2 Endpoints
+
+| Endpoint | Entrada | Regras |
+|---|---|---|
+| `organization-members-role_POST` | `organizationId`, `membershipId`, `role` | `membros.gerencie` + organização `ativa`. Alvo ou novo papel `proprietario` exige `propriedade.gerencie`. Auto-alteração só para baixo. Rebaixar proprietário exige outro proprietário ativo |
+| `organization-members-deactivate_POST` | `organizationId`, `membershipId` | `membros.gerencie` + organização `ativa`. Não vale para si mesmo (409, usar "Sair"). Alvo proprietário: `propriedade.gerencie` + outro proprietário ativo. Desativação lógica (`inativo`), nunca `DELETE` |
+| `organization-members-leave_POST` | `organizationId` | Basta ser membro ativo; funciona com a organização em qualquer status. Proprietário só sai havendo outro proprietário ativo (409) |
+
+Erros: 400 (Zod), 401, 403 (`OrganizationAccessError`), 404 (membership de
+outra organização ou inexistente), 409 (`ConflictError`), 429 (limite de 30/h
+por usuário, bucket `organization-members`).
+
+**Ordem das validações (ajuste da auditoria da Fase 73):** a autorização sobre
+proprietário vem **antes** dos conflitos de estado. Quem não tem
+`propriedade.gerencie` recebe 403 sempre ao tentar tocar em proprietário,
+mesmo que ele já tenha saído; antes, o resultado dependia da ordem
+(`409 "já não está ativo"` revelava o estado a quem não podia agir).
+
+### 13.3 Permissão
+
+`propriedade.gerencie` existe só em `proprietario` (`permissions.tsx`).
+`administrador` tem as outras 19. O teste que fixava a igualdade entre os dois
+papéis foi atualizado de propósito. Sair não exige permissão.
+
+### 13.4 Invariante e locks
+
+**I1 — toda organização tem ao menos um proprietário ativo**, garantida na
+aplicação, sob lock, sem migration e sem trigger (T-2). Protocolo:
+
+1. `SELECT … FROM organizations … FOR NO KEY UPDATE` (lock da organização);
+2. membership do ator (relida e travada) → membership do alvo (filtrada pela
+   organização) → convite;
+3. todas as regras são revalidadas com o estado relido sob o lock.
+
+Ordem global **organizations → memberships → organization_invites**, sem
+exceção. O aceite de convite, que antes travava o convite antes da membership,
+foi corrigido na auditoria (e deixou de usar `JOIN … FOR UPDATE`, que promovia
+o lock da organização para `FOR UPDATE`). A exclusão de conta trava várias
+organizações em ordem crescente de `id`.
+
+### 13.5 Aceite de convite (A2)
+
+- membro **ativo** → 409 ("Você já é membro desta organização"); papel
+  intocado; o convite continua pendente;
+- membro **inativo** → reativa com o papel **do convite**; auditoria
+  `organizacao.convite_aceito` com `reativacao: true` e `papelAnterior`;
+- convite **expirado** ou **revogado** → 410, não reativa;
+- um novo convite revoga o anterior: o token antigo nunca tem precedência;
+- convite não pode nomear `proprietario` (400).
+
+### 13.6 Exclusão de conta (A1)
+
+A verificação "único proprietário" roda **dentro** da transação, depois de
+travar as organizações do usuário em ordem crescente de `id`. Se for o último
+proprietário de alguma organização → 409; havendo outro proprietário ativo, a
+exclusão prossegue. Provado por um teste determinístico (a exclusão espera o
+lock) e por testes de concorrência.
+
+### 13.7 Sessões
+
+Nenhuma sessão é invalidada: o guard relê papel e status a cada requisição.
+Provado: depois de rebaixar, a mesma sessão perde `membros.gerencie` na
+requisição seguinte e continua lendo; depois de sair/ser desativado, recebe 403
+e a organização some de `organizations_GET`, e a sessão segue válida para
+outras organizações.
+
+### 13.8 Auditoria
+
+`organizacao.membro_papel_alterado` (`alvoUserId`, `papelAnterior`,
+`papelNovo`), `organizacao.membro_desativado` (`alvoUserId`, `papelNoMomento`),
+`organizacao.membro_saiu` (`papelNoMomento`) e `organizacao.convite_aceito`
+(`reativacao`, `papelAnterior`). Só ids; nenhuma recusa gera evento; cadeia de
+hash verificada pelos testes.
+
+### 13.9 Interface
+
+Aba Equipe: menu de ações por membro (só para quem gerencia, nunca na própria
+linha, com os papéis permitidos pela matriz), "Sair da organização" para todos
+(desabilitado para o único proprietário, com a explicação), seção recolhida de
+ex-membros e diálogos de confirmação. O erro é mapeado pelo status HTTP
+(`ApiRequestError`): **401** → aviso e `/login` com reset do cache; **403** →
+mensagem estável e lista recarregada; **404**; **409** → mensagem do servidor
++ aviso de equipe alterada; **429**; qualquer outra falha → mensagem
+genérica (texto de 5xx nunca é exibido). Alvos de toque de ~44 px (botões,
+itens de menu, seletor e botões dos diálogos) em telas ≤ 768 px.
+
+### 13.10 Evidências
+
+- **Testes:** 460/460 (434 anteriores + 26 novos), em worktree isolado só com
+  as alterações da fase e banco de teste próprio; typecheck dos dois projetos,
+  `build`, `build:server` (57 endpoints) e `npm audit` (0).
+- **Concorrência (Postgres real, `Promise.all`):** casos 1–6 do briefing,
+  mistura de 8 operações, e provas determinísticas de que sair, aceitar convite
+  e excluir conta **esperam o lock** e decidem com o estado confirmado.
+- **Controle negativo:** removendo o lock da organização, os testes falham com
+  `deadlock detected (40P01)`; removendo o lock da exclusão de conta, os testes
+  de concorrência e o determinístico falham. Os locks foram restaurados.
+- **Central Visual (aplicação real, banco descartável semeado com o seed
+  oficial):** promoção a proprietário, desativação, saída, 409 por alteração
+  concorrente, 403 por rebaixamento concorrente, 401 por sessão expirada;
+  375, 390, 768 px e desktop; 8 rotas × 3 larguras sem overflow; `/plataforma`.
+
+### 13.11 Limites conhecidos
+
+- O "X" de fechar do componente `Dialog` compartilhado mede ~30 px; é
+  anterior a esta fase e usado em todo o app.
+- O `Input` compartilhado (`width: 100%` + `content-box`) segue como na
+  Fase 69.
+- Notificar por e-mail a pessoa afetada depende de SMTP (bloqueado).

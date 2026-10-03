@@ -1,5 +1,6 @@
 import { z } from "zod";
 import superjson from "superjson";
+import { ApiRequestError } from "../helpers/apiRequestError.js";
 import { MembershipRoleArrayValues, type MembershipRole } from "../helpers/schema.js";
 
 export const schema = z.object({
@@ -29,8 +30,13 @@ export const postOrganizationMembersRole = async (
   });
 
   if (!result.ok) {
-    const errorData = superjson.parse<{ message: string }>(await result.text());
-    throw new Error(errorData.message || "Não foi possível alterar o papel");
+    let message = "";
+    try {
+      message = superjson.parse<{ message?: string }>(await result.text()).message ?? "";
+    } catch {
+      // corpo que não é JSON (ex.: 502 do proxy): o status continua sendo repassado
+    }
+    throw new ApiRequestError(message || "Não foi possível alterar o papel", result.status);
   }
 
   return superjson.parse<OutputType>(await result.text());

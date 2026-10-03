@@ -39,10 +39,14 @@ export async function handle(request: Request) {
       if (target.userId === actor.userId) {
         throw new ConflictError('Para deixar a organização, use a opção "Sair da organização"');
       }
+      // Autorização ANTES de conflito de estado: quem não pode tocar em
+      // proprietário recebe 403 sempre, qualquer que seja o estado atual do
+      // alvo (não revela se o proprietário já saiu e não depende da ordem).
+      if (target.role === "proprietario") assertCanTouchOwner(actor);
+
       if (target.status !== "ativo") throw new ConflictError("Este membro já não está ativo");
 
       if (target.role === "proprietario") {
-        assertCanTouchOwner(actor);
         await assertAnotherActiveOwnerRemains(trx, input.organizationId);
       }
 

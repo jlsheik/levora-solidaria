@@ -41,7 +41,12 @@ descreve o fluxo real que substitui isso.
    - ao aceitar, a membership é criada (ou reativada, se já existia
      inativa) com o papel do convite, e o convite muda para `aceito`. Se a
      pessoa já é membro **ativo**, o aceite é recusado (409) e o papel
-     atual não muda: um convite antigo nunca rebaixa nem promove. O aceite
+     atual não muda: um convite antigo nunca rebaixa nem promove. Convite
+     **expirado** ou **revogado** não reativa ninguém (410), e um novo convite
+     para o mesmo e-mail revoga o anterior, então o token antigo nunca tem
+     precedência (Fase 73, provado em `test/membershipLifecycle.test.ts`). A
+     reativação de um ex-membro é auditada em `organizacao.convite_aceito` com
+     `reativacao: true`. O aceite
      trava a organização antes de tocar em `memberships`, como as demais
      mutações de membros (`docs/MEMBROS_ESPECIFICACAO.md`, seção 5).
 5. Tudo gera evento de auditoria: `organizacao.convite_criado`,

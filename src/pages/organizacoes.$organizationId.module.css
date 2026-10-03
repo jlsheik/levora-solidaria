@@ -303,3 +303,11 @@
     flex-direction: column;
   }
 }
+
+/* Fase 73: alvos de toque de ~44px em telas estreitas/tablet (botões de equipe). */
+@media (max-width: 768px) {
+  .touchTarget,
+  .revokeButton {
+    min-height: 2.75rem;
+  }
+}

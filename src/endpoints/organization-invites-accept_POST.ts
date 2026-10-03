@@ -27,20 +27,31 @@ export async function handle(request: Request) {
       if (!inviteOrganization) return { type: "invalido" as const };
       await lockOrganization(trx, inviteOrganization.organizationId);
 
+      // 2º da ordem global: a membership de quem aceita (se existir), travada
+      // ANTES da linha do convite. Só a linha do convite é travada abaixo —
+      // sem JOIN com `organizations`, que já está travada com NO KEY UPDATE e
+      // não deve ser promovida a FOR UPDATE.
+      const existingMembership = await trx
+        .selectFrom("memberships")
+        .select(["id", "role", "status"])
+        .where("organizationId", "=", inviteOrganization.organizationId)
+        .where("userId", "=", user.id)
+        .forUpdate()
+        .executeTakeFirst();
+
+      // 3º da ordem global: o convite.
       const invite = await trx
         .selectFrom("organizationInvites")
-        .innerJoin("organizations", "organizations.id", "organizationInvites.organizationId")
         .select([
-          "organizationInvites.id",
-          "organizationInvites.status",
-          "organizationInvites.email",
-          "organizationInvites.role",
-          "organizationInvites.expiresAt",
-          "organizationInvites.organizationId",
-          "organizationInvites.invitedByUserId",
-          "organizations.name as organizationName",
+          "id",
+          "status",
+          "email",
+          "role",
+          "expiresAt",
+          "organizationId",
+          "invitedByUserId",
         ])
-        .where("organizationInvites.tokenHash", "=", tokenHash)
+        .where("tokenHash", "=", tokenHash)
         .forUpdate()
         .executeTakeFirst();
 
@@ -53,13 +64,11 @@ export async function handle(request: Request) {
         return { type: "email_diferente" as const };
       }
 
-      const existingMembership = await trx
-        .selectFrom("memberships")
-        .select(["id", "role", "status"])
-        .where("organizationId", "=", invite.organizationId)
-        .where("userId", "=", user.id)
-        .forUpdate()
-        .executeTakeFirst();
+      const organizationRow = await trx
+        .selectFrom("organizations")
+        .select("name")
+        .where("id", "=", invite.organizationId)
+        .executeTakeFirstOrThrow();
 
       // Convite antigo nunca pode rebaixar/promover quem já é membro ativo.
       if (existingMembership?.status === "ativo") {
@@ -109,7 +118,7 @@ export async function handle(request: Request) {
         trx
       );
 
-      return { type: "sucesso" as const, organizationId: invite.organizationId, organizationName: invite.organizationName, role: invite.role };
+      return { type: "sucesso" as const, organizationId: invite.organizationId, organizationName: organizationRow.name, role: invite.role };
     });
 
     if (result.type === "invalido") {

@@ -37,12 +37,14 @@ export async function handle(request: Request) {
       const target = await readTargetUnderLock(trx, input.organizationId, input.membershipId);
       if (!target) return null;
 
-      if (target.status !== "ativo") throw new ConflictError("Este membro já não está ativo");
-      if (target.role === input.role) throw new ConflictError("Este membro já tem este papel");
-
+      // Autorização ANTES de conflito de estado (ver deactivate): quem não pode
+      // tocar em proprietário recebe 403 sempre, independentemente do estado.
       if (target.role === "proprietario" || input.role === "proprietario") {
         assertCanTouchOwner(actor);
       }
+
+      if (target.status !== "ativo") throw new ConflictError("Este membro já não está ativo");
+      if (target.role === input.role) throw new ConflictError("Este membro já tem este papel");
 
       if (target.userId === actor.userId && roleRank(input.role) > roleRank(target.role)) {
         throw new ConflictError("Você só pode rebaixar o seu próprio papel");
