@@ -63,6 +63,10 @@ export type StockTransactionType = "ajuste" | "entrada" | "saida";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export type PlatformAccessLevel = "admin" | "owner";
+
+export type PlatformAccessStatus = "active" | "revoked";
+
 export type UserRole = "admin" | "user";
 
 export interface ApprovalRequests {
@@ -490,10 +494,14 @@ export interface Organizations {
 }
 
 export interface Sessions {
+  absoluteExpiresAt: Generated<Timestamp>;
   createdAt: Generated<Timestamp | null>;
   expiresAt: Timestamp;
   id: string;
   lastAccessed: Generated<Timestamp | null>;
+  lastReauthAt: Timestamp | null;
+  mfaVerifiedAt: Timestamp | null;
+  primaryMethod: string | null;
   userId: number;
 }
 
@@ -540,6 +548,7 @@ export interface UserPasswords {
 }
 
 export interface Users {
+  anonymizedAt: Timestamp | null;
   avatarUrl: string | null;
   createdAt: Generated<Timestamp | null>;
   displayName: string;
@@ -547,6 +556,23 @@ export interface Users {
   id: Generated<number>;
   role: Generated<UserRole>;
   updatedAt: Generated<Timestamp | null>;
+}
+
+export interface PlatformAccess {
+  grantedAt: Generated<Timestamp>;
+  grantedByUserId: number | null;
+  grantOrigin: Generated<string>;
+  level: PlatformAccessLevel;
+  revokedAt: Timestamp | null;
+  revokedByUserId: number | null;
+  revokedReason: string | null;
+  status: Generated<PlatformAccessStatus>;
+  userId: number;
+}
+
+export interface PlatformState {
+  id: number;
+  ownerBootstrappedAt: Timestamp | null;
 }
 
 export interface DB {
@@ -571,6 +597,8 @@ export interface DB {
   platformAssignmentSettings: PlatformAssignmentSettings;
   organizationServiceAreas: OrganizationServiceAreas;
   organizations: Organizations;
+  platformAccess: PlatformAccess;
+  platformState: PlatformState;
   sessions: Sessions;
   needClosures: NeedClosures;
   sources: Sources;
@@ -586,6 +614,7 @@ export interface DB {
 
 
 // Use these for zod schema enums or other purposes, since the kysely enums are just types
+export const PlatformAccessLevelArrayValues: [PlatformAccessLevel, ...PlatformAccessLevel[]] = ["admin","owner"];
 export const UserRoleArrayValues: [UserRole, ...UserRole[]] = ["admin","user"];
 export const OrganizationTypeArrayValues: [OrganizationType, ...OrganizationType[]] = ["igreja","organizacao_social","ponto_distribuicao"];
 export const OrganizationStatusArrayValues: [OrganizationStatus, ...OrganizationStatus[]] = ["ativa","em_analise","suspensa"];

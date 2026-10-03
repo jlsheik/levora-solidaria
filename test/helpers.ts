@@ -112,10 +112,18 @@ export async function addMembership(organizationId: number, userId: number, role
     .execute();
 }
 
-/** Usuário com `role: "admin"` — o único papel que passa por `requirePlatformAdmin`. */
+/** Usuário com `platform_access` ativo (nível `admin`) — o que passa por `requirePlatformAdmin`. */
 export async function createPlatformAdmin(overrides?: { email?: string; displayName?: string }): Promise<AuthenticatedTestUser> {
   const user = await createTestUser(overrides);
-  await db.updateTable("users").set({ role: "admin" }).where("id", "=", user.id).execute();
+  await db.insertInto("platformAccess").values({ userId: user.id, level: "admin", status: "active", grantOrigin: "test" }).execute();
+  const cookie = await createSessionCookie(user.id);
+  return { userId: user.id, email: user.email, cookie };
+}
+
+/** Platform Owner (no máximo 1 ativo por vez — índice único parcial). */
+export async function createPlatformOwner(overrides?: { email?: string; displayName?: string }): Promise<AuthenticatedTestUser> {
+  const user = await createTestUser(overrides);
+  await db.insertInto("platformAccess").values({ userId: user.id, level: "owner", status: "active", grantOrigin: "test" }).execute();
   const cookie = await createSessionCookie(user.id);
   return { userId: user.id, email: user.email, cookie };
 }

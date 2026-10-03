@@ -774,6 +774,117 @@ CREATE TABLE files (
 );
 CREATE INDEX idx_files_org ON files(organization_id);
 
+-- ============================================================
+-- Fase 89 — Fundação de identidade (espelha db/migrations/0015_identity_foundation.sql, sem os trechos só de migração)
+-- ============================================================
+-- ------------------------------------------------------------
+-- users.anonymized_at
+-- ------------------------------------------------------------
+ALTER TABLE users ADD COLUMN anonymized_at TIMESTAMPTZ;
+
+
+-- ------------------------------------------------------------
+-- platform_access
+-- ------------------------------------------------------------
+CREATE TYPE platform_access_level AS ENUM ('owner', 'admin');
+CREATE TYPE platform_access_status AS ENUM ('active', 'revoked');
+
+CREATE TABLE platform_access (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE RESTRICT,
+  level platform_access_level NOT NULL,
+  status platform_access_status NOT NULL DEFAULT 'active',
+  granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- NULL = não foi um usuário que concedeu (migração, bootstrap offline, seed sintético de staging).
+  granted_by_user_id INTEGER REFERENCES users(id),
+  grant_origin TEXT NOT NULL DEFAULT 'owner_grant',
+  revoked_at TIMESTAMPTZ,
+  revoked_by_user_id INTEGER REFERENCES users(id),
+  revoked_reason TEXT,
+  CONSTRAINT platform_access_status_consistency CHECK ((status = 'active') = (revoked_at IS NULL))
+);
+
+-- INVARIANTE: no máximo UM Platform Owner ativo (mesmo sob concorrência).
+CREATE UNIQUE INDEX platform_access_single_active_owner ON platform_access ((1)) WHERE level = 'owner' AND status = 'active';
+CREATE INDEX idx_platform_access_active ON platform_access (level) WHERE status = 'active';
+
+-- Singleton reservado para o bootstrap offline (Fase 90); preenchido pelo backfill quando já existe owner.
+CREATE TABLE platform_state (
+  id SMALLINT PRIMARY KEY CHECK (id = 1),
+  owner_bootstrapped_at TIMESTAMPTZ
+);
+INSERT INTO platform_state (id) VALUES (1);
+
+CREATE FUNCTION platform_access_guard() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'platform_access: linhas não são apagadas; use status = revoked' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  IF NEW.user_id <> OLD.user_id THEN
+    RAISE EXCEPTION 'platform_access: user_id é imutável' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER platform_access_guard BEFORE UPDATE OR DELETE ON platform_access FOR EACH ROW EXECUTE FUNCTION platform_access_guard();
+
+-- Último owner: uma mudança que remove/rebaixa/revoga um owner ATIVO só é aceita se, no COMMIT, existir um owner ativo.
+-- Deferido de propósito: a transferência (antigo → admin, novo → owner) acontece na MESMA transação.
+CREATE FUNCTION platform_access_keep_owner() RETURNS trigger AS $$
+BEGIN
+  IF OLD.level = 'owner' AND OLD.status = 'active'
+     AND NOT (TG_OP = 'UPDATE' AND NEW.level = 'owner' AND NEW.status = 'active') THEN
+    IF NOT EXISTS (SELECT 1 FROM platform_access WHERE level = 'owner' AND status = 'active') THEN
+      RAISE EXCEPTION 'platform_access: o último Platform Owner ativo não pode ser removido, rebaixado ou revogado' USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+CREATE CONSTRAINT TRIGGER platform_access_keep_owner AFTER UPDATE OR DELETE ON platform_access
+  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform_access_keep_owner();
+
+-- ------------------------------------------------------------
+-- Backfill: users.role = 'admin' → platform_access (determinístico; não adivinha)
+-- ------------------------------------------------------------
+
+-- users.role = 'admin' deixa de ser aceito: a autorização de plataforma é platform_access.
+CREATE FUNCTION users_forbid_admin_role() RETURNS trigger AS $$
+BEGIN
+  IF NEW.role = 'admin' THEN
+    RAISE EXCEPTION 'users.role = admin não é mais permitido; a autorização de plataforma é platform_access' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER users_forbid_admin_role BEFORE INSERT OR UPDATE OF role ON users FOR EACH ROW EXECUTE FUNCTION users_forbid_admin_role();
+
+-- Titular de platform_access ATIVO nunca é anonimizado (evita "admin sem identidade" e conta de plataforma apagada por LGPD).
+CREATE FUNCTION users_protect_platform_holder() RETURNS trigger AS $$
+BEGIN
+  IF NEW.anonymized_at IS NOT NULL AND OLD.anonymized_at IS NULL
+     AND EXISTS (SELECT 1 FROM platform_access WHERE user_id = NEW.id AND status = 'active') THEN
+    RAISE EXCEPTION 'users: titular de platform_access ativo não pode ser anonimizado; revogue/transfira o acesso antes' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER users_protect_platform_holder BEFORE UPDATE OF anonymized_at ON users FOR EACH ROW EXECUTE FUNCTION users_protect_platform_holder();
+
+-- ------------------------------------------------------------
+-- sessions
+-- ------------------------------------------------------------
+ALTER TABLE sessions
+  ADD COLUMN absolute_expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '30 days'),
+  ADD COLUMN primary_method TEXT,
+  ADD COLUMN mfa_verified_at TIMESTAMPTZ,
+  ADD COLUMN last_reauth_at TIMESTAMPTZ;
+
+
+-- ------------------------------------------------------------
+-- user_passwords: 0..1 senha por usuário
+-- ------------------------------------------------------------
+ALTER TABLE user_passwords ADD CONSTRAINT user_passwords_user_id_key UNIQUE (user_id);
+
 COMMIT;
 
 -- ============================================================

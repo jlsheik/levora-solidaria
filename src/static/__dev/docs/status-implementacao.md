@@ -12,8 +12,9 @@
 ## Como testar agora (fase 4)
 
 1. Alguém precisa ser operador de plataforma: no banco, rode
-   `UPDATE users SET role = 'admin' WHERE email = 'seu-email@...'` para a
-   conta que vai operar a Levora (isso não é feito pela interface de
+   `INSERT INTO platform_access (user_id, level, grant_origin) SELECT id, 'owner', 'manual' FROM users WHERE email = 'seu-email@...'`
+   (Fase 89: `users.role = 'admin'` foi aposentado — o banco recusa esse valor; o poder de plataforma é `platform_access`)
+   para a conta que vai operar a Levora (isso não é feito pela interface de
    propósito — é uma decisão que só o dono do projeto deve tomar).
 2. Logado como esse usuário, vá em "Operação de plataforma" (aparece no
    painel para quem é `admin`).

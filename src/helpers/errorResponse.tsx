@@ -17,9 +17,12 @@ import { PlatformAccessError } from "./platformAccess.js";
  * caso desde a primeira versão.
  */
 export class ConflictError extends Error {
-  constructor(message: string) {
+  /** Código estável opcional de domínio (ex.: `plataforma_acesso_ativo`), devolvido ao cliente junto da mensagem. */
+  readonly code?: string;
+  constructor(message: string, code?: string) {
     super(message);
     this.name = "ConflictError";
+    this.code = code;
   }
 }
 
@@ -108,7 +111,8 @@ export function buildErrorResponse(
 ): Response {
   const message = getPublicMessage(error, fallbackMessage);
   const status = mapTypedErrorToStatus(error) ?? extraStatus?.(message) ?? 500;
-  return new Response(superjson.stringify({ message }), {
+  const code = error instanceof ConflictError ? error.code : undefined;
+  return new Response(superjson.stringify(code ? { message, code } : { message }), {
     status,
     headers: { "Content-Type": "application/json" },
   });

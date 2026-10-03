@@ -8,6 +8,7 @@ import { checkRateLimit, rateLimitResponse } from "../../helpers/rateLimit.js";
 import superjson from "superjson";
 import { ConflictError, buildErrorResponse } from "../../helpers/errorResponse.js";
 import { lockOrganizationsInOrder } from "../../helpers/membershipAdmin.js";
+import { lockPlatformAccessInOrder, lockUsersInOrder } from "../../helpers/lockOrder.js";
 
 // Fase 52 (SEC-07): achado da varredura "qualquer endpoint com bcrypt" —
 // este endpoint comparava a senha (bcrypt.compare) sem nenhum limite,
@@ -82,6 +83,20 @@ export async function handle(request: Request) {
         .execute();
       await lockOrganizationsInOrder(trx, memberships.map((row) => row.organizationId));
 
+      // Ordem canônica de locks (lockOrder.tsx): organizações → users → platform_access → credenciais → sessões → audit.
+      // Fase 89: titular de platform_access ATIVO (owner ou admin) não exclui a conta — o último owner nunca some, e a
+      // anonimização nunca deixa "acesso de plataforma sem identidade". O trigger de banco é a defesa final.
+      await lockUsersInOrder(trx, [user.id]);
+      const [platformRow] = await lockPlatformAccessInOrder(trx, [user.id]);
+      if (platformRow && platformRow.status === "active") {
+        throw new ConflictError(
+          platformRow.level === "owner"
+            ? "Você é o proprietário da plataforma. Transfira a propriedade antes de excluir a conta."
+            : "Você possui acesso de plataforma. Peça ao proprietário para revogá-lo antes de excluir a conta.",
+          "plataforma_acesso_ativo"
+        );
+      }
+
       const blockingOrgs = await trx
         .selectFrom("memberships")
         .innerJoin("organizations", "organizations.id", "memberships.organizationId")
@@ -137,6 +152,7 @@ export async function handle(request: Request) {
           email: `usuario-excluido-${user.id}@removido.invalid`,
           displayName: "Usuário removido",
           avatarUrl: null,
+          anonymizedAt: new Date(),
           updatedAt: new Date(),
         })
         .where("id", "=", user.id)

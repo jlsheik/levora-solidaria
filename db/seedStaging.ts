@@ -14,7 +14,7 @@
  *
  * Únicas escritas SQL diretas (sem endpoint equivalente, todas restritas
  * aos e-mails sintéticos deste seed):
- *   - promover o e-mail do admin sintético a `users.role = 'admin'` (não
+ *   - conceder ao admin sintético `platform_access` (owner) (não
  *     existe endpoint de promoção — o papel de plataforma é um bootstrap);
  *   - redefinir a senha dos usuários sintéticos (opção --reset-passwords);
  *   - criar/apagar as linhas de `sessions` usadas para autenticar as
@@ -459,8 +459,11 @@ export async function runStagingSeed(options: { resetPasswords?: boolean } = {})
     for (const key of Object.keys(SEED_USERS) as UserKey[]) users[key] = await ensureUser(stats, key, options.resetPasswords ?? false);
 
     // Bootstrap do papel de plataforma (sem endpoint de promoção; ver cabeçalho).
-    await db.updateTable("users").set({ role: "admin" })
-      .where("id", "=", users.admin.id).where("role", "!=", "admin").execute();
+    // Fase 89: o poder de plataforma é `platform_access` (users.role='admin' foi aposentado). O admin sintético é o
+    // único Platform Owner do staging. Idempotente.
+    await db.insertInto("platformAccess")
+      .values({ userId: users.admin.id, level: "owner", status: "active", grantOrigin: "seed_staging" })
+      .onConflict((oc) => oc.column("userId").doNothing()).execute();
 
     const actor = {} as Record<UserKey, Actor>;
     for (const key of Object.keys(SEED_USERS) as UserKey[]) {

@@ -80,7 +80,7 @@ RBAC granular por permissão nomeada, não só papel — ver
 [`docs/RBAC_PERMISSOES.md`](RBAC_PERMISSOES.md). Toda ação passa por
 `requireOrganizationMembership` (é membro?) e, quando restrita,
 `requirePermission` (o papel do membro tem a permissão nomeada?). Papel de
-plataforma (`users.role === 'admin'`) é separado do papel dentro de uma
+plataforma (`platform_access` ativo — owner | admin; Fase 89, ver `docs/IDENTIDADE_E_AUTENTICACAO_ESPECIFICACAO.md` §25.1; `users.role='admin'` foi aposentado) é separado do papel dentro de uma
 organização (`memberships.role`) — ver `src/helpers/platformAccess.tsx`.
 
 ## Isolamento multi-organização
