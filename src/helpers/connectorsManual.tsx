@@ -2,7 +2,7 @@ import type { SourceConnector, ConnectorRunContext, ConnectorRunResult } from ".
 
 /**
  * Único conector real disponível hoje: descoberta manual por um operador de
- * plataforma autorizado (`users.role === 'admin'`). Não acessa nenhuma rede
+ * plataforma autorizado (`platform_access` ativo). Não acessa nenhuma rede
  * externa — a "coleta" é a submissão de um formulário por um humano, feita
  * diretamente pelo endpoint `opportunities-registry_POST`. `run()` existe
  * apenas para cumprir o contrato `SourceConnector` e não tem nada a

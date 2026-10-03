@@ -644,7 +644,7 @@ describe("Fase 78 — dupla autorização: segurança", () => {
     expect((await decide(s, other.owner, approvalRequestId, "aprovada", other.orgId)).status).toBe(404);
     expect((await decide(s, other.owner, approvalRequestId, "aprovada", s.orgId)).status).toBe(403);
     const platform = await createAuthenticatedUser();
-    await db.updateTable("users").set({ role: "admin" }).where("id", "=", platform.userId).execute();
+    await db.insertInto("platformAccess").values({ userId: platform.userId, level: "admin", status: "active", grantOrigin: "test" }).execute();
     expect((await decide(s, platform, approvalRequestId, "aprovada", s.orgId)).status).toBe(403);
     expect(await ledger(s)).toHaveLength(1);
     expect(await ledger(other)).toHaveLength(1);

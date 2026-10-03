@@ -1,25 +1,25 @@
 import { db } from "./db.js";
 import { User } from "./User.js";
+import { evaluateSession, SESSION_POLICY, type SessionTier } from "./sessionPolicy.js";
 
 import {
   CleanupProbability,
   getServerSessionOrThrow,
   NotAuthenticatedError,
-  SessionExpirationSeconds,
 } from "./getSetServerSession.js";
 
 export async function getServerUserSession(request: Request) {
   const session = await getServerSessionOrThrow(request);
 
-  // Occasionally clean up expired sessions
+  // Limpeza oportunista (só coleta de lixo — a imposição real é a validação abaixo): remove sessões fora do teto
+  // absoluto ou ociosas há mais que o maior limite ocioso. Sessões de plataforma (60 min) são encerradas na validação.
   if (Math.random() < CleanupProbability) {
-    const expirationDate = new Date(
-      Date.now() - SessionExpirationSeconds * 1000
-    );
+    const now = new Date();
+    const idleCutoff = new Date(now.getTime() - SESSION_POLICY.standard.idleMs);
     try {
       await db
         .deleteFrom("sessions")
-        .where("lastAccessed", "<", expirationDate)
+        .where((eb) => eb.or([eb("lastAccessed", "<", idleCutoff), eb("absoluteExpiresAt", "<", now)]))
         .execute();
     } catch (cleanupError) {
       // Log but don't fail the request if cleanup fails
@@ -27,19 +27,27 @@ export async function getServerUserSession(request: Request) {
     }
   }
 
-  // Query the sessions and users tables in a single join query
+  // Sessão + usuário + acesso de plataforma ATIVO (se houver) numa única consulta. O poder de plataforma é relido do
+  // banco a cada requisição (nunca confiado ao cookie/JWT).
   const results = await db
     .selectFrom("sessions")
     .innerJoin("users", "sessions.userId", "users.id")
+    .leftJoin("platformAccess", (join) =>
+      join.onRef("platformAccess.userId", "=", "users.id").on("platformAccess.status", "=", "active")
+    )
     .select([
       "sessions.id as sessionId",
       "sessions.createdAt as sessionCreatedAt",
       "sessions.lastAccessed as sessionLastAccessed",
+      "sessions.absoluteExpiresAt as sessionAbsoluteExpiresAt",
+      "sessions.primaryMethod as sessionPrimaryMethod",
+      "sessions.mfaVerifiedAt as sessionMfaVerifiedAt",
+      "sessions.lastReauthAt as sessionLastReauthAt",
       "users.id",
       "users.email",
       "users.displayName",
-      "users.role",
       "users.avatarUrl",
+      "platformAccess.level as platformLevel",
     ])
     .where("sessions.id", "=", session.id)
     .limit(1)
@@ -50,16 +58,38 @@ export async function getServerUserSession(request: Request) {
   }
 
   const result = results[0];
+  const platformLevel = result.platformLevel ?? null;
+  const tier: SessionTier = platformLevel ? "platform" : "standard";
+  const now = new Date();
+
+  const evaluation = evaluateSession({
+    tier,
+    createdAt: result.sessionCreatedAt,
+    lastAccessed: result.sessionLastAccessed,
+    absoluteExpiresAt: result.sessionAbsoluteExpiresAt,
+    now,
+  });
+  if (!evaluation.valid) {
+    // Expirada (ociosa ou teto absoluto): a linha é removida e o JWT, ainda que válido, deixa de valer.
+    try {
+      await db.deleteFrom("sessions").where("id", "=", session.id).execute();
+    } catch (error) {
+      console.error("Session expiry cleanup error:", error);
+    }
+    throw new NotAuthenticatedError();
+  }
+
   const user = {
     id: result.id,
     email: result.email,
     displayName: result.displayName,
     avatarUrl: result.avatarUrl,
-    role: result.role,
+    // `role` é derivado (compatibilidade com o frontend): a autorização de plataforma é `platformAccess`.
+    role: platformLevel ? ("admin" as const) : ("user" as const),
+    platformLevel,
   };
 
   // Update the session's lastAccessed timestamp
-  const now = new Date();
   await db
     .updateTable("sessions")
     .set({ lastAccessed: now })
@@ -72,6 +102,10 @@ export async function getServerUserSession(request: Request) {
     session: {
       ...session,
       lastAccessed: now,
+      absoluteExpiresAt: evaluation.effectiveAbsoluteExpiresAt,
+      primaryMethod: result.sessionPrimaryMethod,
+      mfaVerifiedAt: result.sessionMfaVerifiedAt,
+      lastReauthAt: result.sessionLastReauthAt,
     },
   };
 }

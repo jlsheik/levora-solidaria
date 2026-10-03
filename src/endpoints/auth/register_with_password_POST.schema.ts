@@ -1,5 +1,6 @@
 import { z } from "zod";
 import superjson from "superjson";
+import { newPasswordSchema } from "../../helpers/passwordPolicy.js";
 
 // Fase 51: regra canônica de normalização de e-mail adotada de forma
 // consistente em todo endpoint que aceita e-mail como entrada (aqui,
@@ -11,7 +12,7 @@ import superjson from "superjson";
 // endpoints, mas desnecessariamente hostil a um erro de digitação trivial.
 export const schema = z.object({
   email: z.string().trim().email("Informe um e-mail válido"),
-  password: z.string().min(8, "A senha deve ter pelo menos 8 caracteres"),
+  password: newPasswordSchema,
   displayName: z.string().min(1, "Nome é obrigatório"),
 });
 

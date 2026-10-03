@@ -4,11 +4,9 @@ import { sql } from "kysely";
 import { z } from "zod";
 import { schema } from "./login_with_password_POST.schema.js";
 import { compare } from "bcryptjs";
-import { randomBytes } from "crypto";
-import {
-  setServerSession,
-  SessionExpirationSeconds,
-} from "../../helpers/getSetServerSession.js";
+import { setServerSession } from "../../helpers/getSetServerSession.js";
+import { createSession } from "../../helpers/sessionLifecycle.js";
+import { auditLoginFailure, auditLoginSuccess } from "../../helpers/loginAudit.js";
 import { User } from "../../helpers/User.js";
 import { checkRateLimit, getClientIp, rateLimitResponse } from "../../helpers/rateLimit.js";
 import superjson from "superjson";
@@ -118,6 +116,8 @@ export async function handle(request: Request) {
             (lockoutEnd.getTime() - now.getTime()) / (60 * 1000)
           );
           // DO NOT log blocked attempts to prevent extending lockout indefinitely
+          // (loginAttempts). A auditoria é outra trilha: 1 evento por e-mail+IP a cada 10 min (loginAudit).
+          await auditLoginFailure(trx, { userId: null, email: normalizedEmail, ip, method: "senha", reason: "bloqueio_temporario" });
           return {
             type: "rate_limited" as const,
             remainingMinutes,
@@ -138,7 +138,6 @@ export async function handle(request: Request) {
           "users.email",
           "users.displayName",
           "users.avatarUrl",
-          "users.role",
           "userPasswords.passwordHash",
         ])
         .where(sql`LOWER(users.email)`, "=", normalizedEmail)
@@ -162,6 +161,7 @@ export async function handle(request: Request) {
           })
           .execute();
 
+        await auditLoginFailure(trx, { userId: null, email: normalizedEmail, ip, method: "senha", reason: "credenciais_invalidas" });
         return {
           type: "auth_failed" as const,
         };
@@ -182,6 +182,7 @@ export async function handle(request: Request) {
           })
           .execute();
 
+        await auditLoginFailure(trx, { userId: user.id, email: normalizedEmail, ip, method: "senha", reason: "credenciais_invalidas" });
         return {
           type: "auth_failed" as const,
         };
@@ -198,21 +199,8 @@ export async function handle(request: Request) {
         .execute();
 
       // Create session inside the same transaction to ensure atomicity
-      const sessionId = randomBytes(32).toString("hex");
-      const expiresAt = new Date(
-        now.getTime() + SessionExpirationSeconds * 1000
-      );
-
-      await trx
-        .insertInto("sessions")
-        .values({
-          id: sessionId,
-          userId: user.id,
-          createdAt: now,
-          lastAccessed: now,
-          expiresAt: expiresAt,
-        })
-        .execute();
+      const createdSession = await createSession(trx, { userId: user.id, primaryMethod: "password", now });
+      const sessionId = createdSession.id;
 
       // Reset failed attempts counter by deleting previous failed attempts
       // This preserves audit trail of successful logins
@@ -222,11 +210,23 @@ export async function handle(request: Request) {
         .where("success", "=", false)
         .execute();
 
+      const platform = await trx
+        .selectFrom("platformAccess")
+        .select("level")
+        .where("userId", "=", user.id)
+        .where("status", "=", "active")
+        .executeTakeFirst();
+
+      // Auditoria por último (a hash-chain toma um advisory lock global).
+      await auditLoginSuccess(trx, { userId: user.id, method: "senha", ip });
+
       return {
         type: "success" as const,
         user,
         sessionId,
         sessionCreatedAt: now,
+        absoluteExpiresAt: createdSession.absoluteExpiresAt,
+        platformLevel: platform?.level ?? null,
       };
     });
 
@@ -283,7 +283,8 @@ export async function handle(request: Request) {
       email: user.email,
       avatarUrl: user.avatarUrl,
       displayName: user.displayName,
-      role: user.role,
+      role: result.platformLevel ? "admin" : "user",
+      platformLevel: result.platformLevel,
     };
 
     const response = new Response(
@@ -298,11 +299,15 @@ export async function handle(request: Request) {
     );
 
     // Set session cookie
-    await setServerSession(response, {
-      id: result.sessionId,
-      createdAt: result.sessionCreatedAt.getTime(),
-      lastAccessed: result.sessionCreatedAt.getTime(),
-    });
+    await setServerSession(
+      response,
+      {
+        id: result.sessionId,
+        createdAt: result.sessionCreatedAt.getTime(),
+        lastAccessed: result.sessionCreatedAt.getTime(),
+      },
+      { absoluteExpiresAt: result.absoluteExpiresAt }
+    );
 
     return response;
   } catch (error) {
