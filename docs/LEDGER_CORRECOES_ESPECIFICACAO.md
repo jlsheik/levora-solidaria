@@ -1169,3 +1169,178 @@ restaurado e o hash conferido.
 - **O histórico não "fecha ao recarregar":** a tela mantém **um painel aberto por
   vez** (`expandedReceiptId`); abrir outro fecha o anterior. Comportamento herdado
   da Fatia 1, não um defeito de recarga.
+
+## AE. Fase 82 — reconciliação final da Fatia 2 e preparação da Fatia 3
+
+Somente documentação. Checkpoint verificado: `943cd3b` (pai `97f2e72`).
+
+### AE.1 Contagem real de testes (execuções reais do Vitest em worktree limpo)
+
+| Commit | Arquivos | Testes | Diferença | De onde vem |
+|---|---:|---:|---:|---|
+| `28d4e3d` | 46 | **460** | — | baseline da Fase 73 |
+| `97f2e72` | 47 | **504** | +44 | `needFulfillmentCorrections.test.ts` (novo, 44; a Fase 79 só ajustou um teste existente) |
+| `943cd3b` | 49 | **543** | +39 | `needFulfillmentPhysical.test.ts` (novo, **31**) + `ledgerLockOrder.test.ts` (novo, **8**) |
+
+Decomposição por fase: Fase 80 = +30 (534 no total; o arquivo físico tinha 30
+testes); Fase 81 = +8 (`ledgerLockOrder.test.ts`) **+1** (`sem_saldo_fisico`, no
+arquivo físico, que passou a ter 31) = **+9** → 543. O total correto sempre foi
+**543**; o erro foi de redação no relatório da Fase 81, que descreveu os "+9"
+como "9 em `ledgerLockOrder` e mais 1" (isso daria 544, mas `ledgerLockOrder` tem
+**8** testes). Três testes do arquivo da Fatia 1 foram **editados** (não
+adicionados) na Fase 80, porque a semântica física mudou. `vitest list` não serve
+como contagem (devolve 6 a menos nos três commits: 454/498/537); vale a execução.
+
+**Estabilidade:** em `943cd3b` a suíte completa foi executada 4 vezes: 3 deram
+543/543 e **1 deu 542/543 com um teste falhando**, cujo nome **não foi capturado**
+(o filtro da saída descartou o detalhe) e que não reproduziu em 3 execuções
+completas seguintes nem em 6 rodadas isoladas dos 4 arquivos sensíveis a
+concorrência (100/100 em todas). Causa **não identificada**; o suspeito natural são
+as provas determinísticas com `sleep` sob carga de CPU. Fica registrado como
+**intermitência não explicada**, a investigar capturando a saída completa na
+próxima falha.
+
+### AE.2 Locks (confirmação, sem reabrir o código)
+
+`needs-status_POST` e a correção/estorno físico usam `FOR NO KEY UPDATE` na need;
+a FK do ledger toma `FOR KEY SHARE`; as provas de concorrência (`ledgerLockOrder`,
+`needFulfillmentPhysical`) e os testes da Fase 35 (`needsStatus`) passam. A mudança
+em `needs-status_POST.ts` foi uma **correção necessária de um deadlock
+pré-existente** (need `FOR UPDATE` → item × recebimento: item → FK → need), descoberto
+durante a revisão da ordem de locks e reproduzido com o endpoint real antes da
+correção (seção AD).
+
+### AE.3 Estado final da Fatia 2
+
+**Concluídos:** correção física (positiva e negativa, um `ajuste` pelo delta sobre
+o saldo físico real da allocation); estorno contábil; estorno físico opcional;
+atomicidade ledger + estoque; estoque insuficiente; concorrência e ordem de locks;
+auditoria; isolamento por organização; UI desktop e mobile.
+`need_fulfillments` (Modelo B) **permanece estruturalmente congelado** — nenhuma
+migration, coluna ou constraint foi alterada nas Fatias 1 e 2.
+
+### AE.4 Dívidas conhecidas (não bloqueiam)
+
+- Mensagens brutas de validação Zod chegam ao cliente (`buildErrorResponse`).
+- Enforcement automático da ordem de locks (hoje: matriz da seção AD + testes).
+- A tela de Atribuições mantém um painel de histórico aberto por vez (comportamento
+  herdado da Fatia 1) e as listas recarregam após cada ação.
+- Intermitência de um teste de suíte completa (AE.1).
+
+### AE.5 Superfície atual da Prestação de Contas (auditoria para a Fatia 3; nada implementado)
+
+Arquivos: `impact-report_GET.ts` (+ schema) e a página
+`organizacoes.$organizationId.prestacao-contas.tsx` (178 linhas).
+
+- **O que aparece hoje** (tudo lido de `stock_transactions`, `needs` e `audit_log`):
+  cartões (necessidades cadastradas, atendidas, "Recebimentos registrados",
+  eventos de auditoria); tabela "Movimentação de estoque por item" (entradas,
+  saídas, ajustes, saldo no período, saldo atual); lista "Doações recebidas no
+  período".
+- **Como os movimentos físicos entram:** a tabela agrupa por item e tipo — os
+  `ajuste` das Fatias 1/2 aparecem **somente** na coluna "Ajustes" (e no saldo
+  líquido); a lista "Doações recebidas" e o cartão "Recebimentos registrados"
+  filtram `type = 'entrada'` — portanto uma **correção positiva** (`ajuste +`) e uma
+  **retirada física** (`ajuste −`) **não** aparecem como linhas nem nas contagens.
+- **O ledger contábil (`need_fulfillments`) não é lido por esse relatório:** não há
+  atendido/faltante/excedente por necessidade, nem original × correção × estorno,
+  nem ligação com a allocation. Correções e estornos **só contábeis** são
+  invisíveis ali.
+- **Filtros:** apenas período (início/fim; padrão: do dia 1º do mês até hoje), sobre
+  `created_at`. Há botão de impressão e folha de estilo de impressão. Acesso:
+  `relatorios.leia` (proprietário/administrador) — mais restrito que o histórico do
+  recebimento (`logistica.leia`).
+- **Desktop/mobile:** a tabela já está num contêiner com rolagem horizontal
+  (`tableScroll`); não há media query responsiva além da de impressão; o relatório
+  não foi verificado em 375/390/768 nesta fase.
+- **Desempenho:** hoje são ~8 consultas sequenciais (sem N+1 por linha). O ledger
+  tem os índices necessários: `(organization_id, created_at DESC)`,
+  `need_id` e `(allocation_id, created_at)`. Para o líquido por necessidade, o
+  padrão a reutilizar é o agrupamento em lote de
+  `getNeedFulfillmentBalanceBatch` (usado por `needs_GET`) — nunca um cálculo por
+  necessidade em laço.
+
+**O que a Fatia 3 precisa mostrar (a especificar):** por necessidade — recebido
+original, correções (com sinal), estornos, **líquido** (`fulfilled` = fórmula única
+de `needFulfillment.tsx`), necessário, faltante e **excedente**; cada correção e
+estorno como linha própria (data, autor, motivo da auditoria, efeito físico,
+ligação com o movimento de estoque), o `original` **sempre visível** (nunca
+substituído pelo líquido); pedidos de aprovação como evento administrativo. Decidir
+na especificação: líquido **acumulado** versus **no período**, e se a lista
+"Doações recebidas" passa a incluir as correções físicas positivas.
+**Restrição:** a Fatia 3 trabalha sobre dados já existentes — **sem** alterar o
+ledger, o schema nem as regras para atender à UI.
+
+## AF. Fase 83 — causa da intermitência (542/543) e fechamento
+
+**Resultado: reproduzida, causa identificada, era um defeito do TESTE (não do
+código de produção, nem do ambiente).**
+
+### AF.1 Reprodução
+
+Sequência de execuções completas em `943cd3b` com saída integral e relatório JSON
+(log fora do Git), parando na primeira falha:
+
+| Execução | Resultado | Teste que falhou |
+|---:|---|---|
+| 1 | 543/543 | — |
+| 2 | 543/543 | — |
+| 3 | **542/543** | `needFulfillmentPhysical.test.ts` › "caso 4: duas reversals físicas concorrentes — um pedido só; decisões concorrentes executam uma vez" |
+
+A falha: `expect([d1.status, d2.status].sort()).toEqual([200, 409])` recebeu
+`[200, 403]`. Isolado (só esse teste, sem os outros arquivos), reproduziu 1 vez em
+24 execuções, com o mesmo `[200, 403]` — logo não depende da combinação de arquivos
+nem de estado deixado por outro teste. As seis rodadas e as três execuções
+completas anteriores (Fase 82) passaram porque a falha exige uma coincidência de
+duas corridas aleatórias.
+
+### AF.2 Causa
+
+O teste disputava o pedido entre `operador` e `admin` (quem chega primeiro cria o
+pedido; o outro recebe 409) e depois escolhia dois decisores **assumindo** quem era
+o solicitante. Quando o `admin` ganhava a corrida do pedido, os dois decisores
+concorrentes passavam a ser o proprietário e **o próprio solicitante (admin)**. A
+decisão do solicitante então resulta em **403 (autoaprovação)** se ele trava o pedido
+primeiro, ou **409 (já decidido)** se o proprietário trava primeiro — a verificação de
+status vem antes da de autoaprovação. O resultado esperado `[200, 409]` só valia numa
+das ordens.
+
+Prova do mecanismo (experimento descartável, não commitado): 30 rodadas com o
+**admin como solicitante** decidindo ao mesmo tempo que o proprietário: o
+proprietário recebeu 200 nas 30; o solicitante nunca recebeu 200; o par de status foi
+`[200, 409]` em 19 e `[200, 403]` em 11. **O código de produção está correto em todas
+as ordens** (o solicitante nunca aprova; só uma decisão executa); o que variava era a
+premissa do teste.
+
+### AF.3 Correção (somente no teste)
+
+Os dois que disputam o pedido passam a ser dois **operadores** (sem
+`aprovacoes.decida`) e os dois decisores são o **administrador e o proprietário**,
+que não podem ser o solicitante em ordem nenhuma. Sem retry, sem sleep, sem reduzir
+concorrência. O teste antigo reproduzia 1/24 isolado; o corrigido passou 40/40
+isoladas (a taxa antiga prevê cerca de 1,7 falhas em 40, então 0/40 é só indício; a
+garantia vem de a autoaprovação ser logicamente impossível na nova composição).
+
+### AF.4 Outras verificações
+
+- Concorrência isolada e em conjunto: `ledgerLockOrder` (8), `needFulfillmentPhysical`
+  (31), `needFulfillmentCorrections` (44) e `needsStatus` (17) passam sozinhos e juntos
+  (100/100); sem conexões órfãs (`pg_stat_activity` vazio) nem locks pendurados.
+- Maior duração de teste nas três execuções: 8,4 s (testes de timeout da Fase 53),
+  contra o limite padrão de 15 s; os testes de concorrência desta frente ficaram em
+  ≤ 5,3 s. Não há indício de falha por timeout.
+- **Esperas temporais** nos testes de lock (`setTimeout`/`sleep`): as de 400 ms antes de
+  `expect(finished).toBe(false)` só podem falhar se o lock **não** bloquear (a prova do
+  controle negativo); duas são prazos que, em tese, sob CPU muito carregada poderiam
+  falhar sem bug — o `Promise.race` de 3 s em `needFulfillmentPhysical` (decisão não
+  pode esperar) e o `sleep(400)` seguido de `expect(finished).toBe(true)` para o
+  `FOR KEY SHARE` em `ledgerLockOrder`. **Não foram observadas falhando e não foram
+  alteradas** (a investigação não as incriminou); ficam registradas como fragilidade
+  teórica.
+- `needs-status_POST`, locks, ledger, estoque, matching e aprovação **não foram
+  tocados**.
+
+### AF.5 Contagem
+
+Continua **543** (460 → 504 → 543); a correção alterou um teste existente, não
+adicionou nenhum.

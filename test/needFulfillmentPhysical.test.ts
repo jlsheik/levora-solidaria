@@ -481,12 +481,17 @@ describe("Fase 80 — concorrência física (Postgres real, Promise.all)", () =>
     const e = await setupEnv();
     const a = await receive(e);
     const v1 = await tok(e, a);
-    const [r1, r2] = await Promise.all([reverse(e, a, e.operador, { expectedVigenteFulfillmentId: v1, withdrawStock: true }), reverse(e, a, e.admin, { expectedVigenteFulfillmentId: v1, withdrawStock: true })]);
+    // Quem pede NUNCA aprova (autoaprovação = 403). Para o resultado não depender de quem ganha a corrida do pedido, os dois
+    // que disputam o pedido são operadores (sem aprovacoes.decida) e os dois decisores são o administrador e o proprietário,
+    // que não podem ser o solicitante em nenhuma ordem.
+    const operador2 = await createAuthenticatedUser();
+    await addMembership(e.orgId, operador2.userId, "operador");
+    const [r1, r2] = await Promise.all([reverse(e, a, e.operador, { expectedVigenteFulfillmentId: v1, withdrawStock: true }), reverse(e, a, operador2, { expectedVigenteFulfillmentId: v1, withdrawStock: true })]);
     expect([r1.status, r2.status].sort()).toEqual([202, 409]);
     const pending = await db.selectFrom("approvalRequests").select(["id", "requestedByUserId"]).where("status", "=", "pendente").execute();
     expect(pending).toHaveLength(1);
-    const approver = pending[0].requestedByUserId === e.operador.userId ? e.admin : e.operador === e.admin ? e.owner : e.owner;
-    const [d1, d2] = await Promise.all([decide(e, approver, pending[0].id), decide(e, approver === e.owner ? e.admin : e.owner, pending[0].id)]);
+    expect([e.operador.userId, operador2.userId]).toContain(pending[0].requestedByUserId);
+    const [d1, d2] = await Promise.all([decide(e, e.admin, pending[0].id), decide(e, e.owner, pending[0].id)]);
     expect([d1.status, d2.status].sort()).toEqual([200, 409]);
     expect((await movements(e)).filter((m) => Number(m.delta) < 0)).toHaveLength(1);
     expect(await stock(e.itemId)).toBe(0);
