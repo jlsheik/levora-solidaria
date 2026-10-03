@@ -18,6 +18,7 @@ import { Textarea } from "../components/Textarea";
 import { Button } from "../components/Button";
 import { Badge } from "../components/Badge";
 import { Skeleton } from "../components/Skeleton";
+import { ReceiptHistoryPanel } from "../components/ReceiptHistoryPanel";
 import { FileDropzone } from "../components/FileDropzone";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/Select";
 import { z } from "zod";
@@ -59,6 +60,7 @@ export default function OrganizationAllocationsPage() {
   const queryClient = useQueryClient();
   const [receiveTarget, setReceiveTarget] = useState<{ id: number; title: string } | null>(null);
   const [expandedTimelineId, setExpandedTimelineId] = useState<number | null>(null);
+  const [expandedReceiptId, setExpandedReceiptId] = useState<number | null>(null);
   const [uploadedProof, setUploadedProof] = useState<{ id: number; originalFilename: string } | null>(null);
 
   const orgsQuery = useQuery({ queryKey: ["organizations"], queryFn: () => getOrganizations() });
@@ -209,6 +211,14 @@ export default function OrganizationAllocationsPage() {
                   </Button>
                 </div>
               )}
+              {a.status === "recebida" && (
+                <div className={styles.actions}>
+                  <Button size="sm" variant="outline" onClick={() => setExpandedReceiptId(expandedReceiptId === a.id ? null : a.id)}>
+                    {expandedReceiptId === a.id ? "Ocultar" : "Ver"} histórico do recebimento
+                  </Button>
+                </div>
+              )}
+              {a.status === "recebida" && expandedReceiptId === a.id && <ReceiptHistoryPanel organizationId={organizationId} allocationId={a.id} />}
               {expandedTimelineId === a.id && (
                 <div className={styles.timelineBox}>
                   {timelineQuery.isFetching && !timelineQuery.data ? <Skeleton className={styles.listSkeleton} /> : (

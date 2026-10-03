@@ -3,6 +3,8 @@ import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
 import { getItemStockBalance } from "../helpers/stockBalance.js";
+import { APPROVAL_REQUEST_EXPIRATION_DAYS } from "../helpers/expireApprovalRequests.js";
+import { buildLedgerAuditEntry, executeApprovedLedgerRequest, isLedgerApprovalActionType, type ApprovedLedgerResult } from "../helpers/needFulfillmentCorrections.js";
 import { schema } from "./approval-requests-decide_POST.schema.js";
 import superjson from "superjson";
 import type { Json } from "../helpers/schema.js";
@@ -19,7 +21,7 @@ export async function handle(request: Request) {
     const result = await db.transaction().execute(async (trx) => {
       const req = await trx
         .selectFrom("approvalRequests")
-        .select(["id", "status", "actionType", "payload", "requestedByUserId"])
+        .select(["id", "status", "actionType", "payload", "requestedByUserId", "organizationId", "createdAt"])
         .where("id", "=", input.requestId)
         .where("organizationId", "=", input.organizationId)
         .forUpdate()
@@ -73,6 +75,22 @@ export async function handle(request: Request) {
         stockAdjustment = { payload, itemName: item.name };
       }
 
+      // Pedidos do ledger de atendimento (Fase 78): a execução acontece AQUI,
+      // na transação da decisão, sob a ordem global de locks (pedido já
+      // travado acima → allocation → need → ledger → auditoria por último).
+      // Tudo é validado ANTES de mudar o status: obsoleto/expirado/inválido
+      // devolvem 409 sem escrever nada e o pedido continua `pendente`.
+      let ledgerExecution: Extract<ApprovedLedgerResult, { type: "executed" }> | null = null;
+      if (input.decision === "aprovada" && isLedgerApprovalActionType(req.actionType)) {
+        const expirationCutoff = Date.now() - APPROVAL_REQUEST_EXPIRATION_DAYS * 24 * 60 * 60 * 1000;
+        if (req.createdAt.getTime() < expirationCutoff) return { type: "pedido_expirado" as const };
+
+        const executed = await executeApprovedLedgerRequest(trx, req);
+        if (executed.type === "payload_invalid") return { type: "ledger_payload_invalid" as const };
+        if (executed.type === "pedido_obsoleto") return { type: "pedido_obsoleto" as const };
+        ledgerExecution = executed;
+      }
+
       const [updated] = await trx
         .updateTable("approvalRequests")
         .set({ status: input.decision, decidedByUserId: user.id, decisionNotes: input.notes ?? null, decidedAt: new Date() })
@@ -80,7 +98,25 @@ export async function handle(request: Request) {
         .returning(["id", "status"])
         .execute();
 
-      if (input.decision === "aprovada") {
+      if (input.decision === "aprovada" && ledgerExecution) {
+        const audit = buildLedgerAuditEntry(ledgerExecution.plan, ledgerExecution.result, {
+          actorUserId: user.id,
+          reason: ledgerExecution.payload.motivo,
+          approvalRequestId: req.id,
+          requesterUserId: req.requestedByUserId,
+        });
+        await recordAuditLogEntry(
+          {
+            organizationId: input.organizationId,
+            actorUserId: user.id,
+            action: audit.action,
+            entityType: "opportunity_allocation",
+            entityId: String(ledgerExecution.plan.allocationId),
+            metadata: audit.metadata,
+          },
+          trx
+        );
+      } else if (input.decision === "aprovada") {
         // Reexecuta a ação real — hoje só existe um tipo de ação de alto
         // risco (ajuste de estoque); novos tipos entram aqui.
         if (stockAdjustment) {
@@ -147,6 +183,26 @@ export async function handle(request: Request) {
     }
     if (result.type === "payload_invalid") {
       return new Response(superjson.stringify({ message: "Não foi possível executar a ação: item de inventário não encontrado" }), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (result.type === "ledger_payload_invalid") {
+      // Mesmo status (409) e mesmo fluxo do payload_invalid de estoque; só a mensagem
+      // é a do domínio do ledger (sem detalhes internos do payload).
+      return new Response(superjson.stringify({ message: "Não foi possível executar este pedido: os dados da correção ou do estorno do recebimento são inválidos. Rejeite o pedido e solicite de novo." }), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (result.type === "pedido_obsoleto") {
+      return new Response(
+        superjson.stringify({ message: "O recebimento mudou desde o pedido, então ele não pode mais ser executado. Rejeite este pedido e peça de novo com o histórico atual.", code: "pedido_obsoleto" }),
+        { status: 409, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (result.type === "pedido_expirado") {
+      return new Response(superjson.stringify({ message: "Este pedido passou do prazo de decisão e não pode mais ser aprovado", code: "pedido_expirado" }), {
         status: 409,
         headers: { "Content-Type": "application/json" },
       });

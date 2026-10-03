@@ -9,10 +9,13 @@
  */
 export class ApiRequestError extends Error {
   readonly status: number;
+  /** Código estável de domínio (ex.: `pedido_obsoleto`), quando a API o envia. */
+  readonly code: string | null;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code: string | null = null) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
+    this.code = code;
   }
 }
