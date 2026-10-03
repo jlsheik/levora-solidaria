@@ -8,6 +8,8 @@ export const schema = z.object({
   allocationId: z.coerce.number().int().positive(),
   expectedVigenteFulfillmentId: fulfillmentIdSchema,
   reason: reasonSchema,
+  // Retirada física opcional (P-L4): só o saldo físico REAL da allocation. Padrão: estorno só contábil.
+  withdrawStock: z.boolean().optional(),
 });
 
 // Todo estorno é dupla autorização (P-L6): a resposta é sempre um pedido.

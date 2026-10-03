@@ -37,6 +37,7 @@ export function ReceiptHistoryPanel({ organizationId, allocationId }: Props) {
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("");
   const [reason, setReason] = useState("");
+  const [withdraw, setWithdraw] = useState(false);
 
   const historyQuery = useQuery({
     queryKey: historyKey,
@@ -71,6 +72,7 @@ export function ReceiptHistoryPanel({ organizationId, allocationId }: Props) {
     setQuantity("");
     setUnit("");
     setReason("");
+    setWithdraw(false);
     setField("quantidade");
   };
 
@@ -95,9 +97,9 @@ export function ReceiptHistoryPanel({ organizationId, allocationId }: Props) {
   });
 
   const reverseMutation = useMutation({
-    mutationFn: () => postAllocationsReceiptReverse({ organizationId, allocationId, expectedVigenteFulfillmentId: data!.vigenteFulfillmentId!, reason }),
+    mutationFn: () => postAllocationsReceiptReverse({ organizationId, allocationId, expectedVigenteFulfillmentId: data!.vigenteFulfillmentId!, reason, withdrawStock: withdraw }),
     onSuccess: () => {
-      toast.success("Pedido de estorno enviado: outra pessoa precisa aprovar");
+      toast.success(withdraw ? "Pedido de estorno com retirada do estoque enviado: outra pessoa precisa aprovar" : "Pedido de estorno enviado: outra pessoa precisa aprovar");
       closeDialog();
       refreshAll();
     },
@@ -125,7 +127,12 @@ export function ReceiptHistoryPanel({ organizationId, allocationId }: Props) {
 
   const newQuantity = Number(quantity.replace(",", "."));
   const reduces = field === "quantidade" && headRow && newQuantity > 0 && newQuantity < headRow.quantity;
-  const needsApproval = mode === "estornar" || reduces || (field === "unidade" && headRow?.isCountable && !!unit.trim());
+  // Efeito físico (mesma unidade do item): o saldo físico da atribuição vai ao valor novo, por UM ajuste.
+  const item = data.item;
+  const unitMatchesItem = !!item && !!headRow && headRow.unit.trim().toLowerCase() === item.unit.trim().toLowerCase();
+  const physicalDelta = field === "quantidade" && unitMatchesItem && newQuantity > 0 && data.physicalBalance !== null ? Math.round((newQuantity - data.physicalBalance) * 1000) / 1000 : 0;
+  const needsApproval = mode === "estornar" || reduces || physicalDelta < 0 || (field === "unidade" && headRow?.isCountable && !!unit.trim());
+  const canWithdraw = !!item && unitMatchesItem && (data.physicalBalance ?? 0) > 0;
   const validForm = reason.trim().length >= 3 && (mode === "estornar" || (field === "quantidade" ? newQuantity > 0 : unit.trim().length > 0));
 
   return (
@@ -137,6 +144,11 @@ export function ReceiptHistoryPanel({ organizationId, allocationId }: Props) {
           Necessidade “{data.need.title}”: atendido {formatQuantity(data.progress.fulfilled)} de {formatQuantity(data.need.quantityNeeded)} {data.need.unit}
           {data.progress.requiredRemaining > 0 ? ` · faltam ${formatQuantity(data.progress.requiredRemaining)}` : ""}
           {data.progress.surplus > 0 ? ` · excedente ${formatQuantity(data.progress.surplus)}` : ""}
+        </p>
+      )}
+      {data.item && data.physicalBalance !== null && (
+        <p className={styles.summary}>
+          Estoque físico desta atribuição: {formatQuantity(data.physicalBalance)} {data.item.unit} em “{data.item.name}” (saldo atual do item: {formatQuantity(data.item.currentBalance)}).
         </p>
       )}
       {data.chainState === "estornada" && <p className={styles.warning}>Este recebimento está estornado: não conta mais para a necessidade. O registro original continua abaixo.</p>}
@@ -156,6 +168,17 @@ export function ReceiptHistoryPanel({ organizationId, allocationId }: Props) {
             <div className={styles.rowMeta}>
               {r.createdByDisplayName ?? "sistema"} · {new Date(r.createdAt).toLocaleString("pt-BR")}
               {r.countedEffect !== 0 ? ` · efeito no saldo ${r.countedEffect > 0 ? "+" : ""}${formatQuantity(r.countedEffect)}` : ""}
+            </div>
+            <div className={styles.rowMeta}>
+              {r.physicalDelta !== null
+                ? `Estoque: ${r.physicalDelta > 0 ? "+" : ""}${formatQuantity(r.physicalDelta)} ${data.item?.unit ?? ""} (${r.entryType === "original" ? "entrada do recebimento" : r.entryType === "reversal" ? "retirada física do estorno" : "ajuste da correção"})`
+                : r.entryType === "reversal"
+                  ? r.pairedWithCorrection
+                    ? "Estoque: o ajuste, se houve, está na correção do par"
+                    : "Estorno só contábil: o estoque físico não foi alterado"
+                  : r.entryType === "correction"
+                    ? "Estoque: sem movimento nesta correção"
+                    : null}
             </div>
             {r.reason && <div className={styles.rowReason}>Motivo: {r.reason}</div>}
           </li>
@@ -203,8 +226,8 @@ export function ReceiptHistoryPanel({ organizationId, allocationId }: Props) {
             <DialogTitle>{mode === "estornar" ? "Estornar recebimento" : data.chainState === "estornada" ? "Desfazer estorno" : "Corrigir recebimento"}</DialogTitle>
             <DialogDescription>
               {mode === "estornar"
-                ? "O recebimento deixa de contar para a necessidade; o registro original permanece no histórico. Exige a aprovação de outra pessoa. Não altera o estoque físico."
-                : "A correção cria novas linhas no histórico (nada é apagado) e não altera o estoque físico. Reduções exigem a aprovação de outra pessoa."}
+                ? "O recebimento deixa de contar para a necessidade; o registro original permanece no histórico. Exige a aprovação de outra pessoa. O estoque físico só é retirado se você marcar a opção abaixo."
+                : "A correção cria novas linhas no histórico (nada é apagado) e ajusta o estoque físico pela diferença, quando a unidade é a do item. Reduções exigem a aprovação de outra pessoa."}
             </DialogDescription>
           </DialogHeader>
 
@@ -226,7 +249,27 @@ export function ReceiptHistoryPanel({ organizationId, allocationId }: Props) {
               ) : (
                 <Input aria-label="Nova unidade" placeholder="Nova unidade (ex.: kg)" value={unit} onChange={(e) => setUnit(e.target.value)} />
               )}
+              {physicalDelta !== 0 && item && (
+                <p className={styles.hint}>
+                  Estoque físico: ajuste de {physicalDelta > 0 ? "+" : ""}{formatQuantity(physicalDelta)} {item.unit} em “{item.name}” ({formatQuantity(data.physicalBalance ?? 0)} → {formatQuantity(newQuantity)}).
+                </p>
+              )}
               {needsApproval && <p className={styles.warning}>Esta correção reduz o que conta para a necessidade: ela fica pendente até outra pessoa aprovar.</p>}
+            </div>
+          )}
+
+          {mode === "estornar" && (
+            <div className={styles.form}>
+              {canWithdraw ? (
+                <label className={styles.choice}>
+                  <span>
+                    <input type="checkbox" checked={withdraw} onChange={(e) => setWithdraw(e.target.checked)} /> Retirar também do estoque físico: −{formatQuantity(data.physicalBalance ?? 0)} {item?.unit} de “{item?.name}”
+                  </span>
+                </label>
+              ) : (
+                <p className={styles.hint}>Sem retirada física: esta atribuição não tem saldo físico retirável na unidade do item.</p>
+              )}
+              {!withdraw && <p className={styles.hint}>Estorno só contábil: o estoque físico não será alterado.</p>}
             </div>
           )}
 

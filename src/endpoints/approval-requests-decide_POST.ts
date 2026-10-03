@@ -88,6 +88,7 @@ export async function handle(request: Request) {
         const executed = await executeApprovedLedgerRequest(trx, req);
         if (executed.type === "payload_invalid") return { type: "ledger_payload_invalid" as const };
         if (executed.type === "pedido_obsoleto") return { type: "pedido_obsoleto" as const };
+        if (executed.type === "insufficient_stock") return { type: "insufficient_stock" as const, currentStock: executed.currentStock, itemName: executed.itemName };
         ledgerExecution = executed;
       }
 

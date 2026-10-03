@@ -35,6 +35,9 @@ export type OutputType =
       status: "executada";
       reversalFulfillmentId: string | null;
       fulfillmentId: string;
+      /** Movimento físico criado (null quando só contábil). */
+      stockTransactionId: string | null;
+      deltaFisico: number | null;
       progress: { fulfilled: number; requiredRemaining: number; surplus: number } | null;
     }
   | { status: "pendente_aprovacao"; approvalRequestId: number };

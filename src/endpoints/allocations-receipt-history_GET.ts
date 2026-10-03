@@ -5,6 +5,7 @@ import { requirePermissionToRead } from "../helpers/organizationAccess.js";
 import { roleHasPermission } from "../helpers/permissions.js";
 import { computeNeedProgress, getNeedFulfillmentBalance } from "../helpers/needFulfillment.js";
 import { countedEffect, readLedgerRows, resolveLedgerChain, LEDGER_APPROVAL_ACTION_TYPES } from "../helpers/needFulfillmentCorrections.js";
+import { getItemStockBalance } from "../helpers/stockBalance.js";
 import { schema } from "./allocations-receipt-history_GET.schema.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
@@ -47,6 +48,16 @@ export async function handle(request: Request) {
         : undefined;
       const progress = need ? computeNeedProgress(Number(need.quantityNeeded), await getNeedFulfillmentBalance(trx, need.id)) : null;
 
+      // Movimentos físicos ligados às linhas (nem toda linha tem) e o item do recebimento.
+      const linkedIds = rows.map((r) => r.stockTransactionId).filter((v): v is string => v !== null);
+      const movements =
+        linkedIds.length > 0
+          ? await trx.selectFrom("stockTransactions").select(["id", "delta", "itemId"]).where("id", "in", linkedIds).where("organizationId", "=", input.organizationId).execute()
+          : [];
+      const itemId = movements[0]?.itemId ?? null;
+      const itemRow = itemId !== null ? await trx.selectFrom("inventoryItems").select(["id", "name", "unit"]).where("id", "=", itemId).where("organizationId", "=", input.organizationId).executeTakeFirst() : undefined;
+      const itemInfo = itemRow ? { id: itemRow.id, name: itemRow.name, unit: itemRow.unit, currentBalance: await getItemStockBalance(trx, itemRow.id) } : null;
+
       const authorIds = [...new Set(rows.map((r) => r.createdByUserId).filter((v): v is number => v !== null))];
       const authors = authorIds.length > 0 ? await trx.selectFrom("users").select(["id", "displayName"]).where("id", "in", authorIds).execute() : [];
 
@@ -71,7 +82,7 @@ export async function handle(request: Request) {
         .where(sql<boolean>`approval_requests.payload->>'allocationId' = ${String(input.allocationId)}`)
         .executeTakeFirst();
 
-      return { rows, chain, need, progress, authors, events, pending };
+      return { rows, chain, need, progress, authors, events, pending, movements, itemInfo };
     });
 
     const authorName = new Map(snapshot.authors.map((a) => [a.id, a.displayName]));
@@ -85,6 +96,9 @@ export async function handle(request: Request) {
       };
       for (const id of meta.fulfillmentIds) if (typeof id === "string") eventByFulfillmentId.set(id, info);
     }
+
+    const movementDelta = new Map(snapshot.movements.map((m) => [String(m.id), Number(m.delta)]));
+    const physicalBalance = snapshot.movements.length > 0 ? snapshot.movements.reduce((acc, m) => acc + Number(m.delta), 0) : null;
 
     const netCountedEffect = snapshot.chain.head && snapshot.chain.headState === "ativa" ? countedEffect(snapshot.chain.head) : 0;
 
@@ -106,7 +120,11 @@ export async function handle(request: Request) {
           createdAt: r.createdAt.toISOString(),
           reason: eventByFulfillmentId.get(r.id)?.reason ?? null,
           approvalRequestId: eventByFulfillmentId.get(r.id)?.approvalRequestId ?? null,
+          stockTransactionId: r.stockTransactionId,
+          physicalDelta: r.stockTransactionId !== null ? (movementDelta.get(r.stockTransactionId) ?? null) : null,
         })),
+        item: snapshot.itemInfo,
+        physicalBalance,
         vigenteFulfillmentId: snapshot.chain.vigenteFulfillmentId,
         chainState: snapshot.chain.headState,
         netCountedEffect,

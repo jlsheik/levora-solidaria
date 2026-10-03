@@ -21,7 +21,7 @@ export async function handle(request: Request) {
         organizationId: input.organizationId,
         allocationId: input.allocationId,
         expectedVigenteFulfillmentId: input.expectedVigenteFulfillmentId,
-        operation: { kind: "estorno" },
+        operation: { kind: "estorno", withdrawStock: input.withdrawStock === true },
         reason: input.reason,
         actorUserId: user.id,
       })

@@ -188,7 +188,7 @@ describe("Fase 78 — histórico do ledger", () => {
 });
 
 describe("Fase 78 — correção contábil (par reversal + correction)", () => {
-  it("100 → 120: executa direto (aumento), cria reversal 100 + correction 120, saldo 120, nenhum movimento físico", async () => {
+  it("100 → 120: executa direto (aumento), cria reversal 100 + correction 120, saldo 120, UM ajuste físico +20", async () => {
     const s = await setup();
     const stockBefore = await stockCount();
     const v1 = await vigente(s);
@@ -204,17 +204,17 @@ describe("Fase 78 — correção contábil (par reversal + correction)", () => {
     expect(rows.map((r) => [r.entryType, Number(r.quantity), r.isCountable, r.stockTransactionId === null ? "sem-estoque" : "com-estoque"])).toEqual([
       ["original", 100, true, "com-estoque"],
       ["reversal", 100, true, "sem-estoque"],
-      ["correction", 120, true, "sem-estoque"],
+      ["correction", 120, true, "com-estoque"],
     ]);
     expect(rows[1].reversesFulfillmentId).toBe(rows[0].id);
     expect(rows[2].reversesFulfillmentId).toBe(rows[0].id);
     expect(await balance(s)).toBe(120);
-    expect(await stockCount()).toEqual(stockBefore);
+    expect(await stockCount()).toEqual({ n: stockBefore.n + 1, total: stockBefore.total + 20 });
 
     const events = (await auditActions(s)).filter((e) => e.action.startsWith("atribuicao.recebimento_"));
     expect(events).toHaveLength(1);
     expect(events[0].action).toBe("atribuicao.recebimento_corrigido");
-    expect(events[0].metadata).toMatchObject({ quantidadeAnterior: 100, quantidadeNova: 120, efeitoEstoque: "nenhum", motivo: "Contagem refeita", allocationId: s.allocationId });
+    expect(events[0].metadata).toMatchObject({ quantidadeAnterior: 100, quantidadeNova: 120, efeitoEstoque: "ajuste", deltaFisico: 20, motivo: "Contagem refeita", allocationId: s.allocationId });
   });
 
   it("100 → 80: é redução ⇒ 202 pendente, ledger intacto até a aprovação; payload completo e imutável", async () => {
@@ -244,7 +244,9 @@ describe("Fase 78 — correção contábil (par reversal + correction)", () => {
       quantidadeNova: 80,
       unidadeAnterior: "kg",
       unidadeNova: "kg",
-      efeitoEstoque: "nenhum",
+      efeitoEstoque: "ajuste",
+      retiradaFisica: false,
+      saldoFisicoAllocation: 100,
       deltaFisicoPlanejado: -20,
       itemId: s.itemId,
       motivo: "Faltaram 20",
@@ -268,7 +270,10 @@ describe("Fase 78 — correção contábil (par reversal + correction)", () => {
     const rows = await ledger(s);
     expect(rows.map((r) => [r.entryType, Number(r.quantity)])).toEqual([["original", 100], ["reversal", 100], ["correction", 80]]);
     expect(await balance(s)).toBe(80);
-    expect(await stockCount()).toEqual(stockBefore);
+    // UM ajuste −20 (nunca saída 100 + entrada 80), vinculado à correction; a reversal do par não tem movimento
+    expect(await stockCount()).toEqual({ n: stockBefore.n + 1, total: stockBefore.total - 20 });
+    expect(rows[1].stockTransactionId).toBeNull();
+    expect(rows[2].stockTransactionId).not.toBeNull();
     // autor das linhas = solicitante
     expect(rows[1].createdByUserId).toBe(s.operador.userId);
 
@@ -949,22 +954,28 @@ describe("Fase 78 — concorrência (Postgres real, Promise.all)", () => {
 });
 
 describe("Fase 78 — invariantes finais", () => {
-  it("nenhuma operação desta fatia cria movimento físico (stock_transactions) nem altera o item", async () => {
+  it("cadeia física de reentrada: 100→140 (+40), →60 (−80), estorno contábil (0), reativar 100 (+40); total físico = soma dos movimentos vinculados", async () => {
     const s = await setup();
     const before = await stockCount();
     let v = await vigente(s);
     await correct(s, s.operador, { expectedVigenteFulfillmentId: v, quantity: 140 });
+    expect((await stockCount()).total).toBe(before.total + 40);
     v = await vigente(s);
     const a = await parseJson<{ approvalRequestId: number }>(await correct(s, s.operador, { expectedVigenteFulfillmentId: v, quantity: 60 }));
     await decide(s, s.admin, a.approvalRequestId);
+    expect((await stockCount()).total).toBe(before.total - 40);
     v = await vigente(s);
     const b = await parseJson<{ approvalRequestId: number }>(await reverse(s, s.operador, { expectedVigenteFulfillmentId: v }));
     await decide(s, s.admin, b.approvalRequestId);
+    expect((await stockCount()).total).toBe(before.total - 40); // estorno contábil: estoque inalterado
     v = await vigente(s);
     await correct(s, s.operador, { expectedVigenteFulfillmentId: v, quantity: 100 });
-    expect(await stockCount()).toEqual(before);
-    const linked = await db.selectFrom("needFulfillments").select(["stockTransactionId"]).where("allocationId", "=", s.allocationId).where("entryType", "<>", "original").execute();
-    expect(linked.every((r) => r.stockTransactionId === null)).toBe(true);
+    expect((await stockCount()).total).toBe(before.total); // 60 físico → 100
+    const data = await historyData(s);
+    expect(data.physicalBalance).toBe(100);
+    const linked = await db.selectFrom("needFulfillments").select(["entryType", "stockTransactionId"]).where("allocationId", "=", s.allocationId).orderBy("id").execute();
+    // só a correction que moveu o físico e o original têm movimento; reversals do par/contábil não
+    expect(linked.filter((r) => r.entryType === "reversal").every((r) => r.stockTransactionId === null)).toBe(true);
   });
 
   it("o ledger segue append-only e as quantidades continuam positivas após uma cadeia longa", async () => {

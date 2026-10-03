@@ -25,12 +25,19 @@ export type ReceiptHistoryRow = {
   /** Motivo da operação (vem da trilha de auditoria; o ledger em si não tem coluna de motivo). */
   reason: string | null;
   approvalRequestId: number | null;
+  /** Movimento físico de estoque ligado a esta linha (null = linha só contábil). */
+  stockTransactionId: string | null;
+  /** Delta do movimento físico ligado (+ entrada, − saída), ou null. */
+  physicalDelta: number | null;
 };
 
 export type OutputType = {
   allocation: { id: number; status: string };
   need: { id: number; title: string; unit: string; quantityNeeded: number } | null;
   rows: ReceiptHistoryRow[];
+  /** Item físico do recebimento e saldo físico desta atribuição (soma dos movimentos ligados ao ledger). */
+  item: { id: number; name: string; unit: string; currentBalance: number } | null;
+  physicalBalance: number | null;
   /** Token de precondição: enviar como `expectedVigenteFulfillmentId`. `null` se não há recebimento. */
   vigenteFulfillmentId: string | null;
   chainState: "ativa" | "estornada" | null;

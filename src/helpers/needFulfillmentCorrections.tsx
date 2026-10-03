@@ -6,15 +6,18 @@ import { normalize } from "./opportunityMatching.js";
 import { computeNeedProgress, getNeedFulfillmentBalance } from "./needFulfillment.js";
 import { recordAuditLogEntry } from "./auditLog.js";
 import { createApprovalRequest } from "./approvals.js";
+import { getItemStockBalance } from "./stockBalance.js";
 import superjson from "superjson";
 
 /**
  * Ciclo de correção/estorno do ledger de atendimento (Fase 78, Fatia 1).
  * Contrato: docs/LEDGER_CORRECOES_ESPECIFICACAO.md (seções B, G, O–U).
  *
- * Esta fatia é SÓ CONTÁBIL: nenhuma função aqui cria `stock_transactions`
- * (o efeito físico de correção/estorno é a Fatia 2). O Modelo B não muda:
- * toda operação é um INSERT de linhas novas (`reversal`/`correction`).
+ * Fatia 1 (Fase 78): efeito contábil. Fatia 2 (Fase 80): efeito FÍSICO no estoque
+ * — um único `stock_transactions` do tipo `ajuste` (delta com sinal), criado
+ * na MESMA transação do ledger e vinculado a UMA linha (`correction`, ou a
+ * `reversal` quando há retirada física opcional). O Modelo B não muda: toda
+ * operação é um INSERT de linhas novas (`reversal`/`correction`).
  *
  * Fórmula de saldo: continua exclusivamente em `needFulfillment.tsx`
  * (`getNeedFulfillmentBalance`). `countedEffect` abaixo é só a projeção do
@@ -120,7 +123,21 @@ export function resolveLedgerChain(rows: LedgerRow[]): LedgerChain {
   return { head, headState, vigenteFulfillmentId: headReversal ? headReversal.id : head.id, states, pairedReversals };
 }
 
-export type LedgerOperationInput = { kind: "correcao"; quantity?: number; unit?: string } | { kind: "estorno" };
+export type LedgerOperationInput = { kind: "correcao"; quantity?: number; unit?: string } | { kind: "estorno"; withdrawStock?: boolean };
+
+/** Efeito físico planejado (e, na execução, aplicado) de UMA operação. Sempre um único `ajuste`. */
+export interface LedgerStockEffect {
+  itemId: number;
+  itemName: string;
+  /** Delta com sinal (+ entrada / − saída), 3 casas, nunca 0. */
+  delta: number;
+  /** Saldo físico da allocation ANTES da operação (soma dos movimentos vinculados ao ledger dela). */
+  saldoFisicoAllocation: number;
+  /** Linha do ledger que carrega o movimento (a `correction`; ou a `reversal` na retirada física). */
+  carrier: "correction" | "reversal";
+  /** Saldo do item sob o lock, antes do movimento. */
+  itemBalanceBefore: number;
+}
 
 export interface LedgerOperationPlan {
   organizationId: number;
@@ -142,9 +159,11 @@ export interface LedgerOperationPlan {
   createReversal: boolean;
   requiresApproval: boolean;
   unitMismatchNote: string | null;
-  /** Dado de planejamento para a Fatia 2 (não executado nesta fatia). */
+  /** Delta físico planejado = executado (null quando não há movimento). */
   deltaFisicoPlanejado: number | null;
   itemId: number | null;
+  stock: LedgerStockEffect | null;
+  retiradaFisica: boolean;
 }
 
 export type LedgerPlanError =
@@ -154,7 +173,10 @@ export type LedgerPlanError =
   | { type: "ja_estornado" }
   | { type: "sem_alteracao" }
   | { type: "quantidade_e_unidade_juntas" }
-  | { type: "sem_dados" };
+  | { type: "sem_dados" }
+  | { type: "insufficient_stock"; currentStock: number; itemName: string }
+  | { type: "sem_saldo_fisico" }
+  | { type: "unidade_incompativel" };
 
 const QUANTITY_SCALE = 1000;
 const sameQuantity = (a: number, b: number) => Math.round(a * QUANTITY_SCALE) === Math.round(b * QUANTITY_SCALE);
@@ -191,7 +213,14 @@ export { readLedgerRows };
  */
 export async function lockAndPlanLedgerOperation(
   trx: Transaction<DB>,
-  params: { organizationId: number; allocationId: number; expectedVigenteFulfillmentId: string; operation: LedgerOperationInput }
+  params: {
+    organizationId: number;
+    allocationId: number;
+    expectedVigenteFulfillmentId: string;
+    operation: LedgerOperationInput;
+    /** Pedido da Fatia 1 (efeitoEstoque "nenhum") aprovado depois: executa só o contábil, como autorizado. */
+    forceNoPhysical?: boolean;
+  }
 ): Promise<{ type: "plan"; plan: LedgerOperationPlan } | LedgerPlanError> {
   const allocation = await trx
     .selectFrom("opportunityAllocations")
@@ -215,8 +244,33 @@ export async function lockAndPlanLedgerOperation(
 
   let need: { quantityNeeded: number; unit: string } | null = null;
   if (originalRow.needId !== null) {
-    const needRow = await trx.selectFrom("needs").select(["quantityNeeded", "unit"]).where("id", "=", originalRow.needId).forUpdate().executeTakeFirst();
+    // FOR NO KEY UPDATE (não FOR UPDATE): o recebimento insere em need_fulfillments (FK → needs = FOR KEY SHARE) DEPOIS de
+    // travar o item; um FOR UPDATE aqui, antes do lock do item, fechava um ciclo (deadlock real, achado na Fase 80).
+    const needRow = await trx.selectFrom("needs").select(["quantityNeeded", "unit"]).where("id", "=", originalRow.needId).forNoKeyUpdate().executeTakeFirst();
     if (needRow) need = { quantityNeeded: Number(needRow.quantityNeeded), unit: needRow.unit };
+  }
+
+  // Item físico do recebimento (o do movimento do `original`; imutável). O lock do
+  // item vem DEPOIS da need e ANTES do ledger (ordem global: allocation → need →
+  // itens → ledger → auditoria), a mesma ordem do recebimento e da decisão.
+  let item: { id: number; name: string; unit: string } | null = null;
+  const originalStock = await trx
+    .selectFrom("needFulfillments")
+    .innerJoin("stockTransactions", "stockTransactions.id", "needFulfillments.stockTransactionId")
+    .select(["stockTransactions.itemId as itemId"])
+    .where("needFulfillments.allocationId", "=", params.allocationId)
+    .where("needFulfillments.entryType", "=", "original")
+    .executeTakeFirst();
+  if (originalStock) {
+    const itemRow = await trx
+      .selectFrom("inventoryItems")
+      .select(["id", "name", "unit"])
+      .where("id", "=", originalStock.itemId)
+      .where("organizationId", "=", params.organizationId)
+      .forUpdate()
+      .executeTakeFirst();
+    if (!itemRow) return { type: "not_found" };
+    item = itemRow;
   }
 
   const rows = await readLedgerRows(trx, params.allocationId, true);
@@ -230,12 +284,29 @@ export async function lockAndPlanLedgerOperation(
   const needId = originalRow.needId;
   const counts = head.isCountable && needId !== null;
 
-  const original = rows.find((r) => r.entryType === "original");
-  let itemId: number | null = null;
-  if (original?.stockTransactionId) {
-    const stockRow = await trx.selectFrom("stockTransactions").select(["itemId"]).where("id", "=", original.stockTransactionId).executeTakeFirst();
-    itemId = stockRow?.itemId ?? null;
+  const itemId = item?.id ?? null;
+
+  // Saldo físico REAL da allocation: soma dos movimentos efetivamente vinculados às
+  // linhas dela (nem toda linha tem movimento; nunca se assume a quantidade da linha).
+  const linkedIds = rows.map((r) => r.stockTransactionId).filter((v): v is string => v !== null);
+  let saldoFisicoAllocation = 0;
+  if (linkedIds.length > 0) {
+    const sumRow = await trx
+      .selectFrom("stockTransactions")
+      .select((eb) => eb.fn.sum("delta").as("total"))
+      .where("id", "in", linkedIds)
+      .where("organizationId", "=", params.organizationId)
+      .executeTakeFirst();
+    saldoFisicoAllocation = Number(sumRow?.total ?? 0);
   }
+  // Só há significado físico quando a unidade da linha é a do item (sem conversão).
+  const unitMatchesItem = (lineUnit: string) => item !== null && normalize(lineUnit) === normalize(item.unit);
+  const round3 = (n: number) => Math.round(n * QUANTITY_SCALE) / QUANTITY_SCALE;
+  const buildStock = async (delta: number, carrier: "correction" | "reversal"): Promise<{ stock: LedgerStockEffect } | LedgerPlanError> => {
+    const balance = await getItemStockBalance(trx, (item as { id: number }).id);
+    if (delta < 0 && balance + delta < 0) return { type: "insufficient_stock", currentStock: balance, itemName: (item as { name: string }).name };
+    return { stock: { itemId: (item as { id: number }).id, itemName: (item as { name: string }).name, delta, saldoFisicoAllocation, carrier, itemBalanceBefore: balance } };
+  };
 
   const base = {
     organizationId: params.organizationId,
@@ -253,6 +324,16 @@ export async function lockAndPlanLedgerOperation(
 
   if (params.operation.kind === "estorno") {
     if (chain.headState === "estornada") return { type: "ja_estornado" };
+    // Retirada física opcional (P-L4): só o saldo físico REAL da allocation, inteiro.
+    let stock: LedgerStockEffect | null = null;
+    const withdraw = params.operation.withdrawStock === true && params.forceNoPhysical !== true;
+    if (withdraw) {
+      if (!unitMatchesItem(head.unit)) return { type: "unidade_incompativel" };
+      if (saldoFisicoAllocation <= 0) return { type: "sem_saldo_fisico" };
+      const built = await buildStock(-saldoFisicoAllocation, "reversal");
+      if (!("stock" in built)) return built;
+      stock = built.stock;
+    }
     return {
       type: "plan",
       plan: {
@@ -266,7 +347,9 @@ export async function lockAndPlanLedgerOperation(
         createReversal: true,
         requiresApproval: true,
         unitMismatchNote: null,
-        deltaFisicoPlanejado: null,
+        deltaFisicoPlanejado: stock?.delta ?? null,
+        stock,
+        retiradaFisica: stock !== null,
       },
     };
   }
@@ -294,7 +377,19 @@ export async function lockAndPlanLedgerOperation(
   // Redução = menos quantidade registrada OU menos efeito contado → exige
   // segunda pessoa (P-L5/P-L6). Aumento, reclassificação e reativação não.
   const reducesQuantity = !reactivating && qtyChanged && quantidadeNova < head.quantity;
-  const requiresApproval = reducesQuantity || efeitoNovo < efeitoAnterior;
+  // Efeito físico (P-L3): a correção de QUANTIDADE (mesma unidade do item) leva o saldo
+  // físico da allocation ao valor novo — UM ajuste pela diferença, nunca "saída tudo + entrada".
+  // Unidade só reclassificada: sem movimento. Redução física exige segunda pessoa.
+  let stock: LedgerStockEffect | null = null;
+  if (params.forceNoPhysical !== true && !unitChanged && unitMatchesItem(head.unit)) {
+    const delta = round3(quantidadeNova - saldoFisicoAllocation);
+    if (delta !== 0) {
+      const built = await buildStock(delta, "correction");
+      if (!("stock" in built)) return built;
+      stock = built.stock;
+    }
+  }
+  const requiresApproval = reducesQuantity || efeitoNovo < efeitoAnterior || (stock !== null && stock.delta < 0);
 
   const unitMismatchNote =
     !isCountableNova && need
@@ -314,7 +409,9 @@ export async function lockAndPlanLedgerOperation(
       createReversal,
       requiresApproval,
       unitMismatchNote,
-      deltaFisicoPlanejado: unitChanged || !qtyChanged ? null : quantidadeNova - head.quantity,
+      deltaFisicoPlanejado: stock?.delta ?? null,
+      stock,
+      retiradaFisica: false,
     },
   };
 }
@@ -322,14 +419,37 @@ export async function lockAndPlanLedgerOperation(
 export interface LedgerExecutionResult {
   reversalFulfillmentId: string | null;
   fulfillmentId: string;
+  stockTransactionId: string | null;
+  itemBalanceAfter: number | null;
   needId: number | null;
   progressBefore: { fulfilled: number; requiredRemaining: number; surplus: number } | null;
   progressAfter: { fulfilled: number; requiredRemaining: number; surplus: number } | null;
 }
 
-/** Escreve as linhas do plano (já travado/validado). SEM estoque físico nesta fatia. */
-export async function executeLedgerPlan(trx: Transaction<DB>, plan: LedgerOperationPlan, createdByUserId: number): Promise<LedgerExecutionResult> {
+/**
+ * Escreve o plano (já travado e validado): primeiro o movimento físico (se houver),
+ * depois as linhas do ledger — na MESMA transação do chamador (tudo ou nada).
+ */
+export async function executeLedgerPlan(trx: Transaction<DB>, plan: LedgerOperationPlan, createdByUserId: number, motivo: string): Promise<LedgerExecutionResult> {
   const before = plan.needId !== null && plan.needQuantity !== null ? computeNeedProgress(plan.needQuantity, await getNeedFulfillmentBalance(trx, plan.needId)) : null;
+
+  let stockTransactionId: string | null = null;
+  let itemBalanceAfter: number | null = null;
+  if (plan.stock) {
+    const reason =
+      plan.operacao === "estorno"
+        ? `Retirada física do estorno do recebimento da atribuição #${plan.allocationId}: ${motivo}`
+        : `Ajuste da correção do recebimento da atribuição #${plan.allocationId} (${plan.stock.saldoFisicoAllocation} → ${plan.stock.saldoFisicoAllocation + plan.stock.delta}): ${motivo}`;
+    const [tx] = await trx
+      .insertInto("stockTransactions")
+      .values({ organizationId: plan.organizationId, itemId: plan.stock.itemId, type: "ajuste", delta: plan.stock.delta, reason, createdByUserId })
+      .returning(["id"])
+      .execute();
+    stockTransactionId = String(tx.id);
+    itemBalanceAfter = await getItemStockBalance(trx, plan.stock.itemId);
+    // Nunca negativo (o plano já validou sob o lock; esta é a trava final, desfaz tudo).
+    if (itemBalanceAfter < 0) throw new Error("estoque ficaria negativo");
+  }
 
   let reversalFulfillmentId: string | null = null;
   let fulfillmentId = "";
@@ -341,7 +461,7 @@ export async function executeLedgerPlan(trx: Transaction<DB>, plan: LedgerOperat
         organizationId: plan.organizationId,
         needId: plan.needId,
         allocationId: plan.allocationId,
-        stockTransactionId: null,
+        stockTransactionId: plan.stock?.carrier === "reversal" ? stockTransactionId : null,
         quantity: plan.quantidadeAnterior,
         unit: plan.unidadeAnterior,
         isCountable: plan.isCountableAnterior,
@@ -362,7 +482,7 @@ export async function executeLedgerPlan(trx: Transaction<DB>, plan: LedgerOperat
         organizationId: plan.organizationId,
         needId: plan.needId,
         allocationId: plan.allocationId,
-        stockTransactionId: null,
+        stockTransactionId: plan.stock?.carrier === "correction" ? stockTransactionId : null,
         quantity: plan.quantidadeNova,
         unit: plan.unidadeNova,
         isCountable: plan.isCountableNova,
@@ -377,7 +497,7 @@ export async function executeLedgerPlan(trx: Transaction<DB>, plan: LedgerOperat
   }
 
   const after = plan.needId !== null && plan.needQuantity !== null ? computeNeedProgress(plan.needQuantity, await getNeedFulfillmentBalance(trx, plan.needId)) : null;
-  return { reversalFulfillmentId, fulfillmentId, needId: plan.needId, progressBefore: before, progressAfter: after };
+  return { reversalFulfillmentId, fulfillmentId, stockTransactionId, itemBalanceAfter, needId: plan.needId, progressBefore: before, progressAfter: after };
 }
 
 export function buildLedgerAuditEntry(
@@ -400,9 +520,19 @@ export function buildLedgerAuditEntry(
     efeitoNoSaldoNovo: plan.efeitoNovo,
     excedenteAnterior: result.progressBefore?.surplus ?? 0,
     excedente: result.progressAfter?.surplus ?? 0,
-    efeitoEstoque: "nenhum",
+    efeitoEstoque: plan.stock ? "ajuste" : "nenhum",
     motivo: ctx.reason,
   };
+  if (plan.stock) {
+    base.stockTransactionId = result.stockTransactionId;
+    base.deltaFisico = plan.stock.delta;
+    base.itemId = plan.stock.itemId;
+    base.unidade = plan.unidadeAnterior;
+    base.saldoFisicoAllocationAntes = plan.stock.saldoFisicoAllocation;
+    base.saldoEstoqueAntes = plan.stock.itemBalanceBefore;
+    base.saldoEstoqueApos = result.itemBalanceAfter;
+    base.retiradaFisica = plan.retiradaFisica;
+  }
   if (plan.operacao === "correcao") base.reverteuFulfillmentId = result.reversalFulfillmentId;
   if (ctx.approvalRequestId !== undefined) base.approvalRequestId = ctx.approvalRequestId;
   if (ctx.requesterUserId !== undefined) base.solicitanteUserId = ctx.requesterUserId;
@@ -424,8 +554,10 @@ export const ledgerApprovalPayloadSchema = z.object({
   unidadeAnterior: z.string(),
   unidadeNova: z.string(),
   isCountableResultante: z.boolean(),
-  efeitoEstoque: z.literal("nenhum"),
+  efeitoEstoque: z.enum(["nenhum", "ajuste"]),
   deltaFisicoPlanejado: z.number().nullable(),
+  retiradaFisica: z.boolean().optional(),
+  saldoFisicoAllocation: z.number().nullable().optional(),
   itemId: z.number().int().nullable(),
   motivo: z.string(),
   solicitadoEm: z.string(),
@@ -491,8 +623,10 @@ export async function submitLedgerOperation(
       unidadeAnterior: plan.unidadeAnterior,
       unidadeNova: plan.operacao === "estorno" ? plan.unidadeAnterior : plan.unidadeNova,
       isCountableResultante: plan.isCountableNova,
-      efeitoEstoque: "nenhum",
+      efeitoEstoque: plan.stock ? "ajuste" : "nenhum",
       deltaFisicoPlanejado: plan.deltaFisicoPlanejado,
+      retiradaFisica: plan.retiradaFisica,
+      saldoFisicoAllocation: plan.stock?.saldoFisicoAllocation ?? null,
       itemId: plan.itemId,
       motivo: params.reason,
       solicitadoEm: new Date().toISOString(),
@@ -521,7 +655,7 @@ export async function submitLedgerOperation(
     return { type: "pending_approval", approvalRequestId: approval.id, plan };
   }
 
-  const result = await executeLedgerPlan(trx, plan, params.actorUserId);
+  const result = await executeLedgerPlan(trx, plan, params.actorUserId, params.reason);
   const audit = buildLedgerAuditEntry(plan, result, { actorUserId: params.actorUserId, reason: params.reason });
   await recordAuditLogEntry(
     {
@@ -540,7 +674,8 @@ export async function submitLedgerOperation(
 export type ApprovedLedgerResult =
   | { type: "executed"; plan: LedgerOperationPlan; result: LedgerExecutionResult; payload: LedgerApprovalPayload }
   | { type: "payload_invalid" }
-  | { type: "pedido_obsoleto" };
+  | { type: "pedido_obsoleto" }
+  | { type: "insufficient_stock"; currentStock: number; itemName: string };
 
 /**
  * Execução de um pedido APROVADO, dentro da transação da decisão (o pedido
@@ -560,14 +695,20 @@ export async function executeApprovedLedgerRequest(
   if ((payload.operacao === "estorno") !== (request.actionType === "estorno_recebimento")) return { type: "payload_invalid" };
 
   const operation: LedgerOperationInput =
-    payload.operacao === "estorno" ? { kind: "estorno" } : { kind: "correcao", quantity: payload.quantidadeNova, unit: payload.unidadeNova };
+    payload.operacao === "estorno"
+      ? { kind: "estorno", withdrawStock: payload.retiradaFisica === true }
+      : { kind: "correcao", quantity: payload.quantidadeNova, unit: payload.unidadeNova };
 
   const planned = await lockAndPlanLedgerOperation(trx, {
     organizationId: payload.organizationId,
     allocationId: payload.allocationId,
     expectedVigenteFulfillmentId: payload.targetFulfillmentId,
     operation,
+    // Pedido criado na Fatia 1 (sem efeito físico autorizado): executa SÓ o contábil.
+    forceNoPhysical: payload.efeitoEstoque === "nenhum",
   });
+  // Estoque que deixou de comportar a saída: o pedido continua pendente (nada executa).
+  if (planned.type === "insufficient_stock") return planned;
   if (planned.type !== "plan") return { type: "pedido_obsoleto" };
   const plan = planned.plan;
 
@@ -579,10 +720,15 @@ export async function executeApprovedLedgerRequest(
     sameQuantity(plan.quantidadeAnterior, payload.quantidadeAnterior) &&
     plan.unidadeAnterior === payload.unidadeAnterior &&
     plan.isCountableNova === payload.isCountableResultante &&
-    plan.requiresApproval;
+    plan.requiresApproval &&
+    // O efeito físico aprovado é EXATAMENTE o executado: mesmo item, mesmo delta, mesmo saldo físico.
+    (plan.stock?.itemId ?? null) === (payload.efeitoEstoque === "ajuste" ? payload.itemId : null) &&
+    sameQuantity(plan.stock?.delta ?? 0, payload.efeitoEstoque === "ajuste" ? (payload.deltaFisicoPlanejado ?? 0) : 0) &&
+    (payload.efeitoEstoque !== "ajuste" || sameQuantity(plan.stock?.saldoFisicoAllocation ?? 0, payload.saldoFisicoAllocation ?? 0)) &&
+    (plan.retiradaFisica === (payload.retiradaFisica === true));
   if (!sameAsRequested) return { type: "pedido_obsoleto" };
 
-  const result = await executeLedgerPlan(trx, plan, request.requestedByUserId);
+  const result = await executeLedgerPlan(trx, plan, request.requestedByUserId, payload.motivo);
   return { type: "executed", plan, result, payload };
 }
 
@@ -611,6 +757,12 @@ export function ledgerErrorResponse(error: LedgerPlanError | { type: "pedido_pen
       return make(422, "quantidade_e_unidade_juntas", "Corrija a quantidade e a unidade em operações separadas");
     case "sem_dados":
       return make(422, "sem_dados", "Informe a nova quantidade ou a nova unidade");
+    case "insufficient_stock":
+      return make(409, "insufficient_stock", `Estoque insuficiente: saldo atual é ${error.currentStock}, a saída solicitada deixaria o saldo negativo`, { currentStock: error.currentStock });
+    case "sem_saldo_fisico":
+      return make(422, "sem_saldo_fisico", "Esta atribuição não tem saldo físico a retirar do estoque: use o estorno só contábil");
+    case "unidade_incompativel":
+      return make(422, "unidade_incompativel", "A unidade do recebimento difere da do item de estoque: a retirada física exigiria conversão, que não existe");
     case "pedido_pendente":
       return make(409, "pedido_pendente", "Já existe um pedido de aprovação pendente para este recebimento", { approvalRequestId: error.approvalRequestId });
   }

@@ -31,6 +31,8 @@ export async function handle(request: Request) {
           status: "executada",
           reversalFulfillmentId: result.result.reversalFulfillmentId,
           fulfillmentId: result.result.fulfillmentId,
+          stockTransactionId: result.result.stockTransactionId,
+          deltaFisico: result.plan.stock?.delta ?? null,
           progress: result.result.progressAfter,
         }),
         { headers: { "Content-Type": "application/json" } }

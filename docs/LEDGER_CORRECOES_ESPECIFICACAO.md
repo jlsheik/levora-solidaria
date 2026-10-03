@@ -1024,3 +1024,148 @@ vigente, planejamento, execução, auditoria e respostas de erro);
   mensagem bruta do `ZodError` ao cliente (`buildErrorResponse`, comportamento
   anterior à Fase 78). **Não foi alterado**; uma refatoração global fica para
   uma fase própria.
+
+## AC. Fase 80 — Fatia 2 implementada (efeito físico no estoque)
+
+Baseline `97f2e72`. **Sem migration.** Matching 1.4, `need_resolutions`, lifecycle
+e Modelo B intocados. A seção AA.3 ("nenhum movimento físico") vale só para a
+Fatia 1; **esta seção prevalece** para o efeito físico.
+
+### AC.1 Contrato físico implementado
+
+- **Um único `ajuste`** (`stock_transactions.type = 'ajuste'`, delta com sinal,
+  nunca 0), criado **na mesma transação** do ledger, **antes** das linhas do ledger
+  e com a auditoria por último. Qualquer falha desfaz tudo (testado: falha injetada
+  no ledger depois do movimento, e na auditoria).
+- **Base do cálculo = saldo físico real da allocation:** soma dos `delta` dos
+  movimentos efetivamente ligados às linhas do ledger dela (nem toda linha tem
+  movimento). Nunca a quantidade da linha.
+- **Correção de quantidade** (mesma unidade do item): `delta = novo − saldo físico`.
+  100→80 = `−20`; 100→120 = `+20`; 80→120 depois de 100→80 = `+40`. Nunca "saída
+  100 + entrada 80". Vai na `correction`; a `reversal` do par fica sem movimento.
+  `delta = 0` (ex.: 100→100) = nenhuma operação.
+- **Correção só de unidade, ou de linha cuja unidade ≠ unidade do item:** sem
+  movimento (sem conversão); `inventory_items.unit` nunca muda.
+- **Estorno:** contábil por padrão (nenhum movimento). Com `withdrawStock: true`
+  (opt-in, P-L4): um `ajuste` de `−saldo físico real` **inteiro**, ligado à
+  **reversal**. Linha com unidade ≠ unidade do item ⇒ 422 `unidade_incompativel`;
+  saldo físico ≤ 0 ⇒ 422 `sem_saldo_fisico` (defensivo: só alcançável com dado
+  anômalo, pois uma cadeia estornada não aceita novo estorno).
+- **"Desfazer estorno"** parte do saldo físico que ficou (estorno contábil ⇒
+  100→150 = `+50`; depois de retirada física ⇒ repõe pelo delta).
+- **Aprovação:** todo delta físico **negativo** exige segunda pessoa (inclusive
+  "desfazer estorno" para menos que o saldo físico) — mais estrito que o limiar
+  de risco do ajuste direto (≥20 ou ≥30%), então **não há regra paralela nem
+  segundo pedido**: a mesma aprovação autoriza ledger + movimento. Positivo
+  executa direto.
+- **Estoque insuficiente:** `409 insufficient_stock` (mesma mensagem do estoque
+  existente; nas rotas de solicitação também com `code`). Nada é criado; na
+  decisão o pedido continua `pendente` (e rejeitável).
+- **Pedido da Fatia 1** (`payload.efeitoEstoque = "nenhum"`) aprovado depois
+  executa **só o contábil**, como foi autorizado.
+
+### AC.2 Payload e imutabilidade
+
+`payload` passa a carregar `efeitoEstoque` (`nenhum`|`ajuste`),
+`deltaFisicoPlanejado` (= o executado), `itemId`, `retiradaFisica`,
+`saldoFisicoAllocation`. Na decisão o plano é **recalculado sob os locks** e
+precisa reproduzir exatamente item, delta, saldo físico e retirada do payload;
+senão `409 pedido_obsoleto`, sem executar (testado com delta e item adulterados).
+Nada de quantidade, item ou unidade vem do cliente na decisão.
+
+### AC.3 Locks e o deadlock encontrado
+
+Ordem: `approval_requests` → `opportunity_allocations` → `needs`
+(**`FOR NO KEY UPDATE`**) → `inventory_items` (`FOR UPDATE`) → linhas do ledger →
+auditoria. **Achado real:** com `needs FOR UPDATE` antes do lock do item, uma
+decisão física concorrente com um recebimento do mesmo item **deu deadlock** (o
+recebimento trava o item e depois toma `FOR KEY SHARE` na need pela FK do
+ledger; o `FOR UPDATE` da need conflita com isso). `FOR NO KEY UPDATE` não
+conflita com `KEY SHARE`. Coberto por teste determinístico (segurar a need em
+`FOR KEY SHARE` não pode bloquear a decisão) e por rajada; controles negativos
+executados (reverter o lock da need ou remover o lock do item faz os testes falharem).
+
+### AC.3b Histórico e UI
+
+`allocations-receipt-history` devolve, por linha, `stockTransactionId` e
+`physicalDelta`, e no topo `item` (id, nome, unidade, saldo atual) e
+`physicalBalance`. A tela mostra o efeito em cada linha ("Estoque: −20 kg",
+"Estorno só contábil: o estoque físico não foi alterado"), a prévia física no
+diálogo de correção e a opção "Retirar também do estoque físico" no estorno
+(desmarcada por padrão). Prestação de contas: **sem redesign**; os `ajuste`
+entram na fonte existente (`ajustes`/`netChange` do `impact-report`, testado).
+
+### AC.4 Estado
+
+Fatia 1 e Fatia 2 implementadas. **Fatia 3** (seção "Atendimento por
+necessidade" na Prestação de Contas) continua pendente. Limites: troca de item
+físico, conversão de unidades e chave de idempotência persistente seguem fora.
+
+## AD. Fase 81 — revisão formal dos locks da need (e dois esclarecimentos)
+
+### AD.1 Matriz real de locks (lida do código, não assumida)
+
+Ordem global: `organização → allocation → need → item → ledger → auditoria`.
+"—" = o fluxo não toca/trava aquela etapa. `KS` = `FOR KEY SHARE` (o que uma FK toma).
+
+| Fluxo | Organização | Allocation | Need | Item | Ledger | Auditoria |
+|---|---|---|---|---|---|---|
+| `allocations-receive` | — | `FOR UPDATE` | — (só **KS**, pela FK do `INSERT` do ledger) | `FOR UPDATE` | `INSERT` (FK: KS em allocation/stock_tx) | advisory, último (antes dele: `FOR UPDATE` da oportunidade em `concludeOpportunity`) |
+| `needs-status` | — | — | **`FOR NO KEY UPDATE`** (era `FOR UPDATE`) | `FOR UPDATE` (só se dá baixa) | — | último |
+| correção / estorno (solicitação) | — | `FOR UPDATE` | **`FOR NO KEY UPDATE`** | `FOR UPDATE` | linhas `FOR UPDATE` (id crescente) + `INSERT` | último |
+| decisão de aprovação do ledger | pedido `FOR UPDATE` (1º) | `FOR UPDATE` | **`FOR NO KEY UPDATE`** | `FOR UPDATE` | idem | último |
+| `stock-transactions` / decisão de ajuste | (pedido `FOR UPDATE`) | — | — | `FOR UPDATE` | — | último |
+| matching (`runMatchingForOpportunity`) | — | — | só lê (sem lock); `INSERT` de allocation/avaliação → KS | — | — | último |
+| `allocations-decide` / `-logistics` | — | `FOR UPDATE` | — | — | — | último |
+
+Nenhum fluxo trava a organização nestes caminhos (a trava da organização é só do
+ciclo de membros). Nenhuma ordem contraria `allocation → need → item → ledger`.
+
+### AD.2 Por que `FOR NO KEY UPDATE` é suficiente
+
+Modos de lock de linha do Postgres: `KEY SHARE` < `SHARE` < `NO KEY UPDATE` < `UPDATE`.
+`FOR NO KEY UPDATE` conflita com `FOR UPDATE`, com outro `NO KEY UPDATE`, com
+`SHARE` e com qualquer `UPDATE` comum da linha (é o modo que um `UPDATE` que não
+muda a chave já toma). **Só não conflita com `KEY SHARE`**, que é exatamente o que
+a FK do ledger toma na need ao inserir uma linha. Logo:
+
+- duas mutações incompatíveis na need (duas correções, correção × `needs-status`,
+  correção × edição da need) **continuam serializadas** — provado em teste (a
+  tentativa de outro `NO KEY UPDATE`, `FOR UPDATE` e `UPDATE` comum espera; só o
+  `KEY SHARE` passa);
+- `needs-status` continua serializado consigo mesmo (a proteção da Fase 35 contra
+  baixa em dobro): os testes dela seguem verdes;
+- a FK do ledger pode adquirir sua proteção sem esperar a correção — e é essa espera
+  que fechava o ciclo (A: need → item; B: item → FK → need).
+
+O recebimento não precisa de proteção contra a correção na need (ele só lê
+`unit`, sem lock, e depende da allocation/item, que continuam travados).
+
+### AD.3 Achado: o mesmo ciclo existia em `needs-status`
+
+O ciclo não era só da Fatia 2: `needs-status` (need `FOR UPDATE` → item `FOR UPDATE`,
+na baixa de estoque) × recebimento (item → FK → need) já deadlocava **no HEAD
+anterior**, reproduzido com o endpoint real (40P01). Correção mínima: o mesmo
+`FOR NO KEY UPDATE` na leitura da need de `needs-status_POST.ts`, pelas mesmas
+razões de AD.2. Coberto por teste determinístico de fluxo real e por rajada.
+
+### AD.4 Provas
+
+`test/ledgerLockOrder.test.ts`: (1) o ciclo A/B reproduzido em SQL puro —
+com `FOR UPDATE` exatamente um fluxo recebe `40P01`; com `NO KEY UPDATE` os dois
+concluem; (2) a matriz de conflitos de AD.2; (3) fluxos reais (decisão física,
+correção direta, estorno físico, `needs-status`) contra um recebimento "no meio";
+(4) rajadas de 12 rodadas (aprovação × recebimento; `needs-status` × recebimento ×
+aprovação). Controles negativos: reverter o lock da need (correção) ou
+(`needs-status`) para `FOR UPDATE` faz as provas falharem com `40P01`; o código foi
+restaurado e o hash conferido.
+
+### AD.5 Correções ao que a Fase 80 registrou
+
+- **`sem_saldo_fisico` é alcançável por estados legítimos** (a seção AC.1 o
+  chamava de defensivo): retirada física → "desfazer estorno" só trocando a
+  unidade (sem estoque) → voltar a unidade do item → nova retirada física. Tem
+  teste de API; o ramo permanece.
+- **O histórico não "fecha ao recarregar":** a tela mantém **um painel aberto por
+  vez** (`expandedReceiptId`); abrir outro fecha o anterior. Comportamento herdado
+  da Fatia 1, não um defeito de recarga.
