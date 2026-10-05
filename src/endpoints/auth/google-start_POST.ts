@@ -8,6 +8,8 @@ import { buildAuthorizationUrl, getGoogleConfig, GoogleOidcError } from "../../h
 import { createOauthAttempt, setBindingCookie } from "../../helpers/oauthFlow.js";
 import { db } from "../../helpers/db.js";
 import { schema } from "./google-start_POST.schema.js";
+import { getServerUserSession } from "../../helpers/getServerUserSession.js";
+import { NotAuthenticatedError } from "../../helpers/getSetServerSession.js";
 
 const IP_LIMIT = { limit: 20, windowMs: 15 * 60 * 1000 };
 
@@ -27,6 +29,14 @@ export async function handle(request: Request) {
     if (!config) return jsonResponse(503, { message: "Entrar com o Google não está disponível neste ambiente.", code: "google_nao_configurado" });
 
     let accessCodeId: number | null = null;
+    let reauthUserId: number | null = null;
+    if (input.intent === "reauth") {
+      // o usuário vem da SESSÃO (nunca do corpo); sem sessão ⇒ 401. Só quem tem identidade Google pode reautenticar por ela.
+      const { user } = await getServerUserSession(request);
+      const linked = await db.selectFrom("userIdentities").select("id").where("userId", "=", user.id).where("provider", "=", "google").executeTakeFirst();
+      if (!linked) return jsonResponse(409, { message: "Esta conta não está vinculada ao Google.", code: "google_nao_vinculado" });
+      reauthUserId = user.id;
+    }
     if (input.intent === "signup") {
       const found = await findUsableAccessCode(input.accessCode!);
       if (!found.ok) {
@@ -36,7 +46,7 @@ export async function handle(request: Request) {
       accessCodeId = found.codeId;
     }
 
-    const attempt = await createOauthAttempt({ intent: input.intent, accessCodeId, ipPrefix: ipPrefix(ip) });
+    const attempt = await createOauthAttempt({ intent: input.intent, accessCodeId, userId: reauthUserId, ipPrefix: ipPrefix(ip) });
     const authorizationUrl = await buildAuthorizationUrl(config, { state: attempt.state, nonce: attempt.nonce, codeChallenge: attempt.codeChallenge });
 
     // limpeza oportunista de tentativas velhas (fora do caminho crítico)
@@ -48,6 +58,7 @@ export async function handle(request: Request) {
     setBindingCookie(response, attempt.binding, attempt.expiresAt);
     return response;
   } catch (error: unknown) {
+    if (error instanceof NotAuthenticatedError) return jsonResponse(401, { error: "Not authenticated" });
     if (error instanceof GoogleOidcError) return jsonResponse(502, { message: "Não foi possível iniciar o login com o Google. Tente novamente.", code: "google_indisponivel" });
     console.error("Erro ao iniciar fluxo Google:", error instanceof Error ? error.name : "erro");
     return buildErrorResponse(error, "Não foi possível iniciar o login com o Google");

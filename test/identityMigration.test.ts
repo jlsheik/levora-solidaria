@@ -15,6 +15,7 @@ const MIGRATION = readFileSync(path.resolve(__dirname, "../db/migrations/0015_id
 const MIGRATION_0016 = readFileSync(path.resolve(__dirname, "../db/migrations/0016_mfa_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0017 = readFileSync(path.resolve(__dirname, "../db/migrations/0017_registration_access_codes.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0018 = readFileSync(path.resolve(__dirname, "../db/migrations/0018_google_identity.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0019 = readFileSync(path.resolve(__dirname, "../db/migrations/0019_social_reauth.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIG_DB = "levora_f89_mig_test";
 
 function adminUrl(): URL {
@@ -178,10 +179,11 @@ describe("migração 0015 — sessões, senhas e triggers", () => {
   it("a migração NÃO é reaplicável por engano (objetos já existem) e o schema.sql novo cria o MESMO conjunto de objetos", async () => {
     await runMigration();
     await expect(runMigration()).rejects.toThrow();
-    // schema.sql atual = baseline + 0015 + 0016 (Fase 90) + 0017 (Fase 91) + 0018 (Fase 92)
+    // schema.sql atual = baseline + 0015 + 0016 (Fase 90) + 0017 (Fase 91) + 0018 (Fase 92) + 0019 (Fase 92.1)
     await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
     await sql.begin((trx) => trx.unsafe(MIGRATION_0017));
     await sql.begin((trx) => trx.unsafe(MIGRATION_0018));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0019));
     const migrated = await sql`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords','registration_access_codes','user_identities','oauth_attempts') ORDER BY 1, 2`;
     // banco novo a partir do schema.sql ATUAL (o mesmo que a suíte usa)
     const admin = postgres(adminUrl().toString(), { max: 1, prepare: false, onnotice: () => {} });
@@ -370,5 +372,35 @@ describe("migração 0018 (Google: user_identities + oauth_attempts) sobre o est
     await sql`CREATE TABLE oauth_attempts (x int)`;
     await expect(sql.begin((trx) => trx.unsafe(MIGRATION_0018))).rejects.toThrow();
     await expect(sql`SELECT 1 FROM user_identities`).rejects.toThrow();
+  });
+});
+
+describe("migração 0019 (reauth social) sobre o estado da Fase 92", () => {
+  const upTo0018 = async () => {
+    await runMigration();
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0017));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0018));
+  };
+
+  it("aplica sem tocar nos dados; primary_reauth_at nasce NULL; CHECK: reauth <=> user_id", async () => {
+    const u = await addUser("reauth@x.com");
+    await upTo0018();
+    await sql`INSERT INTO sessions (id, user_id, expires_at, absolute_expires_at) VALUES ('s1', ${u}, now() + interval '1 day', now() + interval '1 day')`;
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0019));
+    const [row] = await sql`SELECT primary_reauth_at FROM sessions WHERE id = 's1'`;
+    expect(row.primary_reauth_at).toBeNull();
+    const attempt = (intent: string, userId: string) => sql.unsafe(`INSERT INTO oauth_attempts (state_hash, binding_hash, nonce_hash, pepper_version, pkce_verifier_ct, pkce_key_id, provider, intent, user_id, expires_at) VALUES (decode(md5(random()::text) || md5(random()::text), 'hex'), decode('00','hex'), decode('00','hex'), 1, decode('00','hex'), 1, 'google', '${intent}', ${userId}, now() + interval '10 minutes')`);
+    await expect(attempt("reauth", "NULL")).rejects.toThrow(/oauth_attempts_user_iff_reauth/);
+    await expect(attempt("login", String(u))).rejects.toThrow(/oauth_attempts_user_iff_reauth/);
+    await attempt("reauth", String(u));
+  });
+
+  it("a migração é atômica: falhando no meio (coluna já existente), a constraint nova não fica", async () => {
+    await upTo0018();
+    await sql`ALTER TABLE oauth_attempts ADD COLUMN user_id INTEGER`; // conflito no meio do arquivo
+    await expect(sql.begin((trx) => trx.unsafe(MIGRATION_0019))).rejects.toThrow();
+    const cols = await sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'sessions' AND column_name = 'primary_reauth_at'`;
+    expect(cols).toHaveLength(0);
   });
 });

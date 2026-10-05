@@ -305,9 +305,9 @@ describe("senha — bytes, não caracteres", () => {
 });
 
 describe("rotateSession — consumidores nesta fase", () => {
-  it("rotateSession só tem os consumidores previstos da Fase 90 (ativar/desativar MFA e step-up); troca de senha/vínculos ficam para fases seguintes", async () => {
+  it("rotateSession só tem os consumidores previstos (ativar/desativar MFA, step-up e reauth por identidade); troca de senha/vínculos ficam para fases seguintes", async () => {
     const { readFileSync, readdirSync, statSync } = await import("node:fs");
-    const ALLOWED = ["mfa-disable_POST.ts", "mfa-setup-confirm_POST.ts", "step-up_POST.ts"]; // consumidores da Fase 90 (MFA/step-up)
+    const ALLOWED = ["google-callback_GET.ts", "mfa-disable_POST.ts", "mfa-setup-confirm_POST.ts", "step-up_POST.ts"]; // Fase 90 (MFA/step-up) + Fase 92.1 (reauth por identidade no callback)
     const { join } = await import("node:path");
     const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? walk(join(dir, f)) : [join(dir, f)]));
     const users = walk("src").concat(walk("server")).filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes("sessionLifecycle")).filter((f) => readFileSync(f, "utf8").includes("rotateSession"));

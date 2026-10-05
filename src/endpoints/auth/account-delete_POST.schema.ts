@@ -1,8 +1,14 @@
 import { z } from "zod";
 import superjson from "superjson";
+import { ApiRequestError } from "../../helpers/apiRequestError.js";
 
+/**
+ * Conta COM senha: `password`. Conta SEM senha (só identidade externa, ex.: Google): `confirmation: "EXCLUIR"` (confirmação digitada contra
+ * execução acidental/CSRF) + reautenticação recente da identidade (`primary_reauth_at`, ver accountReauth.tsx) — verificada no SERVIDOR.
+ */
 export const schema = z.object({
-  password: z.string().min(1, "Informe sua senha para confirmar"),
+  password: z.string().min(1, "Informe sua senha para confirmar").optional(),
+  confirmation: z.literal("EXCLUIR").optional(),
 });
 
 export type OutputType = {
@@ -26,8 +32,8 @@ export const postAccountDelete = async (
   });
 
   if (!result.ok) {
-    const errorData = superjson.parse<{ message: string }>(await result.text());
-    throw new Error(errorData.message || "Não foi possível excluir a conta");
+    const errorData = superjson.parse<{ message: string; code?: string }>(await result.text());
+    throw new ApiRequestError(errorData.message || "Não foi possível excluir a conta", result.status, errorData.code ?? null);
   }
 
   return superjson.parse<OutputType>(await result.text());

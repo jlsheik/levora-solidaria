@@ -13,6 +13,8 @@ import {
   type OauthAttemptRow,
 } from "../../helpers/oauthFlow.js";
 import { lockUsersInOrder } from "../../helpers/lockOrder.js";
+import { getServerUserSession } from "../../helpers/getServerUserSession.js";
+import { rotateSessionInTx } from "../../helpers/sessionLifecycle.js";
 
 const IP_LIMIT = { limit: 30, windowMs: 15 * 60 * 1000 };
 
@@ -26,6 +28,8 @@ function redirect(location: string): Response {
   return response;
 }
 const failureRedirect = (motivo: Motivo) => redirect(`/login?google=erro&motivo=${motivo}`);
+/** Falha de REAUTENTICAÇÃO: volta ao app (o usuário continua logado), nunca à tela de login. */
+const reauthFailureRedirect = () => redirect("/?reauth=erro");
 
 const safeEqual = (a: Buffer, b: Buffer) => a.length === b.length && timingSafeEqual(a, b);
 
@@ -45,11 +49,11 @@ export async function handle(request: Request) {
     if (attempt) await finishOauthAttempt(attempt.id, "failed").catch(() => undefined);
     const signup = attempt?.intent === "signup";
     await auditGoogleFailure({
-      action: kind === "identity" ? "usuario.google_identity_rejected" : signup ? "usuario.cadastro_google_falhou" : "usuario.login_google_falhou",
+      action: kind === "identity" ? "usuario.google_identity_rejected" : signup ? "usuario.cadastro_google_falhou" : attempt?.intent === "reauth" ? "usuario.reauth_google_falhou" : "usuario.login_google_falhou",
       motivo: reason,
       ipPrefix: prefix,
     }).catch(() => undefined);
-    return failureRedirect(motivo);
+    return attempt?.intent === "reauth" ? reauthFailureRedirect() : failureRedirect(motivo);
   };
 
   try {
@@ -92,6 +96,37 @@ export async function handle(request: Request) {
       .where("i.issuer", "=", identity.issuer)
       .where("i.subject", "=", identity.subject)
       .executeTakeFirst();
+
+    // ---------------------------------------------------------------- REAUTH: confirma a identidade do PRÓPRIO usuário ------
+    if (attempt.intent === "reauth") {
+      // A tentativa pertence a UM usuário (user_id gravado no servidor no início); a identidade validada tem de ser DELE.
+      if (attempt.userId === null) return await fail("falha", "tentativa_sem_usuario");
+      if (!existing || existing.userId !== attempt.userId || existing.anonymizedAt) return await fail("falha", "identidade_de_outro_usuario", "identity");
+      let current;
+      try {
+        current = await getServerUserSession(request);
+      } catch {
+        return await fail("falha", "sessao_ausente");
+      }
+      if (current.user.id !== attempt.userId) return await fail("falha", "sessao_de_outro_usuario", "identity");
+      const sessionId = current.session.id;
+      const rotated = await db
+        .transaction()
+        .execute(async (trx) => {
+          await lockUsersInOrder(trx, [attempt!.userId!]);
+          await trx.updateTable("userIdentities").set({ lastUsedAt: now }).where("id", "=", existing.identityId).execute();
+          const next = await rotateSessionInTx(trx, sessionId, { primaryReauth: true }); // lança se a sessão foi encerrada (reauth × logout)
+          await auditGoogleInTx(trx, { action: "usuario.reauth_google", userId: attempt!.userId, metadata: { ipPrefix: prefix } });
+          return next;
+        })
+        .catch(() => null);
+      if (!rotated) return await fail("falha", "sessao_encerrada");
+      await finishOauthAttempt(attempt.id, "completed");
+      const res = redirect("/?reauth=ok");
+      await setServerSession(res, { id: rotated.newId, createdAt: rotated.createdAt.getTime(), lastAccessed: now.getTime() }, { absoluteExpiresAt: rotated.absoluteExpiresAt });
+      clearBindingCookie(res);
+      return res;
+    }
 
     // ---------------------------------------------------------------- LOGIN: nunca cria conta -------------------------------
     if (attempt.intent === "login") {

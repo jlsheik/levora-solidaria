@@ -1,9 +1,9 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getOrganizations } from "../endpoints/organizations_GET.schema";
 import { postOrganizations } from "../endpoints/organizations_POST.schema";
-import { postAccountDelete } from "../endpoints/auth/account-delete_POST.schema";
+import { DeleteAccountDialog } from "../components/DeleteAccountDialog";
 import { OrganizationTypeArrayValues } from "../helpers/schema";
 import { useAuth, AUTH_QUERY_KEY } from "../helpers/useAuth";
 import {
@@ -66,10 +66,6 @@ const createOrgSchema = z.object({
   state: z.string().length(2, "Use a sigla do estado, ex: MG"),
 });
 
-const deleteAccountSchema = z.object({
-  password: z.string().min(1, "Informe sua senha"),
-});
-
 export default function DashboardPage() {
   const { authState, logout } = useAuth();
   const navigate = useNavigate();
@@ -101,22 +97,28 @@ export default function DashboardPage() {
     },
   });
 
-  const deleteAccountForm = useForm({ schema: deleteAccountSchema, defaultValues: { password: "" } });
-  const deleteAccountMutation = useMutation({
-    mutationFn: (data: z.infer<typeof deleteAccountSchema>) => postAccountDelete(data),
-    onSuccess: () => {
-      // A sessão já foi encerrada pelo servidor (cookie limpo na resposta) —
-      // só precisa limpar o estado local e mandar para o login, sem chamar
-      // logout() de novo (não há mais sessão para encerrar).
-      queryClient.setQueryData(AUTH_QUERY_KEY, null);
-      queryClient.resetQueries();
-      toast.success("Conta excluída. Sentiremos sua falta.");
-      navigate("/login");
-    },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Não foi possível excluir a conta");
-    },
-  });
+  // Retorno da reautenticação (/?reauth=ok|erro): reabre o diálogo de exclusão; a barra de endereço é limpa (replace).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [justReauthenticated, setJustReauthenticated] = useState(false);
+  useEffect(() => {
+    const reauth = searchParams.get("reauth");
+    if (!reauth) return;
+    if (reauth === "ok") {
+      setJustReauthenticated(true);
+      setDeleteAccountOpen(true);
+    } else {
+      toast.error("Não foi possível confirmar sua identidade. Tente novamente.");
+    }
+    setSearchParams({}, { replace: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleAccountDeleted = () => {
+    // A sessão já foi encerrada pelo servidor (cookie limpo na resposta) — só limpa o estado local e vai para o login.
+    queryClient.setQueryData(AUTH_QUERY_KEY, null);
+    queryClient.resetQueries();
+    toast.success("Conta excluída. Sentiremos sua falta.");
+    navigate("/login");
+  };
 
   const userName = authState.type === "authenticated" ? authState.user.displayName : "";
 
@@ -155,43 +157,7 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <Dialog open={deleteAccountOpen} onOpenChange={(open) => { setDeleteAccountOpen(open); if (!open) deleteAccountForm.setValues({ password: "" } as any); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Excluir minha conta</DialogTitle>
-            <DialogDescription>
-              Isto encerra sua sessão em todos os dispositivos e remove seus
-              dados pessoais (e-mail, nome). Ações que você já realizou
-              continuam registradas na trilha de auditoria das organizações
-              (exigido para rastreabilidade), mas sem seu nome/e-mail
-              associado. Esta ação não pode ser desfeita.
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...deleteAccountForm}>
-            <form
-              className={styles.formGrid}
-              onSubmit={deleteAccountForm.handleSubmit((data) => deleteAccountMutation.mutate(data))}
-            >
-              <FormItem name="password">
-                <FormLabel>Confirme sua senha</FormLabel>
-                <FormControl>
-                  <Input
-                    type="password"
-                    value={deleteAccountForm.values.password || ""}
-                    onChange={(e) => deleteAccountForm.setValues((p: any) => ({ ...p, password: e.target.value }))}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-              <DialogFooter>
-                <Button type="submit" variant="destructive" disabled={deleteAccountMutation.isPending}>
-                  {deleteAccountMutation.isPending ? "Excluindo..." : "Excluir minha conta"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+      <DeleteAccountDialog open={deleteAccountOpen} onOpenChange={setDeleteAccountOpen} onDeleted={handleAccountDeleted} justReauthenticated={justReauthenticated} />
 
       <main className={styles.main}>
         <div className={styles.titleRow}>
