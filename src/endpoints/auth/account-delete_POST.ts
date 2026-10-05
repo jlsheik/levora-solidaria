@@ -148,6 +148,9 @@ export async function handle(request: Request) {
       await trx.deleteFrom("mfaRecoveryCodes").where("userId", "=", user.id).execute();
       await trx.deleteFrom("authChallenges").where("userId", "=", user.id).execute();
       await trx.deleteFrom("userPasswords").where("userId", "=", user.id).execute();
+      // Fase 92: identidades externas (Google) são credenciais — somem com a conta. O código de acesso consumido NÃO volta: o vínculo
+      // users.registered_via_code_id e redeemed_by_user_id permanecem na linha anonimizada.
+      await trx.deleteFrom("userIdentities").where("userId", "=", user.id).execute();
       await trx.deleteFrom("sessions").where("userId", "=", user.id).execute();
 
       await trx

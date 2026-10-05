@@ -64,7 +64,7 @@ export async function handle(request: Request) {
       return user.id;
     });
 
-    if (!result.ok && result.reason !== "email_em_uso") {
+    if (!result.ok && result.reason !== "email_em_uso" && result.reason !== "identidade_em_uso") {
       // Motivo exato só na auditoria (volume limitado); a resposta pública é sempre a mesma.
       await auditInvalidCodeAttempt({ reason: result.reason, ipPrefix: ipPrefix(ip) });
       return new Response(superjson.stringify({ message: ACCESS_CODE_UNAVAILABLE_MESSAGE, code: "codigo_indisponivel" }), {

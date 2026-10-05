@@ -1228,3 +1228,21 @@ em `/plataforma`, auditoria (`codigo_acesso.criado|revogado|consumido|tentativa_
 **Desvios/pendências:** emissão em lote (até 50, §25) não implementada (emissão unitária); `organization_id` reservado e ignorado; sem e-mail
 automático do código (SMTP); resposta pública única é mais restritiva que a mensagem diferenciada sugerida em rascunhos anteriores (justificativa no doc de auditoria).
 **Continuam não implementados:** Google/Microsoft/Apple/OAuth/OIDC, account linking, passkeys, recuperação de senha por e-mail (Fase 92+).
+
+## 28. Estado após a Fase 92 (implementado)
+
+Implementado e verificado **por testes locais com um Google sintético** (nada foi executado contra o Google real; ver `docs/IDENTIDADE_FASE92_GOOGLE_AUDITORIA.md` §14):
+login e cadastro com **Google** (OIDC Authorization Code + PKCE S256), `user_identities` e `oauth_attempts` (migration 0018), validação local do ID token (assinatura RS256 por JWKS do
+Discovery, `iss`, `aud`/`azp`, `exp`/`iat`, `nonce`, `sub`), integração com `registration_access_codes` (cadastro Google exige código; consumo atômico pelo mesmo
+`provisionUserWithAccessCode`), com o MFA LEVORA (Google **não** substitui o 2º fator) e com as sessões existentes (`primary_method='google'`), auditoria
+(`usuario.login_google|login_google_falhou|cadastro_google|cadastro_google_falhou|google_identity_rejected`), rate limits (`google-start`, `google-callback`) e frontend (botão no login; cadastro em dois passos).
+
+**Decisões congeladas nesta fase (implementação de §7, §25.6, §25.7, §25.9):**
+1. Identidade Google = `(google, issuer, sub)`; o e-mail é só atributo; **sem auto-link por e-mail**; o login Google **nunca** cria conta (CHECK no banco: tentativa `login` não carrega código).
+2. O callback é a única autoridade: `state` de uso único (UPDATE condicional) + vínculo de navegador (`levora_oauth`) + PKCE + nonce; o código de acesso **nunca** está em URL — a tentativa guarda só o `access_code_id`.
+3. Para Google (GET same-site) o callback conclui login/cadastro na mesma requisição; o `finalize` em duas etapas do §25.6 continua reservado à Apple (`form_post`).
+4. Nenhum token do Google é armazenado (o `access_token` é descartado). `email_verified=false` não bloqueia o cadastro, mas é gravado como `false`.
+5. A anonimização da conta apaga `user_identities`; o código consumido continua redimido.
+
+**Pendências/desvios:** account linking explícito; exclusão self-service de conta Google-only (exige senha hoje); e-mail ausente no token ⇒ falha neutra (o §25.9 previa pedir o e-mail); `hd`/allowlist de domínio.
+**Continuam não implementados:** Microsoft, Apple, passkeys, recuperação de senha por e-mail (Fase 93+).

@@ -1,0 +1,10 @@
+.wrap { display: flex; flex-direction: column; gap: var(--spacing-2); min-width: 0; }
+/* Botão neutro (fundo do cartão, texto em primeiro plano): contraste garantido nos dois temas; o "G" mantém as cores da marca. */
+.button { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-3); min-height: 2.75rem; padding: var(--spacing-2) var(--spacing-4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--foreground); font: inherit; font-weight: 500; cursor: pointer; }
+.button:hover:not(:disabled) { background: var(--surface); }
+.button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.button:disabled { cursor: not-allowed; opacity: 0.7; }
+.logo { flex-shrink: 0; }
+.error { font-size: 0.8125rem; color: var(--card-foreground); background: color-mix(in srgb, var(--error) 14%, transparent); border: 1px solid var(--error); border-radius: var(--radius); padding: var(--spacing-2) var(--spacing-3); overflow-wrap: anywhere; }
+.divider { display: flex; align-items: center; gap: var(--spacing-3); color: var(--muted-foreground); font-size: 0.8125rem; margin: var(--spacing-1) 0; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }

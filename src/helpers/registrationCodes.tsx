@@ -157,7 +157,7 @@ export async function revokeAccessCode(trx: Transaction<DB>, params: { actorUser
 // ---- consumo (provisionamento) --------------------------------------------------------------------------------------------
 
 export type InvalidCodeReason = "inexistente" | "expirado" | "revogado" | "utilizado";
-export type ProvisionResult = { ok: true; userId: number; codeId: number } | { ok: false; reason: InvalidCodeReason | "email_em_uso" };
+export type ProvisionResult = { ok: true; userId: number; codeId: number } | { ok: false; reason: InvalidCodeReason | "email_em_uso" | "identidade_em_uso" };
 
 class RollbackProvision extends Error {}
 
@@ -172,6 +172,17 @@ export async function checkAccessCode(rawCode: string, now: Date = new Date()): 
   return { ok: false, reason: status === "redeemed" ? "utilizado" : status === "revoked" ? "revogado" : "expirado" };
 }
 
+/** Como `checkAccessCode`, mas devolve o id do código utilizável (o cadastro social guarda o id na tentativa OAuth; o texto nunca é guardado). */
+export async function findUsableAccessCode(rawCode: string, now: Date = new Date()): Promise<{ ok: true; codeId: number } | { ok: false; reason: InvalidCodeReason }> {
+  const canonical = canonicalizeAccessCode(rawCode);
+  if (!canonical) return { ok: false, reason: "inexistente" };
+  const row = await db.selectFrom("registrationAccessCodes").select(["id", "redeemedAt", "revokedAt", "expiresAt"]).where("codeHash", "in", accessCodeHashes(canonical)).executeTakeFirst();
+  if (!row) return { ok: false, reason: "inexistente" };
+  const status = deriveCodeStatus(row, now);
+  if (status === "active") return { ok: true, codeId: row.id };
+  return { ok: false, reason: status === "redeemed" ? "utilizado" : status === "revoked" ? "revogado" : "expirado" };
+}
+
 /**
  * CONSUMO ATÔMICO. Numa ÚNICA transação: trava a linha do código (FOR UPDATE) → confere que continua ativo → `createUser` (INSERT do
  * usuário com `registered_via_code_id`, mais a credencial do método escolhido) → UPDATE condicional do código
@@ -183,17 +194,24 @@ export async function checkAccessCode(rawCode: string, now: Date = new Date()): 
  * Ordem de locks: registration_access_codes → (inserts) → audit_log.
  */
 export async function provisionUserWithAccessCode(
-  rawCode: string,
+  /** O texto do código (cadastro por senha) OU o id já resolvido (cadastro social: a tentativa OAuth guarda o id, nunca o texto). */
+  target: string | { codeId: number },
   createUser: (trx: Transaction<DB>, context: { codeId: number }) => Promise<number | null>,
-  now: Date = new Date()
+  now: Date = new Date(),
+  hooks: { afterRedeem?: (trx: Transaction<DB>, context: { userId: number; codeId: number }) => Promise<void> } = {}
 ): Promise<ProvisionResult> {
-  const canonical = canonicalizeAccessCode(rawCode);
-  if (!canonical) return { ok: false, reason: "inexistente" };
-  const hashes = accessCodeHashes(canonical);
+  const codeIdTarget = typeof target === "string" ? null : target.codeId;
+  let hashes: Buffer[] | null = null;
+  if (typeof target === "string") {
+    const canonical = canonicalizeAccessCode(target);
+    if (!canonical) return { ok: false, reason: "inexistente" };
+    hashes = accessCodeHashes(canonical);
+  }
 
   try {
     return await db.transaction().execute(async (trx): Promise<ProvisionResult> => {
-      const code = await trx.selectFrom("registrationAccessCodes").selectAll().where("codeHash", "in", hashes).forUpdate().executeTakeFirst();
+      const locator = trx.selectFrom("registrationAccessCodes").selectAll();
+      const code = await (hashes ? locator.where("codeHash", "in", hashes) : locator.where("id", "=", codeIdTarget as number)).forUpdate().executeTakeFirst();
       if (!code) return { ok: false, reason: "inexistente" };
       const status = deriveCodeStatus(code, now);
       if (status !== "active") return { ok: false, reason: status === "redeemed" ? "utilizado" : status === "revoked" ? "revogado" : "expirado" };
@@ -211,6 +229,7 @@ export async function provisionUserWithAccessCode(
         .returning("id")
         .executeTakeFirst();
       if (!redeemed) throw new RollbackProvision();
+      if (hooks.afterRedeem) await hooks.afterRedeem(trx, { userId, codeId: code.id });
 
       await recordAuditLogEntry(
         {
@@ -231,7 +250,7 @@ export async function provisionUserWithAccessCode(
     // Violação de unicidade DENTRO da transação (já revertida): do código (defesa final do banco) ou do e-mail (corrida de cadastro).
     if (error && typeof error === "object" && (error as { code?: string }).code === "23505") {
       const constraint = String((error as { constraint_name?: string }).constraint_name ?? "");
-      return { ok: false, reason: constraint.includes("registered_via_code") ? "utilizado" : "email_em_uso" };
+      return { ok: false, reason: constraint.includes("registered_via_code") ? "utilizado" : constraint.includes("user_identities") ? "identidade_em_uso" : "email_em_uso" };
     }
     throw error;
   }
