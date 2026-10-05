@@ -39,10 +39,11 @@ export async function handle(request: Request) {
       const method = await getMfaMethod(trx, ownerId, "active", { forUpdate: true });
       if (!method) return { type: "invalido" as const };
 
-      const lock = lockStatus(method, now);
-      if (lock.locked) return { type: "bloqueado" as const, retryAfterSeconds: lock.retryAfterSeconds };
-
       const usingRecovery = input.recoveryCode !== undefined;
+      // O bloqueio do TOTP vale só para o TOTP: o recovery code continua aceito (é a saída quando o app/relógio falham).
+      const lock = lockStatus(method, now);
+      if (lock.locked && !usingRecovery) return { type: "bloqueado" as const, retryAfterSeconds: lock.retryAfterSeconds };
+
       const result = usingRecovery ? await consumeRecoveryCode(trx, method, input.recoveryCode!, now) : await verifyTotp(trx, method, input.code!, now);
 
       if (!result.ok) {

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./Dialog";
 import { Button } from "./Button";
 import { Input } from "./Input";
@@ -20,6 +20,13 @@ export const StepUpDialog: React.FC<StepUpDialogProps> = ({ open, onOpenChange, 
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Retorno de foco: o diálogo é aberto por código (depois de um 403), sem um Dialog.Trigger — então o Radix não sabe para onde
+  // devolver o foco. Guarda o elemento focado no instante em que o diálogo abre e o restaura ao fechar.
+  const opener = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  if (open && !wasOpen.current && typeof document !== "undefined") opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  wasOpen.current = open;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +52,15 @@ export const StepUpDialog: React.FC<StepUpDialogProps> = ({ open, onOpenChange, 
 
   return (
     <Dialog open={open} onOpenChange={(next) => !loading && onOpenChange(next)}>
-      <DialogContent>
+      <DialogContent
+        className={styles.dialogScope}
+        onCloseAutoFocus={(event) => {
+          if (opener.current && document.contains(opener.current)) {
+            event.preventDefault();
+            opener.current.focus();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Confirme sua identidade</DialogTitle>
           <DialogDescription>Esta ação é crítica. Informe o código do seu autenticador para continuar.</DialogDescription>

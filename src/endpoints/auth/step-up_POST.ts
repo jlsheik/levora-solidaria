@@ -29,9 +29,9 @@ export async function handle(request: Request) {
       await lockUsersInOrder(trx, [user.id]);
       const method = await getMfaMethod(trx, user.id, "active", { forUpdate: true });
       if (!method) throw new ConflictError("Ative o autenticador para confirmar ações críticas.", "mfa_nao_configurado");
-      const lock = lockStatus(method, now);
-      if (lock.locked) return { type: "bloqueado" as const, retryAfterSeconds: lock.retryAfterSeconds };
       const usingRecovery = input.recoveryCode !== undefined;
+      const lock = lockStatus(method, now);
+      if (lock.locked && !usingRecovery) return { type: "bloqueado" as const, retryAfterSeconds: lock.retryAfterSeconds };
       const result = usingRecovery ? await consumeRecoveryCode(trx, method, input.recoveryCode!, now) : await verifyTotp(trx, method, input.code!, now);
       if (!result.ok) {
         await recordAuditLogEntry({ organizationId: null, actorUserId: user.id, action: "step_up.falhou", entityType: "user", entityId: String(user.id), metadata: { tipo: usingRecovery ? "recovery_code" : "totp", motivo: result.reason } }, trx);

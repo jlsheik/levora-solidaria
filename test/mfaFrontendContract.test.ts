@@ -3,7 +3,8 @@
  * Garante os pontos de segurança que não podem regredir sem alguém perceber.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 const read = (p: string) => readFileSync(p, "utf8").replace(/\r\n/g, "\n");
 
@@ -49,5 +50,58 @@ describe("frontend de MFA/bootstrap — contrato", () => {
     expect(pkg.dependencies.uqr).toBeTruthy();
     const lock = JSON.parse(read("package-lock.json")) as { packages: Record<string, { dependencies?: Record<string, string> }> };
     expect(lock.packages["node_modules/uqr"].dependencies ?? {}).toEqual({});
+  });
+});
+
+describe("Fase 90.1 — exposição dos recovery codes e acessibilidade (contrato)", () => {
+  const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? walk(join(dir, f)) : [join(dir, f)]));
+
+  it("os recovery codes só aparecem nos arquivos esperados (emissão, schema do cliente, painel e página de segurança) — nenhum endpoint os devolve de novo", () => {
+    const files = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && /\brecoveryCodes\b/.test(read(f))).map((f) => f.split("\\").join("/"));
+    expect(files.sort()).toEqual(
+      [
+        "src/components/MfaSetupPanel.tsx",
+        "src/endpoints/auth/mfa-recovery-regenerate_POST.schema.ts",
+        "src/endpoints/auth/mfa-recovery-regenerate_POST.ts",
+        "src/endpoints/auth/mfa-setup-confirm_POST.schema.ts",
+        "src/endpoints/auth/mfa-setup-confirm_POST.ts",
+        "src/helpers/bootstrapFinalize.tsx",
+        "src/pages/seguranca.tsx",
+      ].sort()
+    );
+  });
+
+  it("sem persistência no navegador e sem cache de mutação para os códigos: nenhum localStorage/sessionStorage/persistQueryClient em src; a regeneração usa gcTime 0 e reset()", () => {
+    for (const f of walk("src").filter((x) => /\.(ts|tsx)$/.test(x))) {
+      const src = read(f);
+      expect(src, f).not.toMatch(/persistQueryClient|localStorage|sessionStorage/);
+    }
+    const page = read("src/pages/seguranca.tsx");
+    expect(page).toContain("gcTime: 0");
+    expect(page).toContain("regenerate.reset()");
+  });
+
+  it("os endpoints de MFA só registram o NOME do erro em log (nunca payload, corpo, código ou segredo)", () => {
+    for (const f of walk("src/endpoints/auth").filter((x) => /(mfa|step-up|bootstrap).*_(GET|POST)\.ts$/.test(x))) {
+      const src = read(f);
+      for (const m of src.matchAll(/console\.(error|log|warn|info)\(([^)]*)\)/g)) {
+        expect(m[2], `${f}: ${m[0]}`).toMatch(/error instanceof Error \? error\.name : "erro"/);
+      }
+    }
+  });
+
+  it("acessibilidade: erro de login/cadastro com texto em tom de primeiro plano (>= 4,5:1), alvo de toque de 44 px no 'guardei', Cancelar como outline e acento local no diálogo escuro", () => {
+    for (const f of ["src/components/PasswordLoginForm.module.css", "src/components/PasswordRegisterForm.module.css"]) {
+      const css = read(f);
+      const block = /\.errorMessage \{[^}]*\}/.exec(css)![0];
+      expect(block).toContain("color: var(--foreground)");
+      expect(block).not.toMatch(/\n\s*color: var\(--error\)/);
+    }
+    const mfaCss = read("src/components/mfa.module.css");
+    expect(/\.check \{[^}]*min-height: 2\.75rem/.test(mfaCss)).toBe(true);
+    expect(mfaCss).toMatch(/:global\(\.dark\) \.dialogScope \{ --primary:/);
+    expect(read("src/components/MfaCodeForm.tsx")).not.toMatch(/variant="ghost"/);
+    expect(read("src/components/StepUpDialog.tsx")).not.toMatch(/variant="ghost"/);
+    expect(read("src/components/StepUpDialog.tsx")).toContain("onCloseAutoFocus"); // devolve o foco a quem abriu
   });
 });

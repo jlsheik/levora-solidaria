@@ -161,14 +161,17 @@ export async function countOpenRecoveryCodes(trx: Transaction<DB>, userId: numbe
 
 /**
  * Consome um recovery code do USUÁRIO (um código de outro usuário nunca casa). O consumo é um UPDATE condicional
- * (`used_at IS NULL`): dois usos simultâneos do mesmo código ⇒ um vence, o outro vê 0 linhas. Compartilha o contador de
- * falhas/bloqueio do método TOTP (alternar entre TOTP e recovery não dobra as tentativas). O `method` deve estar travado.
+ * (`used_at IS NULL`): dois usos simultâneos do mesmo código ⇒ um vence, o outro vê 0 linhas. O `method` deve estar travado.
+ *
+ * Fase 90.1 — o recovery code é o ÚNICO caminho de volta quando o TOTP está bloqueado (ou o aplicativo se perdeu): por isso ele
+ * NÃO é barrado pelo bloqueio do TOTP e suas falhas NÃO alimentam o contador do TOTP (um atacante que só quer travar o dono
+ * não consegue travar também a recuperação). Chutar um código é inviável (80 bits) e continua limitado pelas tentativas do
+ * challenge (5), pelo limite por IP e, no step-up, pelo limite por usuário. Um sucesso LIMPA o bloqueio do TOTP.
  */
 export async function consumeRecoveryCode(trx: Transaction<DB>, method: MfaMethodRow, rawCode: string, now: Date = new Date()): Promise<VerifyResult> {
-  const lock = lockStatus(method, now);
-  if (lock.locked) return { ok: false, reason: "locked", retryAfterSeconds: lock.retryAfterSeconds };
+  void now;
   const normalized = normalizeRecoveryCode(rawCode);
-  if (normalized === null) return recordMethodFailure(trx, method, now);
+  if (normalized === null) return { ok: false, reason: "invalid" };
   const hashes = acceptedPepperVersions().map((v) => recoveryHash(normalized, v));
   const used = await trx
     .updateTable("mfaRecoveryCodes")
@@ -179,7 +182,7 @@ export async function consumeRecoveryCode(trx: Transaction<DB>, method: MfaMetho
     .where("invalidatedAt", "is", null)
     .returning("id")
     .executeTakeFirst();
-  if (!used) return recordMethodFailure(trx, method, now);
+  if (!used) return { ok: false, reason: "invalid" };
   await trx.updateTable("mfaMethods").set({ failedAttempts: 0, lastFailedAt: null, lockedUntil: null }).where("id", "=", method.id).execute();
   return { ok: true, step: -1 };
 }

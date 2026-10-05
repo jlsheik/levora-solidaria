@@ -8,7 +8,8 @@ import { setServerSession } from "./getSetServerSession.js";
 type Executor = Kysely<DB> | Transaction<DB>;
 
 export const jsonResponse = (status: number, body: Record<string, unknown>, headers: Record<string, string> = {}) =>
-  new Response(superjson.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } });
+  // `no-store`: estas respostas podem carregar segredos (chave do TOTP, recovery codes) — nenhum cache (navegador/proxy) pode guardá-las.
+  new Response(superjson.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...headers } });
 
 /** Resposta ÚNICA para qualquer challenge inexistente/expirado/consumido/cancelado/de outro propósito (sem distinguir). */
 export const invalidChallengeResponse = () => {

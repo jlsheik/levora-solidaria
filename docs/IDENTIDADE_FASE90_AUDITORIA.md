@@ -77,7 +77,7 @@ pois nunca existiu sessão pré-MFA; fixation testado).
 SHA-1, 6 dígitos, 30 s (RFC 6238; vetores oficiais testados), tolerância **±1 passo**, `otpauth://totp/Levora:<conta>?…` (compatível
 com Google/Microsoft Authenticator). Anti-replay: só aceita passo **> `last_used_step`** gravado sob `SELECT … FOR UPDATE`
 (8 verificações simultâneas do mesmo código ⇒ 1 sucesso). Falhas **persistidas no banco**: a partir de 10 em 1 h, bloqueio de
-30 s dobrando até **15 min** (nunca permanente; falhas antigas deixam de contar; sucesso zera); TOTP e recovery compartilham o contador.
+30 s dobrando até **15 min** (nunca permanente; falhas antigas deixam de contar; sucesso zera). **(Fase 90.1)** o recovery code NÃO compartilha mais o contador/bloqueio do TOTP — ver §15.4.
 Ativação: segredo `pending` (nunca ativo antes do código); 5 erros descartam o pendente. QR: biblioteca **`uqr`** (MIT, 79 kB,
 0 dependências, mantida por unjs; `npm audit` = 0), SVG no cliente.
 
@@ -145,3 +145,82 @@ Lock canônico: `users → platform_access → auth_challenges → mfa_methods �
 - Sem job de re-cifragem para rotação da chave MFA; gestão de segredos de produção (secret manager) continua adiada.
 - Contraste do texto/botões primários sobre cartão escuro (~3,1:1) vem do Design System (abas "Entrar/Criar conta" têm o mesmo valor) — não alterado.
 - Usuários comuns: MFA **opcional** (política atual preservada).
+
+## 15. Fase 90.1 — acessibilidade, hardening e auditorias de fechamento
+
+### 15.1 Contraste (WCAG 1.4.3: texto normal ≥ 4,5:1; texto grande ≥ 3:1)
+**Investigação.** O "3,1:1" do relatório da Fase 90 era um **artefato de medição**: as transições CSS de cor ficavam congeladas na
+metade quando a aba não pintava (screenshots expiravam), e o script lia a cor "de partida" (tema claro) sobre o fundo escuro. Com
+transições desligadas, alfa composto sobre o fundo efetivo e cores normalizadas por canvas, os tokens reais do Design System dão:
+`--primary` escuro `hsl(16,68%,56%)` sobre `--card` `hsl(20,18%,14%)` = **4,64:1** (4,61:1 medido nos botões/abas) — **já aprovado**; claro
+`hsl(14,62%,45%)` sobre branco = 5,0:1. **Nenhum token global foi alterado.**
+
+**Problemas reais encontrados (medição em todas as etapas, claro e escuro, 375/390/768) e correção local:**
+
+| Elemento | Antes | Depois | Correção (escopo) |
+|---|---|---|---|
+| Mensagem de erro do login/cadastro ("E-mail ou senha inválidos") — texto `--error` sobre fundo `--error` 15 %, tema escuro | **3,41:1** | ≥ 4,6:1 (claro 4,8:1) | `.errorMessage` do `PasswordLoginForm`/`PasswordRegisterForm`: texto em `--foreground`; o erro segue sinalizado por fundo e borda `--error` |
+| "Cancelar" e link "Usar um código de recuperação" no diálogo de step-up, tema escuro (acento sobre `--popup`) | 4,48:1 | ≥ 4,5:1 | `.dialogScope` (só dentro do `StepUpDialog`): `--primary: hsl(16,68%,61%)` no `.dark` |
+| "Cancelar" do MFA como botão `ghost` (texto escuro sobre fundo escuro) | ilegível | 4,61:1 | `variant="outline"` (MfaCodeForm, StepUpDialog) |
+| Alvo de toque do "Guardei estes códigos" | 32 px | **44 px** | `.check { min-height: 2.75rem }` |
+
+Sem exceção de "texto grande" usada. Sem falhas após as correções: login, erro de login, MFA, erro de TOTP, recovery, erro de recovery,
+bootstrap (token, token inválido — o expirado usa a mesma mensagem —, credenciais com avisos, início do TOTP, QR, erro de código, códigos de
+recuperação) e step-up (diálogo e erro), em **375 escuro, 390 claro, 768 escuro/claro**. Fora do escopo de autenticação (não alterado): o selo
+"concluida" da tela `/plataforma` mede 4,41:1 no tema escuro e o texto oculto "Close" do botão de fechar do `Dialog` do Design System.
+
+### 15.2 Recovery codes em 375 px escuro (evidência visual real)
+Fluxo completo no preview real (bootstrap → TOTP → códigos): título, aviso "somente agora", **os 10 códigos em coluna única, sem corte nem
+overflow** (`scrollWidth` = 375 e cada item dentro da viewport, sem `scrollWidth > clientWidth`), "Copiar códigos" (44 px, 4,61:1), caixa
+"Guardei" (44 px após a correção) e "Concluir" (44 px, desabilitado até marcar). Screenshot capturado da parte superior; a parte inferior foi
+verificada por geometria (o recorte rolado do painel emulado desloca a imagem — artefato do painel).
+
+### 15.3 Foco e teclado (verificado no preview com teclas reais)
+Foco inicial no campo certo (`mfa-code`, `stepup-code`, token); ordem de tabulação: abas → campo → Cancelar → alternar modo (o "Verificar" desabilitado
+sai da ordem até haver 6 dígitos); **Enter envia** o formulário de MFA (login concluído só com teclado); diálogo de step-up: foco preso dentro,
+fecha com Esc e **devolve o foco ao botão que abriu** (correção: o diálogo é aberto por código após um 403, sem `Dialog.Trigger`; agora guarda e restaura o
+elemento focado); rótulos associados (`label`/`aria-labelledby`).
+
+### 15.4 Bloqueio do TOTP — auditoria e correção mínima
+**Desenho (verificado no código e testado):** é um bloqueio **por usuário/método** (colunas `failed_attempts`, `last_failed_at`, `locked_until` da linha
+de `mfa_methods`) — **não** por rede, **não** global. Contador: falhas dentro de 1 h; a partir de 10 ⇒ espera de 30 s dobrando até **15 min**; sucesso
+(TOTP ou recovery) zera; falhas antigas deixam de contar; nunca permanente. Alcance: exige a senha (só existe challenge depois dela) e vale para
+qualquer origem (várias redes somam no mesmo contador).
+**Risco:** quem JÁ tem a senha pode manter o TOTP do dono bloqueado por ≤ 15 min por vez, repetidamente (custo: 2 logins por ciclo). Os dois
+ajustes possíveis seriam novos subsistemas (chave por rede reabre o brute-force distribuído; limite global é outro mecanismo) — **não implementados**.
+**Correção inequívoca (implementada):** o **recovery code não é barrado pelo bloqueio do TOTP e suas falhas não alimentam o contador do TOTP**;
+um recovery bem-sucedido **limpa** o bloqueio. Assim o bloqueio de TOTP nunca bloqueia o único caminho de recuperação. Recovery continua limitado
+por: 80 bits de entropia, 5 tentativas por challenge, 30 verificações/15 min por IP e 10 step-ups/15 min por usuário. Testes: TOTP bloqueado +
+recovery válido ⇒ login permitido (handler real) e step-up por recovery; recovery inválido não piora o bloqueio; escopo por usuário/método.
+
+### 15.5 Cobertura de step-up (plataforma) — classificação
+| Endpoint | Risco | Step-up hoje? | Decisão |
+|---|---|---|---|
+| `platform-organizations_GET`, `sources_GET`, `background-tasks_GET`, `match-evaluations_GET`, `opportunity-registry_GET`, `audit-log-verify_GET` | baixo (leitura) | não | não precisa |
+| `platform-organizations-status_POST` (aprova/suspende organização) | **alto** | **sim** | feito (Fase 90) |
+| `sources_POST` (registra fonte) | médio | não | avaliar na Fase 91+ (precisa tratar `reauth_required` na tela) |
+| `background-tasks-retry_POST` | médio | não | idem |
+| `opportunity-registry_POST` / `-status_POST` / `-match_POST`, `opportunity-allocations_POST` (caminho de plataforma) | médio | não | idem |
+| (trabalho em andamento fora do HEAD) `platform-automation-controls_POST` | alto | n/a | aplicar quando integrado |
+| **Futuros (Fase 91)**: criar código de acesso, **revogar código**, alterar validade/política de códigos | **crítico/alto** | — | **devem ser considerados operações administrativas sensíveis e avaliados para `requireRecentAuth` (janela 10 min)**; conceder/revogar *Platform Admin* e **transferir ownership** (janela 2 min) idem |
+
+Mitigação atual para os "médios" sem step-up: o titular só tem sessão com MFA concluído, ocioso 60 min, absoluto 8 h.
+
+### 15.6 Exposição dos recovery codes (auditado; comportamento mantido)
+Só existem em `mfa-setup-confirm`/`mfa-recovery-regenerate` (+ transação final do bootstrap); `mfa-status` devolve **apenas a contagem**; nenhum endpoint os
+devolve de novo (teste de contrato varre `src`). No frontend: estado local do componente (`useState`), **sem React Query para a emissão** (a regeneração
+usa `gcTime: 0` + `reset()` — corrigido: antes o resultado ficava no cache de mutações em memória), **sem localStorage/sessionStorage/persistência**
+em todo `src`, sem `console`. Erros do cliente (`authRequest`) só carregam mensagem/status/código. Servidor: logs só com o **nome** do erro; auditoria
+sem códigos (varredura nos testes). **Novo:** respostas de autenticação saem com `Cache-Control: no-store`. Não há "gravação de payload" de rede no produto.
+
+### 15.7 Cookies e challenges (Express real)
+Challenge: `levora_challenge=<43 chars>; HttpOnly; Secure; SameSite=Lax; Path=/_api/v1/auth; Max-Age≤300` (sem `Domain`), apagado com os mesmos
+atributos (`Max-Age=0`). Sessão: `HttpOnly; Secure; SameSite=Lax; Path=/`. Respostas com dois cookies (sessão + limpeza do challenge, inclusive a
+conclusão do bootstrap) chegam inteiras pelo Express real (teste HTTP com controle negativo). Nenhum endpoint de dados aceita o challenge
+(cookie e segredo fora do `getServerSessionOrThrow`; testado). TTL 5 min, uso único, propósito/usuário conferidos, replay e expiração rejeitados,
+concorrência controlada (testes da Fase 90).
+
+### 15.8 Bootstrap — auditoria final (sem mudanças de código)
+256 bits (`LEVB-` + 52 base32), HMAC com pepper versionado (nunca o token), TTL 15 min, uso único (UPDATE condicional), um pendente (índice único
+parcial), claim atômico, transação final única (owner + MFA + token no mesmo COMMIT, rollback completo), recuperação só offline (CLI), nenhum segredo
+em log/audit; o token trafega só no corpo do POST. Reexecutados nesta fase os testes de bootstrap (29) e a ativação pelo Express real.

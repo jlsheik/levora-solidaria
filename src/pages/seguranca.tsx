@@ -27,8 +27,12 @@ export default function SecurityPage() {
 
   const regenerate = useMutation({
     mutationFn: () => postMfaRecoveryRegenerate(),
+    // Os códigos novos NÃO podem ficar no cache de mutações do React Query: gcTime 0 + reset() após copiar para o estado local
+    // (que some ao clicar em "Já guardei" ou ao sair da página).
+    gcTime: 0,
     onSuccess: (r) => {
       setCodes(r.recoveryCodes);
+      regenerate.reset();
       refresh();
     },
     onError: (err) => {

@@ -670,6 +670,90 @@ describe("conta excluída e MFA", () => {
   });
 });
 
+describe("Fase 90.1 — TOTP bloqueado × recovery code, cookies e cache", () => {
+  it("TOTP BLOQUEADO + recovery code válido ⇒ login permitido (HTTP real do handler); TOTP continua 429 até o recovery limpar o bloqueio", async () => {
+    const u = await mfaUser();
+    const { issueRecoveryCodes } = await import("../src/helpers/mfa");
+    const codes = await db.transaction().execute((trx) => issueRecoveryCodes(trx, u.id));
+    await db.updateTable("mfaMethods").set({ failedAttempts: 12, lastFailedAt: new Date(), lockedUntil: new Date(Date.now() + 10 * MIN) }).where("userId", "=", u.id).execute();
+
+    const c1 = cookieFrom(await login(u.email, PASSWORD, "203.0.113.171"), CHALLENGE)!;
+    const blocked = await verify(c1, { code: totp() });
+    expect(blocked.status).toBe(429);
+    expect((await json<{ code: string }>(blocked)).code).toBe("mfa_bloqueado");
+    expect(blocked.headers.get("retry-after")).toBeTruthy();
+    // o mesmo challenge, agora com o recovery code: entra
+    const ok = await verify(c1, { recoveryCode: codes[0] });
+    expect(ok.status).toBe(200);
+    expect(cookieFrom(ok, SESSION)).toBeTruthy();
+    const m = await db.selectFrom("mfaMethods").select(["failedAttempts", "lockedUntil"]).where("userId", "=", u.id).executeTakeFirstOrThrow();
+    expect(m).toEqual({ failedAttempts: 0, lockedUntil: null }); // sucesso limpou o bloqueio do TOTP
+    const c2 = cookieFrom(await login(u.email, PASSWORD, "203.0.113.172"), CHALLENGE)!;
+    expect((await verify(c2, { code: totp(1) })).status).toBe(200); // TOTP volta a funcionar
+  });
+
+  it("recovery inválido durante o bloqueio NÃO piora o bloqueio do TOTP (contador e prazo inalterados) e gasta só tentativas do challenge", async () => {
+    const u = await mfaUser();
+    const lockedUntil = new Date(Date.now() + 10 * MIN);
+    await db.updateTable("mfaMethods").set({ failedAttempts: 10, lastFailedAt: new Date(), lockedUntil }).where("userId", "=", u.id).execute();
+    const c = cookieFrom(await login(u.email, PASSWORD, "203.0.113.173"), CHALLENGE)!;
+    for (let i = 0; i < 3; i++) expect((await verify(c, { recoveryCode: "ZZZZ-ZZZZ-ZZZZ-ZZZZ" })).status).toBe(401);
+    const m = await db.selectFrom("mfaMethods").select(["failedAttempts", "lockedUntil"]).where("userId", "=", u.id).executeTakeFirstOrThrow();
+    expect(m.failedAttempts).toBe(10);
+    expect(m.lockedUntil!.getTime()).toBe(lockedUntil.getTime());
+    expect((await db.selectFrom("authChallenges").select("attempts").where("userId", "=", u.id).executeTakeFirstOrThrow()).attempts).toBe(3);
+  });
+
+  it("step-up por recovery code funciona com o TOTP bloqueado", async () => {
+    const admin = await createPlatformAdmin();
+    const { issueRecoveryCodes } = await import("../src/helpers/mfa");
+    const [code] = await db.transaction().execute((trx) => issueRecoveryCodes(trx, admin.userId));
+    await db.updateTable("mfaMethods").set({ failedAttempts: 11, lastFailedAt: new Date(), lockedUntil: new Date(Date.now() + 10 * MIN) }).where("userId", "=", admin.userId).execute();
+    expect((await stepUp(admin.cookie, { code: totp() })).status).toBe(429);
+    expect((await stepUp(admin.cookie, { recoveryCode: code })).status).toBe(200);
+  });
+
+  it("cookie do CHALLENGE: HttpOnly, Secure, SameSite=Lax, Path restrito a /_api/v1/auth, Max-Age ≤ TTL (5 min) — no login e na ativação do bootstrap; e é APAGADO com os mesmos atributos", async () => {
+    const u = await mfaUser();
+    const res = await login(u.email, PASSWORD, "203.0.113.174");
+    const raw = res.headers.getSetCookie().find((c) => c.startsWith(CHALLENGE + "="))!;
+    expect(raw).toMatch(/; HttpOnly/);
+    expect(raw).toMatch(/; Secure/);
+    expect(raw).toMatch(/; SameSite=Lax/);
+    expect(raw).toMatch(/; Path=\/_api\/v1\/auth(;|$)/);
+    expect(raw).not.toMatch(/Domain=/i);
+    expect(Number(/Max-Age=(\d+)/.exec(raw)![1])).toBeLessThanOrEqual(300);
+    expect(valueOf(raw.split(";")[0])).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const done = await verify(cookieFrom(res, CHALLENGE)!, { code: totp() });
+    const cleared = done.headers.getSetCookie().find((c) => c.startsWith(CHALLENGE + "=;"))!;
+    expect(cleared).toMatch(/Max-Age=0/);
+    expect(cleared).toMatch(/Path=\/_api\/v1\/auth/);
+    expect(cleared).toMatch(/HttpOnly/);
+    // o cookie de SESSÃO continua com seus atributos
+    const sess = done.headers.getSetCookie().find((c) => c.startsWith(SESSION + "="))!;
+    expect(sess).toMatch(/HttpOnly/);
+    expect(sess).toMatch(/Secure/);
+    expect(sess).toMatch(/SameSite=Lax/);
+    expect(sess).toMatch(/Path=\/(;|$)/);
+  });
+
+  it("respostas de autenticação com possíveis segredos são Cache-Control: no-store (chave TOTP, recovery codes, challenge)", async () => {
+    const u = await createAuthenticatedUser();
+    const begin = await setupBegin(u.cookie, { password: PASSWORD });
+    expect(begin.headers.get("cache-control")).toBe("no-store");
+    const setup = await json<{ manualKey: string }>(begin);
+    const { totpCodeAtStep, stepAt } = await import("../src/helpers/totp");
+    const confirm = await setupConfirm(u.cookie, { code: totpCodeAtStep(base32Decode(setup.manualKey), stepAt(Date.now())) });
+    expect(confirm.status).toBe(200);
+    expect(confirm.headers.get("cache-control")).toBe("no-store");
+    const mfa = await mfaUser();
+    expect((await login(mfa.email, PASSWORD, "203.0.113.175")).headers.get("cache-control")).toBe("no-store");
+    const session = cookieFrom(confirm, SESSION)!;
+    await db.updateTable("sessions").set({ mfaVerifiedAt: new Date(), lastReauthAt: new Date() }).where("userId", "=", u.userId).execute();
+    expect((await regenerate(session)).headers.get("cache-control")).toBe("no-store");
+  });
+});
+
 describe("CONCORRÊNCIA J — login do owner × mudança de plataforma", () => {
   it("login completo do owner em paralelo com a transferência de ownership: nunca fica sem owner e a sessão criada reflete um nível válido", async () => {
     const { transferPlatformOwnership } = await import("../src/helpers/platformAccessAdmin");
