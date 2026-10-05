@@ -1193,3 +1193,15 @@ dono e fase definidos (não bloqueiam a implementação):
 4. **"Lembrar dispositivo" e limite de sessões simultâneas** — inexistentes e fora do escopo; decisão futura, sem impacto estrutural.
 5. **Valores numéricos de sessão (§25.15)** — recomendados e congelados como padrão; são constantes de configuração, ajustáveis sem mudar a arquitetura.
 6. **F85 — estabilidade do `impactReport`** — pendência independente (§25.17).
+
+## 26. Estado após a Fase 90 (implementado)
+
+Implementados e verificados (detalhes, formatos e testes em `docs/IDENTIDADE_FASE90_AUDITORIA.md`): bootstrap offline do Platform Owner
+(§25.2, incluindo `owner_recovery`), `auth_challenges`, TOTP (§25.13), recovery codes, MFA obrigatório para titulares de
+`platform_access` com bloqueio de sessão sem MFA concluído (§25.14), step-up (mecanismo + org-status, regenerar códigos e desativar
+MFA), chaves `IDENTITY_CODE_PEPPER`/`MFA_ENCRYPTION_KEY` versionadas (§25.5), QR por biblioteca (`uqr`, §25.12).
+**Desvios/decisões registrados:** (1) o lock de login deixou de ser global por e-mail para contas protegidas (por e-mail+rede /24 +
+alerta de várias redes) — resolve P-6; (2) step-up aplicado, nesta fase, a org-status, regenerar recovery codes e desativar MFA; os
+demais endpoints de plataforma e as ações futuras continuam pendentes de aplicar o mecanismo; (3) a revogação de `platform_access` não
+remove a sessão (o privilégio é relido a cada requisição). **Continuam não implementados:** provedores sociais, códigos de acesso,
+passkeys, recuperação de senha por e-mail (Fases 91+).

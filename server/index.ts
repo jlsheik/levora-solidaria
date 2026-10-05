@@ -101,8 +101,14 @@ async function buildExpressHandler(absPath: string) {
         // repassar o valor do Response original pode não bater,
         // especialmente para corpos binários.
         if (key === "content-length" || key === "transfer-encoding") return;
+        // Set-Cookie é a ÚNICA header que pode se repetir: cada setHeader() SOBRESCREVE o anterior, então respostas com mais de
+        // um cookie (Fase 90: cookie de sessão + limpeza do cookie de challenge) perdiam todos menos o último — a sessão nunca
+        // chegava ao navegador. Repassa o array completo (getSetCookie) em vez de uma header por vez.
+        if (key === "set-cookie") return;
         res.setHeader(key, value);
       });
+      const setCookies = webResponse.headers.getSetCookie();
+      if (setCookies.length > 0) res.setHeader("Set-Cookie", setCookies);
       // arrayBuffer(), não text(): texto (JSON) sobrevive ao round-trip
       // por Buffer normalmente, mas corpo binário (ex.: arquivo baixado em
       // files-download_GET.ts) seria corrompido se decodificado como UTF-8

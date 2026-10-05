@@ -27,6 +27,18 @@ export class ConflictError extends Error {
 }
 
 /**
+ * Lançado quando uma ação crítica exige reautenticação recente (step-up, Fase 90). Mensagem segura para o público;
+ * o cliente reage ao `code: "reauth_required"` pedindo o código do segundo fator.
+ */
+export class ReauthRequiredError extends Error {
+  readonly code = "reauth_required";
+  constructor(message = "Confirme sua identidade com o código do autenticador para continuar.") {
+    super(message);
+    this.name = "ReauthRequiredError";
+  }
+}
+
+/**
  * Único ponto de verdade para transformar um erro lançado num endpoint em
  * status HTTP. Antes, ~40 endpoints repetiam a mesma lógica frágil de
  * `message.includes("acesso") || message.includes("papel") ? 403 : ...`,
@@ -41,6 +53,7 @@ function mapTypedErrorToStatus(error: unknown): number | null {
   if (error instanceof OrganizationAccessError) return 403;
   if (error instanceof PlatformAccessError) return 403;
   if (error instanceof ConflictError) return 409;
+  if (error instanceof ReauthRequiredError) return 403;
   if (error instanceof ZodError) return 400;
   // `superjson.parse(await request.text())` lança SyntaxError nativo
   // quando o corpo nem chega a ser JSON válido (ex.: corpo vazio, HTML de
@@ -79,6 +92,7 @@ function getPublicMessage(error: unknown, fallbackMessage: string): string {
     error instanceof OrganizationAccessError ||
     error instanceof PlatformAccessError ||
     error instanceof ConflictError ||
+    error instanceof ReauthRequiredError ||
     error instanceof ZodError
   ) {
     return error.message;
@@ -111,7 +125,7 @@ export function buildErrorResponse(
 ): Response {
   const message = getPublicMessage(error, fallbackMessage);
   const status = mapTypedErrorToStatus(error) ?? extraStatus?.(message) ?? 500;
-  const code = error instanceof ConflictError ? error.code : undefined;
+  const code = error instanceof ConflictError || error instanceof ReauthRequiredError ? error.code : undefined;
   return new Response(superjson.stringify(code ? { message, code } : { message }), {
     status,
     headers: { "Content-Type": "application/json" },

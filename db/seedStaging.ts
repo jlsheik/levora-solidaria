@@ -145,7 +145,7 @@ async function openSession(userId: number, email: string, sessionIds: string[]):
   await db
     .insertInto("sessions")
     .values({
-      id: sessionId, userId, createdAt: now, lastAccessed: now,
+      id: sessionId, userId, createdAt: now, lastAccessed: now, mfaVerifiedAt: now, lastReauthAt: now,
       expiresAt: new Date(now.getTime() + SessionExpirationSeconds * 1000),
     })
     .execute();
