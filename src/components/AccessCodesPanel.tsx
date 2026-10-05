@@ -55,6 +55,7 @@ export const AccessCodesPanel: React.FC = () => {
   });
 
   const createMutation = useMutation({
+    gcTime: 0, // o resultado (com o código completo) não fica retido no cache de mutações do React Query
     mutationFn: (v: { label: string; minutes: number | null; at: string }) =>
       postPlatformAccessCodesCreate({ label: v.label || undefined, ...(v.minutes !== null ? { expiresInMinutes: v.minutes } : { expiresAt: new Date(v.at) }) }),
     onSuccess: (result) => {

@@ -149,3 +149,31 @@ fazer o aceite de convite inserir em `users` → a varredura estática falha; re
 
 Emissão em lote (até 50, §25), código por organização (`organization_id` reservado), e-mail do código ao cliente (SMTP), expiração
 agregada diária na auditoria, e aplicar `requireRecentAuth` aos demais endpoints de plataforma (já listado na Fase 90).
+
+## 14. Fase 91.1 — hardening final (base `a6c237a`)
+
+**Alfabeto e entropia (pelo desenho).** O gerador já sorteava de um alfabeto canônico: `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (32 símbolos
+distintos, sem I/L/O/U), 20 símbolos, um byte de `crypto.randomBytes` por símbolo. Como `256 % 32 = 0`, `byte % 32` é uniforme (sem viés de
+módulo). Espaço = 32²⁰ = 2¹⁰⁰ códigos; entropia efetiva = 20 × log₂32 = **100 bits** (o prefixo `LEV` e os hífens são só apresentação).
+Nenhum símbolo gerável é reescrito pela canonicalização (ela é a **identidade** sobre o alfabeto) ⇒ **nenhuma perda de entropia por
+convergência**. Hash final: HMAC-SHA-256 (32 bytes) do valor canônico, contexto `access-code:v1:`, pepper versionado.
+
+**Normalização.** `I`,`L`→`1` e `O`→`0` são a regra intencional (Crockford) e só atuam em símbolos que o gerador nunca emite; portanto dois
+códigos canônicos diferentes jamais colidem (teste: mutando cada uma das 20 posições por cada um dos 32 símbolos, 20·31+1 saídas
+distintas, todas idênticas à entrada). Achado corrigido: `toUpperCase()` é Unicode (`ı`→`I`, `ſ`→`S`) e criava apelidos de entrada que não
+são grafias do código; a canonicalização agora **rejeita qualquer entrada não-ASCII** (espaços Unicode continuam ignorados como espaço).
+
+**Cache.** A resposta que entrega o código completo (`platform-access-codes-create`) usa `Cache-Control: no-store` (HTTP real via Express).
+Achado corrigido: as respostas de **erro** de `buildErrorResponse` (ex.: validação 400 do `access-code-check`) não tinham `no-store`; agora
+têm (erros nunca são cacheáveis). O ETag fraco do Express é inócuo (no-store proíbe guardar a cópia). No cliente: o código vive só em estado
+do componente (sem URL/query/rota/localStorage/sessionStorage/IndexedDB/histórico) e a mutação usa `gcTime: 0` (o React Query não retém o resultado).
+
+**Exclusão de conta.** `account-delete` anonimiza (não apaga) o usuário: `registered_via_code_id` e `redeemed_by_user_id` permanecem, o código
+continua `redeemed` (não valida, não cadastra) e um `DELETE` direto do consumidor é barrado pela FK. Exclusão nunca libera um código.
+
+**Sessão/JWT.** O JWT só tem `{id, createdAt, lastAccessed}`; corpo do login, `loadUserPayload`/`User` e as tabelas de sessão/credencial/MFA/
+challenge não referenciam o código; o código não funciona como senha. A existência do código termina no provisionamento.
+
+**`access-code-check`.** Rate limit (20/15 min/IP) antes de qualquer consulta; resposta válida exatamente `{valid:true}`; inválidas com
+corpo único `{message, code}` (inexistente/expirado/revogado/utilizado/mal formado idênticos); sem criador, consumidor, hash, datas,
+organização ou descrição; sem `Set-Cookie`. Estados detalhados só no `/plataforma`. Testes: `test/accessCodesHardening.test.ts` (12).
