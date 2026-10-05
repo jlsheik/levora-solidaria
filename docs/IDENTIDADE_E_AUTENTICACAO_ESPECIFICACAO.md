@@ -1203,5 +1203,28 @@ MFA), chaves `IDENTITY_CODE_PEPPER`/`MFA_ENCRYPTION_KEY` versionadas (§25.5), Q
 **Desvios/decisões registrados:** (1) o lock de login deixou de ser global por e-mail para contas protegidas (por e-mail+rede /24 +
 alerta de várias redes) — resolve P-6; (2) step-up aplicado, nesta fase, a org-status, regenerar recovery codes e desativar MFA; os
 demais endpoints de plataforma e as ações futuras continuam pendentes de aplicar o mecanismo; (3) a revogação de `platform_access` não
-remove a sessão (o privilégio é relido a cada requisição). **Continuam não implementados:** provedores sociais, códigos de acesso,
-passkeys, recuperação de senha por e-mail (Fases 91+).
+remove a sessão (o privilégio é relido a cada requisição). **Continuam não implementados:** provedores sociais, passkeys, recuperação de
+senha por e-mail (Fases 91+; os códigos de acesso foram implementados na Fase 91 — ver §27).
+
+## 27. Estado após a Fase 91 (implementado)
+
+Implementados e verificados (arquitetura, ciclo de vida, concorrência, painel, testes e controles negativos em
+`docs/IDENTIDADE_FASE91_AUDITORIA.md`): `registration_access_codes` (migration 0017), cadastro por senha **somente com código**,
+validação pública sem consumo, criação/revogação/listagem para `platform_access` (owner/admin) com step-up, painel "Códigos de acesso"
+em `/plataforma`, auditoria (`codigo_acesso.criado|revogado|consumido|tentativa_invalida`) e rate limits (§10 do doc de auditoria).
+
+**Decisões congeladas nesta fase (implementação das §25):**
+1. **Nenhuma conta nova nasce sem código válido** (exceções legítimas e documentadas: bootstrap do owner, backfill/migration, seed
+   interno de staging). O aceite de convite nunca cria usuário; convite e código são independentes.
+2. **Consumo atômico** em `provisionUserWithAccessCode(código, createUser)`: `FOR UPDATE` + UPDATE condicional + `UNIQUE(users.registered_via_code_id)`;
+   qualquer falha ⇒ rollback integral. O callback `createUser` torna o provisionamento **independente do método de autenticação**
+   (senha hoje; `signup_attempt` Google/Microsoft/Apple no futuro), sem implementar nenhum provedor.
+3. **Resposta pública única** (`400 codigo_indisponivel`) para inexistente/mal formado/expirado/revogado/utilizado; o motivo só aparece na
+   auditoria e no painel. E-mail já cadastrado + código válido ⇒ resposta neutra de sucesso, **sem consumir** (anti-enumeração, Fase 51).
+4. **Validade** definida pelo servidor: 5 min … 90 dias (também CHECK no banco); estado derivado (sem job de expiração).
+5. **Armazenamento**: só HMAC (`access-code:v1:`, pepper versionado) + últimos 4; texto puro exibido uma única vez; perdeu ⇒ revogar e gerar outro.
+6. O código cria sempre `role='user'`: nunca `platform_access`, nunca MFA, nunca membership.
+
+**Desvios/pendências:** emissão em lote (até 50, §25) não implementada (emissão unitária); `organization_id` reservado e ignorado; sem e-mail
+automático do código (SMTP); resposta pública única é mais restritiva que a mensagem diferenciada sugerida em rascunhos anteriores (justificativa no doc de auditoria).
+**Continuam não implementados:** Google/Microsoft/Apple/OAuth/OIDC, account linking, passkeys, recuperação de senha por e-mail (Fase 92+).

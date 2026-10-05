@@ -50,6 +50,7 @@ export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
       email: "",
       password: "",
       displayName: "",
+      accessCode: "",
     },
   });
 
@@ -61,7 +62,7 @@ export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
     try {
       const result = await postRegister(data);
       setSuccessMessage(result.message);
-      form.setValues({ email: "", password: "", displayName: "" });
+      form.setValues({ email: "", password: "", displayName: "", accessCode: "" });
       onSubmitted?.();
     } catch (err) {
       console.error("Registration error:", err);
@@ -91,6 +92,30 @@ export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
         )}
         className={`${styles.form} ${className || ""}`}
       >
+        <FormItem name="accessCode">
+          <FormLabel>Código de acesso</FormLabel>
+          <FormControl>
+            <Input
+              id="register-access-code"
+              placeholder="LEV-XXXX-XXXX-XXXX-XXXX-XXXX"
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              value={form.values.accessCode || ""}
+              onChange={(e) =>
+                form.setValues((prev: any) => ({
+                  ...prev,
+                  accessCode: e.target.value.toUpperCase(),
+                }))
+              }
+            />
+          </FormControl>
+          <FormDescription>
+            O código é fornecido pela Levora e vale para uma única conta. Não é a sua senha.
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+
         <FormItem name="email">
           <FormLabel>E-mail</FormLabel>
           <FormControl>

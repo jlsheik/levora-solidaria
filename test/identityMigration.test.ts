@@ -13,6 +13,7 @@ import path from "node:path";
 const BASELINE_COMMIT = "a628bd4"; // último commit ANTES da Fase 89
 const MIGRATION = readFileSync(path.resolve(__dirname, "../db/migrations/0015_identity_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0016 = readFileSync(path.resolve(__dirname, "../db/migrations/0016_mfa_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0017 = readFileSync(path.resolve(__dirname, "../db/migrations/0017_registration_access_codes.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIG_DB = "levora_f89_mig_test";
 
 function adminUrl(): URL {
@@ -176,9 +177,10 @@ describe("migração 0015 — sessões, senhas e triggers", () => {
   it("a migração NÃO é reaplicável por engano (objetos já existem) e o schema.sql novo cria o MESMO conjunto de objetos", async () => {
     await runMigration();
     await expect(runMigration()).rejects.toThrow();
-    // schema.sql atual = baseline + 0015 + 0016 (Fase 90)
+    // schema.sql atual = baseline + 0015 + 0016 (Fase 90) + 0017 (Fase 91)
     await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
-    const migrated = await sql`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords') ORDER BY 1, 2`;
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0017));
+    const migrated = await sql`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords','registration_access_codes') ORDER BY 1, 2`;
     // banco novo a partir do schema.sql ATUAL (o mesmo que a suíte usa)
     const admin = postgres(adminUrl().toString(), { max: 1, prepare: false, onnotice: () => {} });
     await admin.unsafe(`DROP DATABASE IF EXISTS ${MIG_DB}_new WITH (FORCE)`);
@@ -188,7 +190,7 @@ describe("migração 0015 — sessões, senhas e triggers", () => {
     const fresh = postgres(u.toString(), { max: 1, prepare: false, onnotice: () => {} });
     try {
       await fresh.unsafe(readFileSync(path.resolve(__dirname, "../db/schema.sql"), "utf-8"));
-      const created = await fresh`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords') ORDER BY 1, 2`;
+      const created = await fresh`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords','registration_access_codes') ORDER BY 1, 2`;
       expect(created.map((r) => `${r.table_name}.${r.column_name}`)).toEqual(migrated.map((r) => `${r.table_name}.${r.column_name}`));
       const [{ n: triggersFresh }] = await fresh`SELECT count(*)::int AS n FROM pg_trigger WHERE NOT tgisinternal`;
       const [{ n: triggersMig }] = await sql`SELECT count(*)::int AS n FROM pg_trigger WHERE NOT tgisinternal`;
@@ -312,5 +314,31 @@ describe("migração 0016 (MFA) sobre o estado da Fase 89", () => {
     await expect(sql.begin((trx) => trx.unsafe(MIGRATION_0016))).rejects.toThrow();
     await expect(sql`SELECT 1 FROM mfa_methods`).rejects.toThrow();
     await expect(sql`SELECT 1 FROM platform_bootstrap_tokens`).rejects.toThrow();
+  });
+});
+
+describe("migração 0017 (códigos de acesso) sobre o estado da Fase 90", () => {
+  it("aplica sem tocar nos usuários existentes (registered_via_code_id NULL), cria a tabela vazia e a UNIQUE por código", async () => {
+    const existing = await addUser("antigo@x.com");
+    await runMigration();
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0017));
+    expect(await sql`SELECT id FROM registration_access_codes`).toHaveLength(0);
+    const [u] = await sql`SELECT registered_via_code_id FROM users WHERE id = ${existing}`;
+    expect(u.registered_via_code_id).toBeNull();
+    const [code] = await sql`INSERT INTO registration_access_codes (code_hash, pepper_version, code_last4, created_by_user_id, expires_at) VALUES (decode(repeat('01', 32), 'hex'), 1, 'ABCD', ${existing}, now() + interval '1 day') RETURNING id`;
+    const second = await addUser("segundo@x.com");
+    await sql`UPDATE users SET registered_via_code_id = ${code.id} WHERE id = ${existing}`;
+    await expect(sql`UPDATE users SET registered_via_code_id = ${code.id} WHERE id = ${second}`).rejects.toThrow(/registered_via_code/);
+    await expect(sql`INSERT INTO registration_access_codes (code_hash, pepper_version, code_last4, created_by_user_id, expires_at) VALUES (decode(repeat('02', 32), 'hex'), 1, 'ABCD', ${existing}, now() + interval '100 days')`).rejects.toThrow(/check/i);
+  });
+
+  it("a migração é atômica: falhando no meio (tabela já existente), a coluna de users não fica", async () => {
+    await runMigration();
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
+    await sql`CREATE TABLE registration_access_codes (x int)`; // conflito logo no início do arquivo
+    await expect(sql.begin((trx) => trx.unsafe(MIGRATION_0017))).rejects.toThrow();
+    const cols = await sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'registered_via_code_id'`;
+    expect(cols).toHaveLength(0);
   });
 });

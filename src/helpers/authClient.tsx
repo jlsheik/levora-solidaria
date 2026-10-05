@@ -1,9 +1,12 @@
 import superjson from "superjson";
 import { ApiRequestError } from "./apiRequestError.js";
 
-/** Cliente fetch comum dos endpoints de autenticação (Fase 90): superjson, cookies, e erro tipado com status e `code` estável. */
-export async function authRequest<T>(method: "GET" | "POST", path: string, body?: unknown, init?: RequestInit): Promise<T> {
-  const result = await fetch(`/_api/v1/auth/${path}`, {
+/**
+ * Cliente fetch comum dos endpoints de autenticação/plataforma (Fases 90–91): superjson, cookies, e erro tipado com status e `code`
+ * estável. `path` é relativo a `/_api/v1/`.
+ */
+export async function apiRequest<T>(method: "GET" | "POST", path: string, body?: unknown, init?: RequestInit): Promise<T> {
+  const result = await fetch(`/_api/v1/${path}`, {
     method,
     ...(body !== undefined ? { body: superjson.stringify(body) } : {}),
     ...init,
@@ -22,3 +25,5 @@ export async function authRequest<T>(method: "GET" | "POST", path: string, body?
   }
   return superjson.parse<T>(text);
 }
+
+export const authRequest = <T,>(method: "GET" | "POST", path: string, body?: unknown, init?: RequestInit) => apiRequest<T>(method, `auth/${path}`, body, init);

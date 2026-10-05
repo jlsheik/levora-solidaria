@@ -406,6 +406,7 @@ export interface UserPasswords {
 }
 
 export interface Users {
+  registeredViaCodeId: number | null;
   anonymizedAt: Timestamp | null;
   avatarUrl: string | null;
   createdAt: Generated<Timestamp | null>;
@@ -500,6 +501,22 @@ export interface PlatformState {
   ownerBootstrappedAt: Timestamp | null;
 }
 
+export interface RegistrationAccessCodes {
+  codeHash: Buffer;
+  codeLast4: string;
+  createdAt: Generated<Timestamp>;
+  createdByUserId: number;
+  expiresAt: Timestamp;
+  id: Generated<number>;
+  label: string | null;
+  organizationId: number | null;
+  pepperVersion: number;
+  redeemedAt: Timestamp | null;
+  redeemedByUserId: number | null;
+  revokedAt: Timestamp | null;
+  revokedByUserId: number | null;
+}
+
 export interface DB {
   authChallenges: AuthChallenges;
   approvalRequests: ApprovalRequests;
@@ -527,6 +544,7 @@ export interface DB {
   platformAccess: PlatformAccess;
   platformBootstrapTokens: PlatformBootstrapTokens;
   platformState: PlatformState;
+  registrationAccessCodes: RegistrationAccessCodes;
   sessions: Sessions;
   sources: Sources;
   stockTransactions: StockTransactions;
