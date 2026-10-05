@@ -11,7 +11,10 @@ import { grantPlatformAdmin, revokePlatformAccess, transferPlatformOwnership } f
 import { handle as postLogin } from "../src/endpoints/auth/login_with_password_POST";
 import { handle as postLogout } from "../src/endpoints/auth/logout_POST";
 import { handle as getSession } from "../src/endpoints/auth/session_GET";
-import { handle as postRegister } from "../src/endpoints/auth/register_with_password_POST";
+import { handle as rawPostRegister } from "../src/endpoints/auth/register_with_password_POST";
+import { withFreshAccessCode } from "./helpers";
+// Fase 91: o cadastro exige código de acesso; estes testes (de outros comportamentos) recebem um código ativo novo automaticamente.
+const postRegister = withFreshAccessCode(rawPostRegister);
 import { handle as postAccountDelete } from "../src/endpoints/auth/account-delete_POST";
 import { handle as postOrgStatus } from "../src/endpoints/platform-organizations-status_POST";
 import { handle as getPlatformOrganizations } from "../src/endpoints/platform-organizations_GET";
@@ -104,7 +107,7 @@ describe("Platform Owner único — todos os caminhos EXISTENTES que poderiam in
   it("não existem (no HEAD desta fase) endpoints de troca de senha, logout global, desativação/suspensão de usuário nem alteração de e-mail/role — nada mais a auditar", async () => {
     const { readdirSync } = await import("node:fs");
     const files = [...readdirSync("src/endpoints"), ...readdirSync("src/endpoints/auth")].join("\n");
-    expect(files).not.toMatch(/password-change|password-reset|sessions-revoke|logout-all|users-status|users-suspend|users-role|profile_POST|platform-access/);
+    expect(files).not.toMatch(/password-change|password-reset|sessions-revoke|logout-all|users-status|users-suspend|users-role|profile_POST|platform-access(?!-codes)/);
   });
 });
 

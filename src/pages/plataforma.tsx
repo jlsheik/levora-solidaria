@@ -18,6 +18,7 @@ import { postBackgroundTasksRetry } from "../endpoints/background-tasks-retry_PO
 import { getPlatformOrganizations } from "../endpoints/platform-organizations_GET.schema";
 import { postPlatformOrganizationsStatus } from "../endpoints/platform-organizations-status_POST.schema";
 import { StepUpDialog } from "../components/StepUpDialog";
+import { AccessCodesPanel } from "../components/AccessCodesPanel";
 import { ApiRequestError } from "../helpers/apiRequestError";
 import { SourceTypeArrayValues, OpportunityUrgencyArrayValues } from "../helpers/schema";
 import {
@@ -564,6 +565,7 @@ export default function PlatformPage() {
             </ul>
           )}
         </section>
+        <AccessCodesPanel />
       </main>
 
       <Dialog open={!!allocateTarget} onOpenChange={(open) => { if (!open) { setAllocateTarget(null); setConfirmPriorRefusal(false); } }}>

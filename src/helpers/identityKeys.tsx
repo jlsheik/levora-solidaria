@@ -43,7 +43,7 @@ function currentVersion(prefix: string): number {
 
 // ---- pepper (HMAC) -------------------------------------------------------------------------------------------------
 
-export type PepperContext = "recovery:v1:" | "bootstrap:v1:" | "challenge:v1:";
+export type PepperContext = "recovery:v1:" | "bootstrap:v1:" | "challenge:v1:" | "access-code:v1:";
 
 function pepperFor(version: number): Buffer {
   const raw = process.env[`IDENTITY_CODE_PEPPER_V${version}`];

@@ -14,6 +14,9 @@ export const schema = z.object({
   email: z.string().trim().email("Informe um e-mail válido"),
   password: newPasswordSchema,
   displayName: z.string().min(1, "Nome é obrigatório"),
+  // Fase 91: código de acesso emitido pela plataforma (provisionamento). A canonicalização/validação é SÓ no servidor; o cliente
+  // apenas limita o tamanho. Nunca vira credencial de login.
+  accessCode: z.string().trim().min(1, "Informe o código de acesso").max(64, "Código de acesso inválido"),
 });
 
 // Fase 51 (SEC-03): nunca `{ user: User }` — o endpoint não cria sessão

@@ -40,7 +40,6 @@ import { verifyAuditLogChain } from "../src/helpers/verifyAuditChain.js";
 import { ALGORITHM_VERSION } from "../src/helpers/opportunityMatching.js";
 import { TASK_HANDLERS } from "../src/helpers/taskHandlers.js";
 
-import { handle as registerHandle } from "../src/endpoints/auth/register_with_password_POST.js";
 import { handle as organizationsPost } from "../src/endpoints/organizations_POST.js";
 import { handle as platformOrgStatus } from "../src/endpoints/platform-organizations-status_POST.js";
 import { handle as invitesPost } from "../src/endpoints/organization-invites_POST.js";
@@ -177,13 +176,16 @@ async function ensureUser(
 
   if (existingId === null) {
     const password = randomBytes(12).toString("base64url");
-    // Cadastro pelo endpoint oficial: valida e-mail, aplica o hash oficial
-    // e respeita a política de enumeração da Fase 51.
-    await call(stats, `cadastro ${spec.email}`, registerHandle, null,
-      { email: spec.email, password, displayName: spec.displayName }, "auth/register_with_password");
-    const id = await userIdByEmail(spec.email);
-    if (id === null) throw new SeedStepError(`cadastro ${spec.email}`, 0, "usuário não foi criado");
-    return { id, created: true, password };
+    // Fase 91: o cadastro PÚBLICO exige código de acesso emitido pela plataforma — e o seed não pode emitir códigos (nem existe
+    // admin ainda). Estes usuários são sintéticos de staging: criados direto, com o hash oficial (mesmo custo do cadastro), como
+    // exceção INTERNA e explícita (documentada em docs/IDENTIDADE_FASE91_AUDITORIA.md; teste varre os únicos criadores de usuário).
+    const passwordHash = await generatePasswordHash(password);
+    const created = await db.transaction().execute(async (trx) => {
+      const [row] = await trx.insertInto("users").values({ email: spec.email.toLowerCase(), displayName: spec.displayName, role: "user" }).returning("id").execute();
+      await trx.insertInto("userPasswords").values({ userId: row.id, passwordHash }).execute();
+      return row.id;
+    });
+    return { id: created, created: true, password };
   }
 
   if (resetPasswords) {

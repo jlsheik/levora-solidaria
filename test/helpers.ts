@@ -149,6 +149,48 @@ export async function createPlatformOwner(overrides?: { email?: string; displayN
   return { userId: user.id, email: user.email, cookie };
 }
 
+/**
+ * Fase 91 — emissor de códigos para os testes. Um "criador de códigos" barato (usuário com platform_access, SEM senha/MFA — o helper
+ * de dados não passa pelo endpoint, que é quem exige MFA/step-up) é criado uma vez por teste. `state` fabrica códigos em qualquer
+ * estado terminal/derivado.
+ */
+export async function ensureCodeCreator(): Promise<number> {
+  // Idempotente e seguro sob concorrência (vários códigos fabricados em paralelo): ON CONFLICT DO NOTHING + releitura.
+  await db.insertInto("users").values({ email: "criador-de-codigos@example.com", displayName: "Criador de códigos", role: "user" }).onConflict((oc) => oc.doNothing()).execute();
+  const creator = await db.selectFrom("users").select("id").where("email", "=", "criador-de-codigos@example.com").executeTakeFirstOrThrow();
+  await db.insertInto("platformAccess").values({ userId: creator.id, level: "admin", status: "active", grantOrigin: "test" }).onConflict((oc) => oc.column("userId").doNothing()).execute();
+  return creator.id;
+}
+
+export type CodeFixtureState = "active" | "expired" | "revoked" | "redeemed";
+
+export async function makeAccessCode(options: { state?: CodeFixtureState; label?: string; creatorId?: number; validityMs?: number } = {}): Promise<{ code: string; id: number; creatorId: number }> {
+  const { createAccessCode } = await import("../src/helpers/registrationCodes");
+  const creatorId = options.creatorId ?? (await ensureCodeCreator());
+  const state = options.state ?? "active";
+  const now = new Date();
+  const createdAt = state === "expired" ? new Date(now.getTime() - 2 * 3600 * 1000) : now;
+  const expiresAt = state === "expired" ? new Date(now.getTime() - 3600 * 1000) : new Date(now.getTime() + (options.validityMs ?? 24 * 3600 * 1000));
+  const created = await db.transaction().execute((trx) => createAccessCode(trx, { actorUserId: creatorId, label: options.label ?? null, expiresAt, now: createdAt }));
+  if (state === "revoked") {
+    await db.updateTable("registrationAccessCodes").set({ revokedAt: new Date(), revokedByUserId: creatorId }).where("id", "=", created.id).execute();
+  } else if (state === "redeemed") {
+    const redeemer = await createTestUser();
+    await db.updateTable("registrationAccessCodes").set({ redeemedAt: new Date(), redeemedByUserId: redeemer.id }).where("id", "=", created.id).execute();
+    await db.updateTable("users").set({ registeredViaCodeId: created.id }).where("id", "=", redeemer.id).execute();
+  }
+  return { code: created.code, id: created.id, creatorId };
+}
+
+/** Envolve o handler do cadastro: injeta um código ATIVO novo quando o corpo não traz `accessCode` (testes antigos de cadastro/enumeração). */
+export function withFreshAccessCode(handler: (request: Request) => Promise<Response>) {
+  return async (request: Request): Promise<Response> => {
+    const body = superjson.parse<Record<string, unknown>>(await request.clone().text());
+    if (body && body.accessCode === undefined) body.accessCode = (await makeAccessCode()).code;
+    return handler(new Request(request.url, { method: request.method, headers: request.headers, body: superjson.stringify(body) }));
+  };
+}
+
 /** Fonte "manual" — único connectorKey que nasce `ativa` sem configuração externa (ver connectorsManual.tsx). */
 export async function createTestSource(createdByUserId: number, overrides: { name?: string } = {}) {
   const suffix = randomBytes(3).toString("hex");
