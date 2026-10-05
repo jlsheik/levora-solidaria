@@ -1,5 +1,6 @@
 import { db } from "./db.js";
 import { User } from "./User.js";
+import { isPlatformMfaRequired } from "./identityKeys.js";
 import { evaluateSession, SESSION_POLICY, type SessionTier } from "./sessionPolicy.js";
 
 import {
@@ -61,6 +62,13 @@ export async function getServerUserSession(request: Request) {
   const platformLevel = result.platformLevel ?? null;
   const tier: SessionTier = platformLevel ? "platform" : "standard";
   const now = new Date();
+
+  // Fase 90: titular de platform_access (owner/admin) NUNCA tem sessão válida sem MFA concluído. Sessões antigas (anteriores à
+  // fase) ou criadas por qualquer caminho sem segundo fator deixam de valer para quem tem poder de plataforma — a pessoa entra
+  // de novo e cai no desafio de MFA (ou na inscrição, se ainda não tem TOTP). O estado parcial vive em auth_challenges.
+  if (platformLevel && isPlatformMfaRequired() && !result.sessionMfaVerifiedAt) {
+    throw new NotAuthenticatedError();
+  }
 
   const evaluation = evaluateSession({
     tier,

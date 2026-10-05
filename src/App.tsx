@@ -4,6 +4,10 @@ import { GlobalContextProviders } from "./components/_globalContextProviders";
 
 import IndexPage from "./pages/_index";
 import indexPageLayout from "./pages/_index.pageLayout";
+import SecurityPage from "./pages/seguranca";
+import securityPageLayout from "./pages/seguranca.pageLayout";
+import PlatformActivatePage from "./pages/plataforma.ativar";
+import platformActivatePageLayout from "./pages/plataforma.ativar.pageLayout";
 
 import LoginPage from "./pages/login";
 import loginPageLayout from "./pages/login.pageLayout";
@@ -100,6 +104,14 @@ const router = createBrowserRouter([
       {
         path: "/organizacoes/:organizationId/matching",
         element: <>{withPageLayout(organizationMatchingSettingsPageLayout, OrganizationMatchingSettingsPage)}</>,
+      },
+      {
+        path: "/seguranca",
+        element: <>{withPageLayout(securityPageLayout, SecurityPage)}</>,
+      },
+      {
+        path: "/plataforma/ativar",
+        element: <>{withPageLayout(platformActivatePageLayout, PlatformActivatePage)}</>,
       },
       {
         path: "/plataforma",

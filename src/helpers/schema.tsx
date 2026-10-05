@@ -63,6 +63,16 @@ export type StockTransactionType = "ajuste" | "entrada" | "saida";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export type AuthChallengePurpose = "bootstrap_owner" | "mfa_enroll" | "mfa_login" | "owner_recovery";
+
+export type AuthChallengeStatus = "cancelled" | "consumed" | "failed" | "pending";
+
+export type MfaMethodStatus = "active" | "disabled" | "pending";
+
+export type MfaMethodType = "totp";
+
+export type PlatformBootstrapPurpose = "owner" | "owner_recovery";
+
 export type PlatformAccessLevel = "admin" | "owner";
 
 export type PlatformAccessStatus = "active" | "revoked";
@@ -157,6 +167,7 @@ export interface InventoryItems {
 }
 
 export interface LoginAttempts {
+  ipPrefix: string | null;
   attemptedAt: Generated<Timestamp | null>;
   email: string;
   id: Generated<number>;
@@ -405,7 +416,74 @@ export interface Users {
   updatedAt: Generated<Timestamp | null>;
 }
 
+export interface AuthChallenges {
+  attempts: Generated<number>;
+  bootstrapTokenId: number | null;
+  consumedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  expiresAt: Timestamp;
+  id: Generated<number>;
+  maxAttempts: Generated<number>;
+  pendingDisplayName: string | null;
+  pendingPasswordHash: string | null;
+  pendingSecretCiphertext: Buffer | null;
+  pendingSecretKeyId: number | null;
+  pendingSecretStep: number | null;
+  pepperVersion: number;
+  primaryMethod: string | null;
+  purpose: AuthChallengePurpose;
+  secretHash: Buffer;
+  status: Generated<AuthChallengeStatus>;
+  userId: number | null;
+}
+
+export interface MfaMethods {
+  confirmedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  disabledAt: Timestamp | null;
+  failedAttempts: Generated<number>;
+  id: Generated<number>;
+  lastFailedAt: Timestamp | null;
+  lastUsedAt: Timestamp | null;
+  lastUsedStep: number | null;
+  lockedUntil: Timestamp | null;
+  secretCiphertext: Buffer;
+  secretKeyId: number;
+  status: Generated<MfaMethodStatus>;
+  type: Generated<MfaMethodType>;
+  userId: number;
+}
+
+export interface MfaRecoveryCodes {
+  batchId: string;
+  codeHash: Buffer;
+  createdAt: Generated<Timestamp>;
+  id: Generated<number>;
+  invalidatedAt: Timestamp | null;
+  pepperVersion: number;
+  usedAt: Timestamp | null;
+  userId: number;
+}
+
+export interface PlatformBootstrapTokens {
+  claimedAt: Timestamp | null;
+  claimedChallengeId: number | null;
+  createdAt: Generated<Timestamp>;
+  expectedEmail: string | null;
+  expiresAt: Timestamp;
+  failedAttempts: Generated<number>;
+  id: Generated<number>;
+  issuedBy: string;
+  pepperVersion: number;
+  purpose: PlatformBootstrapPurpose;
+  revokedAt: Timestamp | null;
+  targetUserId: number | null;
+  tokenHash: Buffer;
+  usedAt: Timestamp | null;
+}
+
 export interface PlatformAccess {
+  bootstrapTokenId: number | null;
   grantedAt: Generated<Timestamp>;
   grantedByUserId: number | null;
   grantOrigin: Generated<string>;
@@ -423,6 +501,7 @@ export interface PlatformState {
 }
 
 export interface DB {
+  authChallenges: AuthChallenges;
   approvalRequests: ApprovalRequests;
   auditLog: AuditLog;
   backgroundTaskRuns: BackgroundTaskRuns;
@@ -433,6 +512,8 @@ export interface DB {
   logisticsEvents: LogisticsEvents;
   matchEvaluations: MatchEvaluations;
   memberships: Memberships;
+  mfaMethods: MfaMethods;
+  mfaRecoveryCodes: MfaRecoveryCodes;
   needFulfillments: NeedFulfillments;
   needResolutions: NeedResolutions;
   needs: Needs;
@@ -444,6 +525,7 @@ export interface DB {
   organizationServiceAreas: OrganizationServiceAreas;
   organizations: Organizations;
   platformAccess: PlatformAccess;
+  platformBootstrapTokens: PlatformBootstrapTokens;
   platformState: PlatformState;
   sessions: Sessions;
   sources: Sources;

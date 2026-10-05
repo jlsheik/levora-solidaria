@@ -34,14 +34,14 @@ export async function createTestUser(overrides: { email?: string; displayName?: 
 }
 
 /** Cria uma sessão de verdade na tabela `sessions` e devolve o cookie assinado. */
-export async function createSessionCookie(userId: number): Promise<string> {
+export async function createSessionCookie(userId: number, options: { mfaVerified?: boolean } = {}): Promise<string> {
   const sessionId = randomBytes(32).toString("hex");
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SessionExpirationSeconds * 1000);
 
   await db
     .insertInto("sessions")
-    .values({ id: sessionId, userId, createdAt: now, lastAccessed: now, expiresAt })
+    .values({ id: sessionId, userId, createdAt: now, lastAccessed: now, expiresAt, ...(options.mfaVerified ? { mfaVerifiedAt: now, lastReauthAt: now } : {}) })
     .execute();
 
   const probe = new Response();
@@ -111,11 +111,31 @@ export async function addMembership(organizationId: number, userId: number, role
     .execute();
 }
 
-/** Usuário com `platform_access` ativo (nível `admin`) — o que passa por `requirePlatformAdmin`. */
+/** Segredo TOTP FIXO dos usuários de teste com MFA (nunca usado fora de teste). */
+export const TEST_TOTP_SECRET = Buffer.from("12345678901234567890");
+
+/** Ativa um TOTP (segredo `TEST_TOTP_SECRET`, cifrado como em produção) para o usuário. */
+export async function enrollTestMfa(userId: number): Promise<void> {
+  const { encryptSecret } = await import("../src/helpers/identityKeys");
+  const { ciphertext, keyId } = encryptSecret(TEST_TOTP_SECRET, `mfa:${userId}`);
+  await db
+    .insertInto("mfaMethods")
+    .values({ userId, status: "active", secretCiphertext: ciphertext, secretKeyId: keyId, confirmedAt: new Date() })
+    .execute();
+}
+
+/** Código TOTP do usuário de teste para o passo (relativo ao relógio atual). */
+export async function testTotp(stepOffset = 0, nowMs = Date.now()): Promise<string> {
+  const { totpCodeAtStep, stepAt } = await import("../src/helpers/totp");
+  return totpCodeAtStep(TEST_TOTP_SECRET, stepAt(nowMs) + stepOffset);
+}
+
+/** Usuário com `platform_access` ativo (nível `admin`) E MFA ativo (poder de plataforma exige MFA) — sessão com MFA concluído. */
 export async function createPlatformAdmin(overrides?: { email?: string; displayName?: string }): Promise<AuthenticatedTestUser> {
   const user = await createTestUser(overrides);
   await db.insertInto("platformAccess").values({ userId: user.id, level: "admin", status: "active", grantOrigin: "test" }).execute();
-  const cookie = await createSessionCookie(user.id);
+  await enrollTestMfa(user.id);
+  const cookie = await createSessionCookie(user.id, { mfaVerified: true });
   return { userId: user.id, email: user.email, cookie };
 }
 
@@ -123,7 +143,8 @@ export async function createPlatformAdmin(overrides?: { email?: string; displayN
 export async function createPlatformOwner(overrides?: { email?: string; displayName?: string }): Promise<AuthenticatedTestUser> {
   const user = await createTestUser(overrides);
   await db.insertInto("platformAccess").values({ userId: user.id, level: "owner", status: "active", grantOrigin: "test" }).execute();
-  const cookie = await createSessionCookie(user.id);
+  await enrollTestMfa(user.id);
+  const cookie = await createSessionCookie(user.id, { mfaVerified: true });
   return { userId: user.id, email: user.email, cookie };
 }
 

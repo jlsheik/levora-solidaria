@@ -5,11 +5,14 @@ import { recordAuditLogEntry } from "../helpers/auditLog.js";
 import { schema } from "./platform-organizations-status_POST.schema.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
+import { requireRecentAuth } from "../helpers/stepUp.js";
 
 export async function handle(request: Request) {
   try {
-    const { user } = await getServerUserSession(request);
+    const { user, session } = await getServerUserSession(request);
     await requirePlatformAdmin(user.id);
+    // Fase 90 (step-up): aprovar/suspender organização é ação crítica da plataforma — exige MFA/step-up RECENTE (10 min).
+    requireRecentAuth(session);
 
     const json = superjson.parse(await request.text());
     const input = schema.parse(json);

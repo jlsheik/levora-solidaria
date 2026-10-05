@@ -17,6 +17,7 @@ import { handle as postOrgStatus } from "../src/endpoints/platform-organizations
 import { handle as getPlatformOrganizations } from "../src/endpoints/platform-organizations_GET";
 import { handle as postMemberLeave } from "../src/endpoints/organization-members-leave_POST";
 import { generatePasswordHash } from "../src/helpers/generatePasswordHash";
+import { fullLogin } from "./mfaHarness";
 import { createPlatformAdmin, createPlatformOwner, createTestUser, createTestOrganization, addMembership, createAuthenticatedUser, buildRequest, parseJson, createSessionCookie } from "./helpers";
 
 const PASSWORD = "senha-de-teste-123";
@@ -65,9 +66,9 @@ describe("Platform Owner único — todos os caminhos EXISTENTES que poderiam in
     const owner = await createPlatformOwner();
     expect((await postLogout(buildRequest("auth/logout", { method: "POST", cookie: owner.cookie }))).status).toBe(200);
     expect((await platformCall(owner.cookie)).status).toBe(401);
-    const again = await login(owner.email);
-    expect(again.status).toBe(200);
-    expect((await who(cookieOf(again))).user).toMatchObject({ platformLevel: "owner" });
+    // Fase 90: o login do owner exige o 2º fator (senha + TOTP) antes de haver sessão
+    const again = await fullLogin(owner.email, owner.userId);
+    expect((await who(again)).user).toMatchObject({ platformLevel: "owner" });
     expect(await owners()).toEqual([owner.userId]);
   });
 
@@ -301,12 +302,13 @@ describe("senha — bytes, não caracteres", () => {
 });
 
 describe("rotateSession — consumidores nesta fase", () => {
-  it("nenhum fluxo de produção do HEAD chama rotateSession ainda (deliberado: troca de senha/MFA/vínculos são Fase 90+); a função é só helper testado", async () => {
+  it("rotateSession só tem os consumidores previstos da Fase 90 (ativar/desativar MFA e step-up); troca de senha/vínculos ficam para fases seguintes", async () => {
     const { readFileSync, readdirSync, statSync } = await import("node:fs");
+    const ALLOWED = ["mfa-disable_POST.ts", "mfa-setup-confirm_POST.ts", "step-up_POST.ts"]; // consumidores da Fase 90 (MFA/step-up)
     const { join } = await import("node:path");
     const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? walk(join(dir, f)) : [join(dir, f)]));
     const users = walk("src").concat(walk("server")).filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes("sessionLifecycle")).filter((f) => readFileSync(f, "utf8").includes("rotateSession"));
-    expect(users).toEqual([]);
+    expect(users.map((f) => f.split(/[\\/]/).pop()).sort()).toEqual(ALLOWED);
     void createSessionCookie;
   });
 });

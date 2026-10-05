@@ -143,6 +143,10 @@ export async function handle(request: Request) {
         .where("userId", "=", user.id)
         .execute();
 
+      // Fase 90: segredo TOTP, recovery codes e challenges são dados de credencial — saem junto com a senha.
+      await trx.deleteFrom("mfaMethods").where("userId", "=", user.id).execute();
+      await trx.deleteFrom("mfaRecoveryCodes").where("userId", "=", user.id).execute();
+      await trx.deleteFrom("authChallenges").where("userId", "=", user.id).execute();
       await trx.deleteFrom("userPasswords").where("userId", "=", user.id).execute();
       await trx.deleteFrom("sessions").where("userId", "=", user.id).execute();
 

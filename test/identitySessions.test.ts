@@ -154,7 +154,16 @@ describe("cookie/JWT limitados ao teto absoluto", () => {
 
   it("login de titular de plataforma devolve Max-Age ≤ 8 h? (o cookie dura o mínimo entre 7 d e o absoluto da linha) e platformLevel na resposta", async () => {
     const admin = await createPlatformAdmin();
-    const res = await login(admin.email);
+    // Fase 90: titular de plataforma só tem sessão depois do 2º fator (senha + TOTP)
+    const first = await login(admin.email);
+    expect((await parseJson<{ mfaRequired: boolean }>(first)).mfaRequired).toBe(true);
+    expect(first.headers.getSetCookie().some((c) => c.startsWith("floot_built_app_session="))).toBe(false);
+    await db.updateTable("mfaMethods").set({ lastUsedStep: null }).where("userId", "=", admin.userId).execute();
+    const { handle: verifyHandle } = await import("../src/endpoints/auth/mfa-verify_POST");
+    const { totpCodeAtStep, stepAt } = await import("../src/helpers/totp");
+    const { TEST_TOTP_SECRET } = await import("./helpers");
+    const challengeCookie = first.headers.getSetCookie().find((c) => c.startsWith("levora_challenge="))!.split(";")[0];
+    const res = await verifyHandle(buildRequest("auth/mfa-verify", { method: "POST", cookie: challengeCookie, body: { code: totpCodeAtStep(TEST_TOTP_SECRET, stepAt(Date.now())) } }));
     expect(res.status).toBe(200);
     const body = await parseJson<{ user: { role: string; platformLevel: string } }>(res);
     expect(body.user).toMatchObject({ role: "admin", platformLevel: "admin" });

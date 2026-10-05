@@ -19,7 +19,7 @@ export interface CreatedSession {
  */
 export async function createSession(
   trx: Transaction<DB>,
-  params: { userId: number; primaryMethod: PrimaryMethod; now?: Date }
+  params: { userId: number; primaryMethod: PrimaryMethod; now?: Date; mfaVerified?: boolean }
 ): Promise<CreatedSession> {
   const now = params.now ?? new Date();
   const id = randomBytes(32).toString("hex");
@@ -34,6 +34,9 @@ export async function createSession(
       expiresAt: absoluteExpiresAt,
       absoluteExpiresAt,
       primaryMethod: params.primaryMethod,
+      // Fase 90: MFA concluído NA criação da sessão (a sessão pré-MFA nunca existiu — o estado parcial é auth_challenges).
+      mfaVerifiedAt: params.mfaVerified ? now : null,
+      lastReauthAt: params.mfaVerified ? now : null,
     })
     .execute();
   return { id, createdAt: now, absoluteExpiresAt };
@@ -49,9 +52,18 @@ export async function createSession(
  */
 export async function rotateSession(
   currentSessionId: string,
-  options: { reauth?: boolean } = {}
+  options: { reauth?: boolean; mfaVerified?: boolean } = {}
 ): Promise<CreatedSession & { newId: string }> {
-  return db.transaction().execute(async (trx) => {
+  return db.transaction().execute((trx) => rotateSessionInTx(trx, currentSessionId, options));
+}
+
+/** Mesma rotação, dentro de uma transação do chamador (ex.: ativar MFA + rotacionar atomicamente). */
+export async function rotateSessionInTx(
+  trx: Transaction<DB>,
+  currentSessionId: string,
+  options: { reauth?: boolean; mfaVerified?: boolean } = {}
+): Promise<CreatedSession & { newId: string }> {
+  {
     const old = await trx.selectFrom("sessions").selectAll().where("id", "=", currentSessionId).forUpdate().executeTakeFirst();
     if (!old) throw new NotAuthenticatedError();
 
@@ -67,11 +79,11 @@ export async function rotateSession(
         expiresAt: old.expiresAt,
         absoluteExpiresAt: old.absoluteExpiresAt,
         primaryMethod: old.primaryMethod,
-        mfaVerifiedAt: old.mfaVerifiedAt,
-        lastReauthAt: options.reauth ? now : old.lastReauthAt,
+        mfaVerifiedAt: options.mfaVerified ? now : old.mfaVerifiedAt,
+        lastReauthAt: options.reauth || options.mfaVerified ? now : old.lastReauthAt,
       })
       .execute();
     await trx.deleteFrom("sessions").where("id", "=", currentSessionId).execute();
     return { id: newId, newId, createdAt: old.createdAt ?? now, absoluteExpiresAt: old.absoluteExpiresAt };
-  });
+  }
 }

@@ -36,7 +36,7 @@ import {
 } from "../components/Select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/DropdownMenu";
 import { z } from "zod";
-import { HeartHandshake, Plus, Building2, LogOut, Network, MoreVertical, Trash2 } from "lucide-react";
+import { HeartHandshake, Plus, Building2, LogOut, Network, MoreVertical, Trash2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import styles from "./_index.module.css";
 
@@ -144,6 +144,9 @@ export default function DashboardPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => navigate("/seguranca")}>
+                <ShieldCheck size={14} /> Segurança (autenticador)
+              </DropdownMenuItem>
               <DropdownMenuItem className={styles.dangerMenuItem} onSelect={() => setDeleteAccountOpen(true)}>
                 <Trash2 size={14} /> Excluir minha conta
               </DropdownMenuItem>

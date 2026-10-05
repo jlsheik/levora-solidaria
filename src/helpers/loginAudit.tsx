@@ -20,6 +20,23 @@ export function ipPrefix(ip: string): string {
   return ip;
 }
 
+/** Falhas somadas de VÁRIAS redes contra a mesma conta: alerta (no máximo 1 por conta por hora), nunca bloqueio. */
+export async function auditLoginSuspicious(trx: Transaction<DB>, params: { userId: number }) {
+  const gate = checkRateLimit({ bucket: "login-suspicious-audit", identifier: String(params.userId), limit: 1, windowMs: 60 * 60 * 1000 });
+  if (!gate.allowed) return;
+  await recordAuditLogEntry(
+    {
+      organizationId: null,
+      actorUserId: params.userId,
+      action: "usuario.login_suspeito",
+      entityType: "user",
+      entityId: String(params.userId),
+      metadata: { motivo: "falhas_de_varias_redes" },
+    },
+    trx
+  );
+}
+
 export type LoginMethod = "senha" | "google" | "microsoft" | "apple";
 
 /** Login bem-sucedido. Chamar como ÚLTIMO passo da transação (a hash-chain toma um advisory lock global). */

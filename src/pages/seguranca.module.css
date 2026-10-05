@@ -1,0 +1,13 @@
+.page { min-height: 100vh; background: var(--background); color: var(--foreground); padding: var(--spacing-8); max-width: 44rem; margin: 0 auto; box-sizing: border-box; }
+.backLink { display: inline-flex; align-items: center; gap: var(--spacing-1); color: var(--muted-foreground); font-size: 0.875rem; text-decoration: none; margin-bottom: var(--spacing-4); }
+.backLink:hover { color: var(--foreground); }
+.title { font-family: var(--font-family-display); font-size: 1.5rem; font-weight: 600; margin: 0 0 var(--spacing-1) 0; }
+.subtitle { color: var(--muted-foreground); font-size: 0.875rem; margin: 0 0 var(--spacing-6) 0; line-height: 1.5; }
+.section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6); }
+.sectionTitle { font-family: var(--font-family-display); font-size: 1.0625rem; font-weight: 600; margin: 0 0 var(--spacing-4) 0; color: var(--card-foreground); }
+.skeleton { height: 4rem; border-radius: var(--radius); }
+
+@media (max-width: 640px) {
+  .page { padding: var(--spacing-4); }
+  .section { padding: var(--spacing-4); }
+}

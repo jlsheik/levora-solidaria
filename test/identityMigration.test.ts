@@ -11,7 +11,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const BASELINE_COMMIT = "a628bd4"; // último commit ANTES da Fase 89
-const MIGRATION = readFileSync(path.resolve(__dirname, "../db/migrations/0015_identity_foundation.sql"), "utf-8");
+const MIGRATION = readFileSync(path.resolve(__dirname, "../db/migrations/0015_identity_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0016 = readFileSync(path.resolve(__dirname, "../db/migrations/0016_mfa_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIG_DB = "levora_f89_mig_test";
 
 function adminUrl(): URL {
@@ -175,6 +176,8 @@ describe("migração 0015 — sessões, senhas e triggers", () => {
   it("a migração NÃO é reaplicável por engano (objetos já existem) e o schema.sql novo cria o MESMO conjunto de objetos", async () => {
     await runMigration();
     await expect(runMigration()).rejects.toThrow();
+    // schema.sql atual = baseline + 0015 + 0016 (Fase 90)
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
     const migrated = await sql`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords') ORDER BY 1, 2`;
     // banco novo a partir do schema.sql ATUAL (o mesmo que a suíte usa)
     const admin = postgres(adminUrl().toString(), { max: 1, prepare: false, onnotice: () => {} });
@@ -282,5 +285,32 @@ describe("migração 0015 — atomicidade, ordem e ausência de auto-bloqueio", 
     const [{ n }] = await sql`SELECT count(*)::int AS n FROM platform_access WHERE level = 'owner' AND status = 'active'`;
     expect(n).toBe(1);
     expect(await sql`SELECT id FROM users WHERE role = 'admin'`).toHaveLength(0);
+  });
+});
+
+describe("migração 0016 (MFA) sobre o estado da Fase 89", () => {
+  it("aplica sem bloquear um owner migrado SEM MFA (o trigger só protege quem já tem TOTP ativo), mantém login_attempts e cria as tabelas vazias", async () => {
+    const admin = await addUser("admin@x.com", "admin");
+    await sql`INSERT INTO login_attempts (email, success) VALUES ('a@x.com', false)`;
+    await runMigration();
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
+    expect((await access()).map((r) => r.user_id)).toEqual([admin]);
+    expect(await sql`SELECT id FROM mfa_methods`).toHaveLength(0);
+    expect(await sql`SELECT id FROM auth_challenges`).toHaveLength(0);
+    expect(await sql`SELECT id FROM platform_bootstrap_tokens`).toHaveLength(0);
+    const [attempt] = await sql`SELECT ip_prefix FROM login_attempts`;
+    expect(attempt.ip_prefix).toBeNull();
+    // o owner sem TOTP continua podendo ser tratado normalmente; com TOTP ativo o trigger passa a proteger
+    await sql`INSERT INTO mfa_methods (user_id, status, secret_ciphertext, secret_key_id, confirmed_at) VALUES (${admin}, 'active', decode('00', 'hex'), 1, now())`;
+    await expect(sql`DELETE FROM mfa_methods WHERE user_id = ${admin}`).rejects.toThrow(/sem MFA ativo/);
+    await expect(sql`INSERT INTO platform_bootstrap_tokens (purpose, token_hash, pepper_version, expires_at, issued_by) VALUES ('owner', decode('01', 'hex'), 1, now() + interval '1 minute', 'a'), ('owner', decode('02', 'hex'), 1, now() + interval '1 minute', 'b')`).rejects.toThrow(/one_pending|duplicate key/);
+  });
+
+  it("a migração é atômica: falhando no meio (tipo já existente), nada do 0016 fica", async () => {
+    await runMigration();
+    await sql`CREATE TYPE auth_challenge_status AS ENUM ('x')`; // conflito no meio do arquivo
+    await expect(sql.begin((trx) => trx.unsafe(MIGRATION_0016))).rejects.toThrow();
+    await expect(sql`SELECT 1 FROM mfa_methods`).rejects.toThrow();
+    await expect(sql`SELECT 1 FROM platform_bootstrap_tokens`).rejects.toThrow();
   });
 });
