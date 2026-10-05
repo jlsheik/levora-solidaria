@@ -20,6 +20,7 @@ import {
 import { useAuth } from "../helpers/useAuth";
 import { MfaCodeForm } from "./MfaCodeForm";
 import { MfaSetupPanel } from "./MfaSetupPanel";
+import { GoogleButton, OrDivider } from "./GoogleButton";
 
 export type LoginFormData = z.infer<typeof schema>;
 
@@ -151,6 +152,10 @@ export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
           )}
         </Button>
       </form>
+      <div className={styles.alt}>
+        <OrDivider>ou</OrDivider>
+        <GoogleButton intent="login">Entrar com Google</GoogleButton>
+      </div>
     </Form>
   );
 };

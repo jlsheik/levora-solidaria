@@ -670,6 +670,36 @@ export interface RegistrationAccessCodes {
   revokedByUserId: number | null;
 }
 
+export interface UserIdentities {
+  createdAt: Generated<Timestamp>;
+  emailSnapshot: string | null;
+  emailVerified: Generated<boolean>;
+  id: Generated<number>;
+  issuer: string;
+  lastUsedAt: Timestamp | null;
+  provider: string;
+  subject: string;
+  userId: number;
+}
+
+export interface OauthAttempts {
+  accessCodeId: number | null;
+  bindingHash: Buffer;
+  createdAt: Generated<Timestamp>;
+  expiresAt: Timestamp;
+  finishedAt: Timestamp | null;
+  id: Generated<number>;
+  intent: string;
+  ipPrefix: string | null;
+  nonceHash: Buffer;
+  pepperVersion: number;
+  pkceKeyId: number;
+  pkceVerifierCt: Buffer;
+  provider: string;
+  stateHash: Buffer;
+  status: Generated<string>;
+}
+
 export interface DB {
   authChallenges: AuthChallenges;
   approvalRequests: ApprovalRequests;
@@ -699,6 +729,8 @@ export interface DB {
   platformBootstrapTokens: PlatformBootstrapTokens;
   platformState: PlatformState;
   registrationAccessCodes: RegistrationAccessCodes;
+  userIdentities: UserIdentities;
+  oauthAttempts: OauthAttempts;
   sessions: Sessions;
   needClosures: NeedClosures;
   sources: Sources;

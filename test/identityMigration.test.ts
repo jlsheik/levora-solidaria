@@ -14,6 +14,7 @@ const BASELINE_COMMIT = "a628bd4"; // último commit ANTES da Fase 89
 const MIGRATION = readFileSync(path.resolve(__dirname, "../db/migrations/0015_identity_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0016 = readFileSync(path.resolve(__dirname, "../db/migrations/0016_mfa_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0017 = readFileSync(path.resolve(__dirname, "../db/migrations/0017_registration_access_codes.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0018 = readFileSync(path.resolve(__dirname, "../db/migrations/0018_google_identity.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIG_DB = "levora_f89_mig_test";
 
 function adminUrl(): URL {
@@ -177,10 +178,11 @@ describe("migração 0015 — sessões, senhas e triggers", () => {
   it("a migração NÃO é reaplicável por engano (objetos já existem) e o schema.sql novo cria o MESMO conjunto de objetos", async () => {
     await runMigration();
     await expect(runMigration()).rejects.toThrow();
-    // schema.sql atual = baseline + 0015 + 0016 (Fase 90) + 0017 (Fase 91)
+    // schema.sql atual = baseline + 0015 + 0016 (Fase 90) + 0017 (Fase 91) + 0018 (Fase 92)
     await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
     await sql.begin((trx) => trx.unsafe(MIGRATION_0017));
-    const migrated = await sql`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords','registration_access_codes') ORDER BY 1, 2`;
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0018));
+    const migrated = await sql`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords','registration_access_codes','user_identities','oauth_attempts') ORDER BY 1, 2`;
     // banco novo a partir do schema.sql ATUAL (o mesmo que a suíte usa)
     const admin = postgres(adminUrl().toString(), { max: 1, prepare: false, onnotice: () => {} });
     await admin.unsafe(`DROP DATABASE IF EXISTS ${MIG_DB}_new WITH (FORCE)`);
@@ -190,7 +192,7 @@ describe("migração 0015 — sessões, senhas e triggers", () => {
     const fresh = postgres(u.toString(), { max: 1, prepare: false, onnotice: () => {} });
     try {
       await fresh.unsafe(readFileSync(path.resolve(__dirname, "../db/schema.sql"), "utf-8"));
-      const created = await fresh`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords','registration_access_codes') ORDER BY 1, 2`;
+      const created = await fresh`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords','registration_access_codes','user_identities','oauth_attempts') ORDER BY 1, 2`;
       expect(created.map((r) => `${r.table_name}.${r.column_name}`)).toEqual(migrated.map((r) => `${r.table_name}.${r.column_name}`));
       const [{ n: triggersFresh }] = await fresh`SELECT count(*)::int AS n FROM pg_trigger WHERE NOT tgisinternal`;
       const [{ n: triggersMig }] = await sql`SELECT count(*)::int AS n FROM pg_trigger WHERE NOT tgisinternal`;
@@ -340,5 +342,33 @@ describe("migração 0017 (códigos de acesso) sobre o estado da Fase 90", () =>
     await expect(sql.begin((trx) => trx.unsafe(MIGRATION_0017))).rejects.toThrow();
     const cols = await sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'registered_via_code_id'`;
     expect(cols).toHaveLength(0);
+  });
+});
+
+describe("migração 0018 (Google: user_identities + oauth_attempts) sobre o estado da Fase 91", () => {
+  it("aplica sem tocar nos dados existentes; UNIQUE(provider,issuer,subject); CHECK: signup SEMPRE com código, login NUNCA", async () => {
+    const existing = await addUser("antigo@x.com");
+    await runMigration();
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0017));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0018));
+    expect(await sql`SELECT id FROM user_identities`).toHaveLength(0);
+    expect(await sql`SELECT id FROM oauth_attempts`).toHaveLength(0);
+    const other = await addUser("outro@x.com");
+    await sql`INSERT INTO user_identities (user_id, provider, issuer, subject) VALUES (${existing}, 'google', 'https://accounts.google.com', 'S1')`;
+    await expect(sql`INSERT INTO user_identities (user_id, provider, issuer, subject) VALUES (${other}, 'google', 'https://accounts.google.com', 'S1')`).rejects.toThrow(/user_identities_provider_issuer_subject_key/);
+    await sql`INSERT INTO user_identities (user_id, provider, issuer, subject) VALUES (${other}, 'google', 'https://accounts.google.com', 'S2')`;
+    const attempt = (intent: string, code: string) => sql.unsafe(`INSERT INTO oauth_attempts (state_hash, binding_hash, nonce_hash, pepper_version, pkce_verifier_ct, pkce_key_id, provider, intent, access_code_id, expires_at) VALUES (decode(md5(random()::text) || md5(random()::text), 'hex'), decode('00','hex'), decode('00','hex'), 1, decode('00','hex'), 1, 'google', '${intent}', ${code}, now() + interval '10 minutes')`);
+    await expect(attempt("signup", "NULL")).rejects.toThrow(/oauth_attempts_code_iff_signup/);
+    await attempt("login", "NULL");
+  });
+
+  it("a migração é atômica: falhando no meio (tabela já existente), user_identities não fica", async () => {
+    await runMigration();
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0017));
+    await sql`CREATE TABLE oauth_attempts (x int)`;
+    await expect(sql.begin((trx) => trx.unsafe(MIGRATION_0018))).rejects.toThrow();
+    await expect(sql`SELECT 1 FROM user_identities`).rejects.toThrow();
   });
 });

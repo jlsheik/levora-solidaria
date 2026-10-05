@@ -46,6 +46,8 @@ const TABLES_IN_DEPENDENCY_ORDER = [
   "organizations",
   "sessions",
   "login_attempts",
+  "oauth_attempts",
+  "user_identities",
   "registration_access_codes",
   "user_passwords",
   "users",

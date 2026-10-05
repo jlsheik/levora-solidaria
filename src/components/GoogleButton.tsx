@@ -1,0 +1,61 @@
+import React, { useState } from "react";
+import { Spinner } from "./Spinner";
+import { ApiRequestError } from "../helpers/apiRequestError";
+import { postGoogleStart } from "../endpoints/auth/google-start_POST.schema";
+import styles from "./GoogleButton.module.css";
+
+/** Marca "G" do Google (cores oficiais, decorativa: o rótulo textual é quem nomeia o botão). */
+const GoogleG: React.FC = () => (
+  <svg className={styles.logo} width="18" height="18" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+  </svg>
+);
+
+interface GoogleButtonProps {
+  intent: "login" | "signup";
+  /** Só no cadastro: o código JÁ validado. Vai no CORPO do POST (nunca na URL) e fica apenas em memória. */
+  accessCode?: string;
+  children: React.ReactNode;
+}
+
+const MESSAGES: Record<string, string> = {
+  codigo_indisponivel: "Código de acesso inválido ou indisponível. Confira o código ou peça um novo à plataforma.",
+  google_nao_configurado: "Entrar com o Google não está disponível neste ambiente.",
+  google_indisponivel: "Não foi possível falar com o Google agora. Tente novamente em instantes.",
+};
+
+/** Inicia o fluxo Google: o servidor cria a tentativa (state/nonce/PKCE) e devolve a URL; o navegador só segue o redirecionamento. */
+export const GoogleButton: React.FC<GoogleButtonProps> = ({ intent, accessCode, children }) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const start = async () => {
+    if (loading) return; // impede cliques/signups simultâneos
+    setError(null);
+    setLoading(true);
+    try {
+      const { authorizationUrl } = await postGoogleStart(intent === "signup" ? { intent, accessCode } : { intent });
+      window.location.assign(authorizationUrl);
+    } catch (err) {
+      setLoading(false);
+      if (err instanceof ApiRequestError && err.code && MESSAGES[err.code]) setError(MESSAGES[err.code]);
+      else if (err instanceof ApiRequestError && err.status === 429) setError("Muitas tentativas. Aguarde um pouco antes de tentar de novo.");
+      else setError("Não foi possível iniciar o login com o Google. Tente novamente.");
+    }
+  };
+
+  return (
+    <div className={styles.wrap}>
+      {error && <div className={styles.error} role="alert">{error}</div>}
+      <button type="button" className={styles.button} onClick={start} disabled={loading} aria-busy={loading}>
+        {loading ? <Spinner size="sm" /> : <GoogleG />}
+        <span>{loading ? "Abrindo o Google..." : children}</span>
+      </button>
+    </div>
+  );
+};
+
+export const OrDivider: React.FC<{ children: React.ReactNode }> = ({ children }) => <div className={styles.divider}>{children}</div>;
