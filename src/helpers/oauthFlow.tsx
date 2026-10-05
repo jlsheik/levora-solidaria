@@ -24,6 +24,7 @@ export interface OauthAttemptRow {
   id: number;
   intent: string;
   accessCodeId: number | null;
+  userId: number | null;
   stateHash: Buffer;
   bindingHash: Buffer;
   nonceHash: Buffer;
@@ -34,7 +35,7 @@ export interface OauthAttemptRow {
 
 const pkceAad = (stateHash: Buffer) => `oauth-pkce:v1:${stateHash.toString("hex")}`;
 
-export async function createOauthAttempt(params: { intent: "login" | "signup"; accessCodeId: number | null; ipPrefix: string; now?: Date }) {
+export async function createOauthAttempt(params: { intent: "login" | "signup" | "reauth"; accessCodeId: number | null; userId?: number | null; ipPrefix: string; now?: Date }) {
   const now = params.now ?? new Date();
   const version = currentPepperVersion();
   const state = newOauthSecret();
@@ -56,6 +57,7 @@ export async function createOauthAttempt(params: { intent: "login" | "signup"; a
       provider: "google",
       intent: params.intent,
       accessCodeId: params.accessCodeId,
+      userId: params.userId ?? null,
       ipPrefix: params.ipPrefix,
       createdAt: now,
       expiresAt,
@@ -77,7 +79,7 @@ export async function claimOauthAttempt(state: string, now: Date = new Date()): 
     .where("stateHash", "in", hashes)
     .where("status", "=", "started")
     .where("expiresAt", ">", now)
-    .returning(["id", "intent", "accessCodeId", "bindingHash", "nonceHash", "pepperVersion", "pkceVerifierCt", "pkceKeyId", "stateHash"])
+    .returning(["id", "intent", "accessCodeId", "userId", "bindingHash", "nonceHash", "pepperVersion", "pkceVerifierCt", "pkceKeyId", "stateHash"])
     .executeTakeFirst();
   return row ?? null;
 }
@@ -143,6 +145,8 @@ export type GoogleAuditAction =
   | "usuario.login_google_falhou"
   | "usuario.cadastro_google"
   | "usuario.cadastro_google_falhou"
+  | "usuario.reauth_google"
+  | "usuario.reauth_google_falhou"
   | "usuario.google_identity_rejected";
 
 /** Sucesso: dentro da transação do negócio, como ÚLTIMO passo. */

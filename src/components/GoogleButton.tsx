@@ -15,7 +15,7 @@ const GoogleG: React.FC = () => (
 );
 
 interface GoogleButtonProps {
-  intent: "login" | "signup";
+  intent: "login" | "signup" | "reauth";
   /** Só no cadastro: o código JÁ validado. Vai no CORPO do POST (nunca na URL) e fica apenas em memória. */
   accessCode?: string;
   children: React.ReactNode;
@@ -23,6 +23,7 @@ interface GoogleButtonProps {
 
 const MESSAGES: Record<string, string> = {
   codigo_indisponivel: "Código de acesso inválido ou indisponível. Confira o código ou peça um novo à plataforma.",
+  google_nao_vinculado: "Esta conta não está vinculada ao Google.",
   google_nao_configurado: "Entrar com o Google não está disponível neste ambiente.",
   google_indisponivel: "Não foi possível falar com o Google agora. Tente novamente em instantes.",
 };

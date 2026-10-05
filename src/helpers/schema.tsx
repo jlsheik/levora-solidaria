@@ -360,6 +360,7 @@ export interface Sessions {
   lastReauthAt: Timestamp | null;
   mfaVerifiedAt: Timestamp | null;
   primaryMethod: string | null;
+  primaryReauthAt: Timestamp | null;
   userId: number;
 }
 
@@ -545,6 +546,7 @@ export interface OauthAttempts {
   provider: string;
   stateHash: Buffer;
   status: Generated<string>;
+  userId: number | null;
 }
 
 export interface DB {

@@ -44,6 +44,7 @@ export async function getServerUserSession(request: Request) {
       "sessions.primaryMethod as sessionPrimaryMethod",
       "sessions.mfaVerifiedAt as sessionMfaVerifiedAt",
       "sessions.lastReauthAt as sessionLastReauthAt",
+      "sessions.primaryReauthAt as sessionPrimaryReauthAt",
       "users.id",
       "users.email",
       "users.displayName",
@@ -114,6 +115,7 @@ export async function getServerUserSession(request: Request) {
       primaryMethod: result.sessionPrimaryMethod,
       mfaVerifiedAt: result.sessionMfaVerifiedAt,
       lastReauthAt: result.sessionLastReauthAt,
+      primaryReauthAt: result.sessionPrimaryReauthAt,
     },
   };
 }

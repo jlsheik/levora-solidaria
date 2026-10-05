@@ -52,7 +52,7 @@ export async function createSession(
  */
 export async function rotateSession(
   currentSessionId: string,
-  options: { reauth?: boolean; mfaVerified?: boolean } = {}
+  options: { reauth?: boolean; mfaVerified?: boolean; primaryReauth?: boolean } = {}
 ): Promise<CreatedSession & { newId: string }> {
   return db.transaction().execute((trx) => rotateSessionInTx(trx, currentSessionId, options));
 }
@@ -61,7 +61,7 @@ export async function rotateSession(
 export async function rotateSessionInTx(
   trx: Transaction<DB>,
   currentSessionId: string,
-  options: { reauth?: boolean; mfaVerified?: boolean } = {}
+  options: { reauth?: boolean; mfaVerified?: boolean; primaryReauth?: boolean } = {}
 ): Promise<CreatedSession & { newId: string }> {
   {
     const old = await trx.selectFrom("sessions").selectAll().where("id", "=", currentSessionId).forUpdate().executeTakeFirst();
@@ -81,6 +81,8 @@ export async function rotateSessionInTx(
         primaryMethod: old.primaryMethod,
         mfaVerifiedAt: options.mfaVerified ? now : old.mfaVerifiedAt,
         lastReauthAt: options.reauth || options.mfaVerified ? now : old.lastReauthAt,
+        // Fase 92.1: reautenticação do método primário (identidade). Herdada pela rotação; só `primaryReauth` a renova.
+        primaryReauthAt: options.primaryReauth ? now : old.primaryReauthAt,
       })
       .execute();
     await trx.deleteFrom("sessions").where("id", "=", currentSessionId).execute();

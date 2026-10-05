@@ -130,8 +130,8 @@ export interface Flow {
 
 export const IP = () => `test-ip-${Math.random().toString(36).slice(2)}`;
 
-export async function startFlow(intent: "login" | "signup", accessCode?: string, ip: string = IP()): Promise<Flow> {
-  const res = await startHandler(buildRequest("auth/google-start", { method: "POST", ip, body: { intent, ...(accessCode ? { accessCode } : {}) } }));
+export async function startFlow(intent: "login" | "signup" | "reauth", accessCode?: string, ip: string = IP(), sessionCookie?: string): Promise<Flow> {
+  const res = await startHandler(buildRequest("auth/google-start", { method: "POST", ip, cookie: sessionCookie, body: { intent, ...(accessCode ? { accessCode } : {}) } }));
   if (res.status !== 200) throw new Error(`start falhou: ${res.status}`);
   const { json } = (await res.json()) as { json: { authorizationUrl: string } };
   const url = new URL(json.authorizationUrl);
@@ -174,3 +174,14 @@ export async function callback(flow: Flow, code: string | undefined, opts: Callb
 export const location = (res: Response) => res.headers.get("location") ?? "";
 export const sessionCookieOf = (res: Response) => res.headers.getSetCookie().find((c) => c.startsWith("floot_built_app_session="));
 export const challengeCookieOf = (res: Response) => res.headers.getSetCookie().find((c) => c.startsWith("levora_challenge="));
+
+/** "nome=valor" do cookie de sessão LEVORA de uma resposta (para reutilizar como Cookie). */
+export const sessionPair = (res: Response) => sessionCookieOf(res)?.split(";")[0];
+
+/** Reautenticação: usuário JÁ logado (cookie de sessão) confirma a identidade no Google. O cookie de sessão e o de vínculo seguem juntos. */
+export async function reauthWithGoogle(sim: GoogleSim, sessionCookie: string, claims: TokenClaims, opts: { ip?: string } = {}) {
+  const flow = await startFlow("reauth", undefined, opts.ip, sessionCookie);
+  const code = approve(sim, flow, claims);
+  const res = await callback(flow, code, { cookie: `${sessionCookie}; ${flow.binding}` });
+  return { flow, code, res, cookie: sessionPair(res) };
+}

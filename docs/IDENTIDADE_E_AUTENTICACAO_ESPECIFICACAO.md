@@ -1244,5 +1244,14 @@ Discovery, `iss`, `aud`/`azp`, `exp`/`iat`, `nonce`, `sub`), integração com `r
 4. Nenhum token do Google é armazenado (o `access_token` é descartado). `email_verified=false` não bloqueia o cadastro, mas é gravado como `false`.
 5. A anonimização da conta apaga `user_identities`; o código consumido continua redimido.
 
-**Pendências/desvios:** account linking explícito; exclusão self-service de conta Google-only (exige senha hoje); e-mail ausente no token ⇒ falha neutra (o §25.9 previa pedir o e-mail); `hd`/allowlist de domínio.
+**Pendências/desvios:** account linking explícito; ~~exclusão self-service de conta Google-only~~ (resolvida na Fase 92.1, §29); e-mail ausente no token ⇒ falha neutra (o §25.9 previa pedir o e-mail); `hd`/allowlist de domínio.
 **Continuam não implementados:** Microsoft, Apple, passkeys, recuperação de senha por e-mail (Fase 93+).
+
+## 29. Estado após a Fase 92.1 (implementado)
+
+**Reautenticação por identidade** (`docs/IDENTIDADE_FASE92_GOOGLE_AUDITORIA.md` §16): `sessions.primary_reauth_at` + `oauth_attempts.intent='reauth'` (migration 0019). `account-delete` de conta **sem senha**
+exige identidade vinculada + confirmação digitada + reautenticação recente da identidade (5 min, validada no servidor sob lock) e, com MFA ativo, também o step-up do MFA — o Google **não** substitui o MFA LEVORA e o MFA não
+substitui a identidade (carimbos distintos). Nenhuma senha é criada em fluxos sociais; não há endpoint de exclusão específico de provedor. O mecanismo é provider-agnóstico (Microsoft/Apple/senha/passkey poderão satisfazê-lo).
+
+**Qualificação do Google:** validado por testes locais com provedor **sintético** e por preview com provedor sintético; **NÃO validado contra o Google real** (roteiro em §17 do doc de auditoria). Não declarar "pronto para produção" antes disso.
+**Decisões:** e-mail ausente ⇒ falha neutra (produto); `email_verified` é atributo; `hd` não implementado; CAP/RISC fora de escopo. **Continuam não implementados:** Microsoft (Fase 93), Apple, passkeys, account linking completo, recuperação de senha.
