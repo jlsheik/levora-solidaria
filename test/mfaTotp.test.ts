@@ -273,19 +273,38 @@ describe("recovery codes — formato, hash e uso único", () => {
     expect(results.filter((r) => r.ok)).toHaveLength(1);
   });
 
-  it("recovery e TOTP compartilham o contador de falhas (alternar não dobra as tentativas)", async () => {
+  it("Fase 90.1: recovery code NÃO alimenta o contador do TOTP e NÃO é barrado pelo bloqueio do TOTP; um sucesso limpa o bloqueio", async () => {
     const u = await createTestUser();
     await enrollTestMfa(u.id);
-    await db.transaction().execute((trx) => issueRecoveryCodes(trx, u.id));
+    const codes = await db.transaction().execute((trx) => issueRecoveryCodes(trx, u.id));
     const now = new Date();
     const useRecovery = (code: string) => db.transaction().execute(async (trx) => consumeRecoveryCode(trx, (await getMfaMethod(trx, u.id, "active", { forUpdate: true }))!, code, now));
     const useTotp = (code: string) => db.transaction().execute(async (trx) => verifyTotp(trx, (await getMfaMethod(trx, u.id, "active", { forUpdate: true }))!, code, now));
-    for (let i = 0; i < 5; i++) {
-      await useRecovery("ZZZZ-ZZZZ-ZZZZ-ZZZZ");
-      await useTotp("000000");
-    }
-    const m = (await getMfaMethod(db as never, u.id, "active")) as MfaMethodRow;
-    expect(m.failedAttempts).toBe(10);
-    expect(lockStatus(m, now).locked).toBe(true);
+    // falhas de recovery (inclusive muitas) não aproximam o TOTP do bloqueio
+    for (let i = 0; i < 15; i++) expect(await useRecovery("ZZZZ-ZZZZ-ZZZZ-ZZZZ")).toMatchObject({ ok: false, reason: "invalid" });
+    expect(((await getMfaMethod(db as never, u.id, "active")) as MfaMethodRow).failedAttempts).toBe(0);
+    // trava o TOTP de verdade
+    for (let i = 0; i < LOCK_AFTER_FAILURES; i++) await useTotp("000000");
+    expect(lockStatus((await getMfaMethod(db as never, u.id, "active")) as MfaMethodRow, now).locked).toBe(true);
+    expect(await useTotp(totpCodeAtStep(TEST_TOTP_SECRET, stepAt(now.getTime())))).toMatchObject({ ok: false, reason: "locked" });
+    // TOTP bloqueado + recovery válido ⇒ aceito, e o bloqueio do TOTP é limpo
+    expect(await useRecovery(codes[0])).toMatchObject({ ok: true });
+    const after = (await getMfaMethod(db as never, u.id, "active")) as MfaMethodRow;
+    expect(after.failedAttempts).toBe(0);
+    expect(lockStatus(after, now).locked).toBe(false);
+  });
+
+  it("escopo do bloqueio do TOTP (auditoria): é por USUÁRIO/método — todas as redes somam no mesmo contador, outro usuário não é afetado", async () => {
+    const a = await createTestUser();
+    const b = await createTestUser();
+    await enrollTestMfa(a.id);
+    await enrollTestMfa(b.id);
+    const now = new Date();
+    const fail = (userId: number) => db.transaction().execute(async (trx) => verifyTotp(trx, (await getMfaMethod(trx, userId, "active", { forUpdate: true }))!, "000000", now));
+    for (let i = 0; i < LOCK_AFTER_FAILURES; i++) await fail(a.id); // (a rede não é parâmetro: não existe chave por rede)
+    expect(lockStatus((await getMfaMethod(db as never, a.id, "active")) as MfaMethodRow, now).locked).toBe(true);
+    expect(lockStatus((await getMfaMethod(db as never, b.id, "active")) as MfaMethodRow, now).locked).toBe(false);
+    const cols = await db.selectFrom("mfaMethods").select(["failedAttempts", "lockedUntil", "lastFailedAt"]).where("userId", "=", a.id).executeTakeFirstOrThrow();
+    expect(Object.keys(cols).sort()).toEqual(["failedAttempts", "lastFailedAt", "lockedUntil"]); // contador/janela/bloqueio por linha de método; sem IP
   });
 });

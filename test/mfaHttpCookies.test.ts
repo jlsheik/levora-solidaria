@@ -9,7 +9,9 @@ import type { AddressInfo } from "node:net";
 import superjson from "superjson";
 import { buildApp } from "../server/index";
 import { createTestUser, enrollTestMfa } from "./helpers";
-import { totp, PASSWORD } from "./mfaHarness";
+import { totp, PASSWORD, codeForManualKey } from "./mfaHarness";
+import { issueBootstrapToken } from "../src/helpers/platformBootstrap";
+import { db } from "../src/helpers/db";
 
 describe("Express real — múltiplos Set-Cookie chegam ao cliente", () => {
   let server: Server;
@@ -46,5 +48,31 @@ describe("Express real — múltiplos Set-Cookie chegam ao cliente", () => {
     const session = cookies.find((c) => c.startsWith("floot_built_app_session="))!.split(";")[0];
     const me = await fetch(`${baseUrl}/_api/v1/auth/session`, { headers: { cookie: session } });
     expect(me.status).toBe(200);
+  });
+
+  it("bootstrap pelo Express REAL: ativação entrega o cookie de challenge com os atributos certos; a conclusão entrega sessão + limpeza (dois Set-Cookie) e a sessão é aceita", async () => {
+    const t = await issueBootstrapToken({ purpose: "owner", email: "http-owner@example.com", issuedBy: "teste@ci" });
+    const act = await post("bootstrap-activate", { token: t.token });
+    expect(act.status).toBe(200);
+    expect(act.headers.get("cache-control")).toBe("no-store");
+    const actCookies = act.headers.getSetCookie();
+    expect(actCookies).toHaveLength(1);
+    expect(actCookies[0]).toMatch(/^levora_challenge=[A-Za-z0-9_-]{43}; HttpOnly; Secure; SameSite=Lax; Path=\/_api\/v1\/auth; Max-Age=\d+$/);
+    const challenge = actCookies[0].split(";")[0];
+
+    expect((await post("bootstrap-credentials", { displayName: "Owner HTTP", password: "senha-forte-http-123" }, challenge)).status).toBe(200);
+    const begin = await post("mfa-setup-begin", {}, challenge);
+    expect(begin.status).toBe(200);
+    const { manualKey } = superjson.parse<{ manualKey: string }>(await begin.text());
+    const done = await post("mfa-setup-confirm", { code: codeForManualKey(manualKey) }, challenge);
+    expect(done.status).toBe(200);
+    const cookies = done.headers.getSetCookie();
+    expect(cookies).toHaveLength(2);
+    const sess = cookies.find((c) => c.startsWith("floot_built_app_session="))!;
+    expect(sess).toMatch(/HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=\d+$/);
+    expect(cookies.some((c) => c.startsWith("levora_challenge=;") && /Max-Age=0/.test(c))).toBe(true);
+    const me = await fetch(`${baseUrl}/_api/v1/auth/session`, { headers: { cookie: sess.split(";")[0] } });
+    expect(me.status).toBe(200);
+    expect((await db.selectFrom("platformAccess").select("level").executeTakeFirstOrThrow()).level).toBe("owner");
   });
 });

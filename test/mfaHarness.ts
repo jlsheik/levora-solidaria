@@ -16,7 +16,7 @@ import { handle as getSession } from "../src/endpoints/auth/session_GET";
 import { handle as postLogout } from "../src/endpoints/auth/logout_POST";
 import { getServerSessionOrThrow } from "../src/helpers/getSetServerSession";
 import { buildRequest, parseJson, TEST_TOTP_SECRET } from "./helpers";
-import { stepAt, totpCodeAtStep } from "../src/helpers/totp";
+import { base32Decode, stepAt, totpCodeAtStep } from "../src/helpers/totp";
 
 export const PASSWORD = "senha-de-teste-123";
 export const SESSION = "floot_built_app_session";
@@ -52,6 +52,11 @@ export const sessionIdOf = async (cookie: string) => (await getServerSessionOrTh
 
 /** Código TOTP do usuário de teste (segredo fixo) para `stepAt(nowMs)+offset`. */
 export const totp = (offset = 0, nowMs = Date.now()) => totpCodeAtStep(TEST_TOTP_SECRET, stepAt(nowMs) + offset);
+
+/** Código TOTP (passo atual + offset) para uma chave base32 mostrada na tela de configuração. */
+export function codeForManualKey(manualKey: string, offset = 0, nowMs = Date.now()): string {
+  return totpCodeAtStep(base32Decode(manualKey), stepAt(nowMs) + offset);
+}
 
 /** Apaga o anti-replay do usuário (para testes que NÃO estão testando replay e precisam logar várias vezes na mesma janela). */
 export const resetReplay = (userId: number) => db.updateTable("mfaMethods").set({ lastUsedStep: null, failedAttempts: 0, lockedUntil: null, lastFailedAt: null }).where("userId", "=", userId).execute();

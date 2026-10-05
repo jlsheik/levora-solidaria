@@ -336,7 +336,7 @@ export async function handle(request: Request) {
           mfaKind: result.kind,
           expiresInSeconds: Math.max(1, Math.floor((result.challenge.expiresAt.getTime() - now.getTime()) / 1000)),
         }),
-        { headers: { "Content-Type": "application/json" } }
+        { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } }
       );
       setChallengeCookie(challengeResponse, result.challenge.secret, result.challenge.expiresAt, now);
       return challengeResponse;
