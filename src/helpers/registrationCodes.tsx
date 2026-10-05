@@ -24,14 +24,14 @@ export const ACCESS_CODE_UNAVAILABLE_MESSAGE = "Código de acesso inválido ou i
 // ---- formato e canonicalização -------------------------------------------------------------------------------------------
 
 export const ACCESS_CODE_PREFIX = "LEV";
-const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"; // Crockford: sem I, L, O, U
-const CANONICAL_LENGTH = 20; // 20 símbolos × 5 bits = 100 bits de entropia
+export const ACCESS_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"; // Crockford: sem I, L, O, U
+export const ACCESS_CODE_LENGTH = 20; // 20 símbolos × 5 bits = 100 bits de entropia
 
 /** `LEV-XXXX-XXXX-XXXX-XXXX-XXXX` — 100 bits de `crypto.randomBytes` (sem contador, data, id ou sequência). */
 export function generateAccessCode(): string {
-  const bytes = randomBytes(CANONICAL_LENGTH);
+  const bytes = randomBytes(ACCESS_CODE_LENGTH);
   let canonical = "";
-  for (let i = 0; i < CANONICAL_LENGTH; i++) canonical += ALPHABET[bytes[i] % 32];
+  for (let i = 0; i < ACCESS_CODE_LENGTH; i++) canonical += ACCESS_CODE_ALPHABET[bytes[i] % 32];
   return formatAccessCode(canonical);
 }
 
@@ -46,8 +46,10 @@ export function formatAccessCode(canonical: string): string {
  * outro caractere ⇒ `null` (formato impossível; o chamador responde igual a qualquer código inválido).
  */
 export function canonicalizeAccessCode(input: string): string | null {
+  // Só ASCII: toUpperCase() é Unicode (ex.: "ı" vira "I", "ſ" vira "S") e criaria apelidos de entrada que não são grafias do código.
+  if (/[^\u0000-\u007F]/.test(input.replace(/\s/g, ""))) return null;
   let s = input.toUpperCase().replace(/[\s-]/g, "");
-  if (s.startsWith(ACCESS_CODE_PREFIX) && s.length === ACCESS_CODE_PREFIX.length + CANONICAL_LENGTH) s = s.slice(ACCESS_CODE_PREFIX.length);
+  if (s.startsWith(ACCESS_CODE_PREFIX) && s.length === ACCESS_CODE_PREFIX.length + ACCESS_CODE_LENGTH) s = s.slice(ACCESS_CODE_PREFIX.length);
   s = s.replace(/[IL]/g, "1").replace(/O/g, "0");
   return /^[0-9A-HJKMNP-TV-Z]{20}$/.test(s) ? s : null;
 }

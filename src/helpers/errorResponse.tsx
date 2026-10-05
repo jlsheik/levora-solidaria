@@ -128,6 +128,7 @@ export function buildErrorResponse(
   const code = error instanceof ConflictError || error instanceof ReauthRequiredError ? error.code : undefined;
   return new Response(superjson.stringify(code ? { message, code } : { message }), {
     status,
-    headers: { "Content-Type": "application/json" },
+    // Erros nunca são cacheáveis (podem ecoar contexto de rotas que carregam segredos, ex.: códigos de acesso).
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
 }
