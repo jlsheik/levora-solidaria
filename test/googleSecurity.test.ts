@@ -486,20 +486,22 @@ describe("varredura estática", () => {
     });
   const source = [...walk("src"), ...walk("server")].map((f) => [f.replace(/\\/g, "/"), readFileSync(f, "utf8")] as const);
 
-  it("sem tokeninfo, sem implicit flow, sem Microsoft/Apple, sem tabela/colunas de tokens do Google", () => {
+  it("sem tokeninfo, sem implicit flow, sem Apple, Microsoft só no módulo próprio, sem tabela/colunas de tokens do Google", () => {
     const oidc = readFileSync("src/helpers/googleOidc.tsx", "utf8");
     expect(oidc).not.toMatch(/googleapis\.com\/(oauth2\/v\d\/)?tokeninfo/i); // nenhuma URL de tokeninfo
     expect(oidc).not.toMatch(/response_type["'], ["']token|id_token token/);
-    const providers = source.filter(([f, text]) => !f.includes("schema.tsx") && /login\.microsoftonline|appleid\.apple|microsoft_callback|apple_callback/.test(text));
-    expect(providers.map(([f]) => f)).toEqual([]);
-    expect(readdirSync("src/endpoints/auth").filter((f) => /microsoft|apple/i.test(f))).toEqual([]);
+    const apple = source.filter(([f, text]) => !f.includes("schema.tsx") && /appleid\.apple|apple_callback/.test(text));
+    expect(apple.map(([f]) => f)).toEqual([]);
+    // Fase 93: o host da Microsoft só existe no módulo próprio dela; nenhum endpoint da Apple
+    expect(source.filter(([, text]) => /login\.microsoftonline/.test(text)).map(([f]) => f)).toEqual(["src/helpers/microsoftOidc.tsx"]);
+    expect(readdirSync("src/endpoints/auth").filter((f) => /apple/i.test(f))).toEqual([]);
     expect(readFileSync("db/schema.sql", "utf8")).not.toMatch(/google_tokens|refresh_token|access_token/i);
   });
 
   it("o único lugar que cria users por Google é o callback (dentro do provisionamento por código); o callback de login não tem INSERT em users", () => {
     const writers = source.filter(([, text]) => /insertInto\(\s*["']users["']\s*\)/.test(text)).map(([f]) => f).sort();
-    expect(writers).toEqual(["src/endpoints/auth/google-callback_GET.ts", "src/endpoints/auth/register_with_password_POST.ts", "src/helpers/bootstrapFinalize.tsx"]);
-    const cb = readFileSync("src/endpoints/auth/google-callback_GET.ts", "utf8");
+    expect(writers).toEqual(["src/endpoints/auth/register_with_password_POST.ts", "src/helpers/bootstrapFinalize.tsx", "src/helpers/oauthCallback.tsx"]);
+    const cb = readFileSync("src/helpers/oauthCallback.tsx", "utf8");
     const loginPart = cb.slice(cb.indexOf('attempt.intent === "login"'), cb.indexOf("CADASTRO"));
     expect(loginPart).not.toMatch(/insertInto/);
     expect(cb).toMatch(/provisionUserWithAccessCode\(\s*\{ codeId: attempt\.accessCodeId \}/); // o código vem da TENTATIVA, nunca da requisição
@@ -507,7 +509,7 @@ describe("varredura estática", () => {
   });
 
   it("o callback usa redirecionamentos RELATIVOS e nunca Host/X-Forwarded-Host", () => {
-    const cb = readFileSync("src/endpoints/auth/google-callback_GET.ts", "utf8");
+    const cb = readFileSync("src/helpers/oauthCallback.tsx", "utf8");
     expect(cb).not.toMatch(/headers\.get\(["'](host|x-forwarded-host|origin|referer)/i);
     expect(cb).not.toMatch(/Location: ["'`]https?:/);
     expect(readFileSync("src/helpers/googleOidc.tsx", "utf8")).not.toMatch(/headers\.get\(["'](host|x-forwarded-host)/i);

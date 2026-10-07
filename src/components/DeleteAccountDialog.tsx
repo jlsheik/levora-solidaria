@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "./Button";
 import { Input } from "./Input";
 import { GoogleButton } from "./GoogleButton";
+import { MicrosoftButton } from "./MicrosoftButton";
 import { StepUpDialog } from "./StepUpDialog";
 import { ApiRequestError } from "../helpers/apiRequestError";
 import { postAccountDelete } from "../endpoints/auth/account-delete_POST.schema";
@@ -21,7 +22,7 @@ interface DeleteAccountDialogProps {
 }
 
 /**
- * Exclusão de conta. Conta COM senha: confirma a senha. Conta SEM senha (ex.: só Google): NÃO há senha inventada — digita-se "EXCLUIR" e
+ * Exclusão de conta. Conta COM senha: confirma a senha. Conta SEM senha (ex.: só Google ou só Microsoft): NÃO há senha inventada — digita-se "EXCLUIR" e
  * confirma-se a identidade de novo com o provedor ("reautenticar identidade"); com MFA ativo, o step-up do autenticador também é pedido.
  * Toda a decisão é do servidor (esta tela só reage aos códigos `reauth_social_required` e `reauth_required`).
  */
@@ -89,8 +90,17 @@ export const DeleteAccountDialog: React.FC<DeleteAccountDialogProps> = ({ open, 
                 {justReauthenticated && !needsSocialReauth && <p className={styles.ok}>Identidade confirmada. Agora confirme a exclusão.</p>}
                 {needsSocialReauth && (
                   <div className={styles.reauth} role="group" aria-label="Confirmar identidade">
-                    <p className={styles.hint}>Por segurança, confirme sua identidade novamente com o Google antes de excluir.</p>
-                    <GoogleButton intent="reauth">Confirmar com o Google</GoogleButton>
+                    {methods.data?.providers.includes("microsoft") ? (
+                      <>
+                        <p className={styles.hint}>Por segurança, confirme sua identidade novamente com a Microsoft antes de excluir.</p>
+                        <MicrosoftButton intent="reauth">Confirmar com a Microsoft</MicrosoftButton>
+                      </>
+                    ) : (
+                      <>
+                        <p className={styles.hint}>Por segurança, confirme sua identidade novamente com o Google antes de excluir.</p>
+                        <GoogleButton intent="reauth">Confirmar com o Google</GoogleButton>
+                      </>
+                    )}
                   </div>
                 )}
               </>

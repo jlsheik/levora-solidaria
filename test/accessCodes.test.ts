@@ -491,7 +491,8 @@ describe("mapa de criadores de usuário (varredura estática)", () => {
 
   it("só o cadastro (com código), o bootstrap do owner e o seed interno inserem em users; o aceite de convite nunca", () => {
     const writers = [...walk("src"), ...walk("server"), "db/seedStaging.ts"].filter((f) => /insertInto\(\s*["']users["']\s*\)/.test(readFileSync(f, "utf8"))).map((f) => f.replace(/\\/g, "/"));
-    expect(writers.sort()).toEqual(["db/seedStaging.ts", "src/endpoints/auth/google-callback_GET.ts", "src/endpoints/auth/register_with_password_POST.ts", "src/helpers/bootstrapFinalize.tsx"]);
+    expect(writers.sort()).toEqual(["db/seedStaging.ts", "src/endpoints/auth/register_with_password_POST.ts", "src/helpers/bootstrapFinalize.tsx", "src/helpers/oauthCallback.tsx"]); // Fase 93: o cadastro social (Google/Microsoft) vive no callback OAuth compartilhado
+    expect(readFileSync("src/helpers/oauthCallback.tsx", "utf8")).toContain("provisionUserWithAccessCode");
     expect(readFileSync("src/endpoints/auth/register_with_password_POST.ts", "utf8")).toContain("provisionUserWithAccessCode");
     expect(readFileSync("src/endpoints/organization-invites-accept_POST.ts", "utf8")).not.toMatch(/insertInto\(\s*["']users["']/);
   });

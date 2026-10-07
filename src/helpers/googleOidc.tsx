@@ -1,6 +1,5 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createLocalJWKSet, decodeProtectedHeader, jwtVerify, errors as joseErrors, type JSONWebKeySet } from "jose";
-import { hmacSecret } from "./identityKeys.js";
+import { oauthHash, safeEqual } from "./oauthPrimitives.js";
 
 /**
  * Google OIDC (Fase 92) — Authorization Code Flow + PKCE (S256), SOMENTE identidade (scopes openid email profile).
@@ -164,13 +163,8 @@ async function getKeySet(config: GoogleConfig, kid: string | undefined, now = Da
 
 // ---- state / nonce / PKCE ----------------------------------------------------------------------------------------------------
 
-const b64url = (buf: Buffer) => buf.toString("base64url");
-export const newOauthSecret = () => b64url(randomBytes(32)); // 256 bits → 43 caracteres
-export const pkceChallenge = (verifier: string) => b64url(createHash("sha256").update(verifier, "ascii").digest());
-export const newPkceVerifier = () => b64url(randomBytes(32)); // 43 caracteres (RFC 7636: 43–128)
-
-export const oauthHash = (kind: "state" | "nonce" | "binding", value: string, version: number) =>
-  hmacSecret(kind === "state" ? "oauth-state:v1:" : kind === "nonce" ? "oauth-nonce:v1:" : "oauth-binding:v1:", value, version);
+// Primitivas compartilhadas com a Microsoft (Fase 93): re-exportadas aqui para não quebrar quem já importa de googleOidc.
+export { newOauthSecret, newPkceVerifier, oauthHash, pkceChallenge } from "./oauthPrimitives.js";
 
 export async function buildAuthorizationUrl(config: GoogleConfig, params: { state: string; nonce: string; codeChallenge: string }): Promise<string> {
   const { authorizationEndpoint } = await getDiscovery(config);
@@ -223,8 +217,6 @@ export async function exchangeCodeForIdToken(config: GoogleConfig, code: string,
   if (typeof payload.id_token !== "string" || payload.id_token.length === 0 || payload.id_token.length > 8192) throw new GoogleOidcError("token_ausente");
   return payload.id_token;
 }
-
-const safeEqual = (a: Buffer, b: Buffer) => a.length === b.length && timingSafeEqual(a, b);
 
 /**
  * Valida o ID token: assinatura (RS256 pelo JWKS), iss ∈ {emissor do Google}, aud == client_id, exp, iat (não no futuro além da

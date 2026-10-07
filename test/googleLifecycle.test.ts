@@ -403,7 +403,7 @@ describe("arquitetura geral (varredura estática)", () => {
     const code = del.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
     expect(code).not.toMatch(/google/i); // nada específico de provedor no CÓDIGO: só isPrimaryReauthFresh
     expect(del).toMatch(/isPrimaryReauthFresh/);
-    for (const f of ["src/endpoints/auth/google-callback_GET.ts", "src/endpoints/auth/google-start_POST.ts", "src/helpers/oauthFlow.tsx", "src/endpoints/auth/account-methods_GET.ts"]) {
+    for (const f of ["src/helpers/oauthCallback.tsx", "src/helpers/oauthStart.tsx", "src/endpoints/auth/google-callback_GET.ts", "src/endpoints/auth/google-start_POST.ts", "src/helpers/oauthFlow.tsx", "src/endpoints/auth/account-methods_GET.ts"]) {
       expect(readFileSync(f, "utf8"), f).not.toMatch(/insertInto\(\s*["']userPasswords["']/);
     }
     expect(readFileSync("src/helpers/accountReauth.tsx", "utf8")).not.toMatch(/^import .*google/im); // a política não depende do provedor
@@ -414,7 +414,7 @@ describe("arquitetura geral (varredura estática)", () => {
     expect(oidc).not.toMatch(/apps\.googleusercontent\.com|GOCSPX|AIza/);
     expect(oidc).toMatch(/process\.env\.GOOGLE_CLIENT_SECRET/);
     expect(oidc).not.toMatch(/console\.(log|error|warn)/);
-    const logs = readFileSync("src/endpoints/auth/google-callback_GET.ts", "utf8").split("\n").filter((l) => l.includes("console."));
+    const logs = readFileSync("src/helpers/oauthCallback.tsx", "utf8").split("\n").filter((l) => l.includes("console."));
     expect(logs.length).toBeGreaterThan(0);
     expect(logs.every((l) => !/\.message|\.stack|,\s*error\s*\)/.test(l))).toBe(true); // só o NOME do erro, nunca a mensagem/stack (que podem ter token ou SQL)
   });

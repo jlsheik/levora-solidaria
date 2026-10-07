@@ -16,6 +16,7 @@ const MIGRATION_0016 = readFileSync(path.resolve(__dirname, "../db/migrations/00
 const MIGRATION_0017 = readFileSync(path.resolve(__dirname, "../db/migrations/0017_registration_access_codes.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0018 = readFileSync(path.resolve(__dirname, "../db/migrations/0018_google_identity.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0019 = readFileSync(path.resolve(__dirname, "../db/migrations/0019_social_reauth.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0020 = readFileSync(path.resolve(__dirname, "../db/migrations/0020_microsoft_identity.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIG_DB = "levora_f89_mig_test";
 
 function adminUrl(): URL {
@@ -179,11 +180,12 @@ describe("migração 0015 — sessões, senhas e triggers", () => {
   it("a migração NÃO é reaplicável por engano (objetos já existem) e o schema.sql novo cria o MESMO conjunto de objetos", async () => {
     await runMigration();
     await expect(runMigration()).rejects.toThrow();
-    // schema.sql atual = baseline + 0015 + 0016 (Fase 90) + 0017 (Fase 91) + 0018 (Fase 92) + 0019 (Fase 92.1)
+    // schema.sql atual = baseline + 0015 + 0016 (Fase 90) + 0017 (Fase 91) + 0018 (Fase 92) + 0019 (Fase 92.1) + 0020 (Fase 93)
     await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
     await sql.begin((trx) => trx.unsafe(MIGRATION_0017));
     await sql.begin((trx) => trx.unsafe(MIGRATION_0018));
     await sql.begin((trx) => trx.unsafe(MIGRATION_0019));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0020));
     const migrated = await sql`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords','registration_access_codes','user_identities','oauth_attempts') ORDER BY 1, 2`;
     // banco novo a partir do schema.sql ATUAL (o mesmo que a suíte usa)
     const admin = postgres(adminUrl().toString(), { max: 1, prepare: false, onnotice: () => {} });
@@ -402,5 +404,38 @@ describe("migração 0019 (reauth social) sobre o estado da Fase 92", () => {
     await expect(sql.begin((trx) => trx.unsafe(MIGRATION_0019))).rejects.toThrow();
     const cols = await sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'sessions' AND column_name = 'primary_reauth_at'`;
     expect(cols).toHaveLength(0);
+  });
+});
+
+describe("migração 0020 (Microsoft) sobre o estado da Fase 92.1", () => {
+  const upTo0019 = async () => {
+    await runMigration();
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0017));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0018));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0019));
+  };
+  const attempt = (provider: string) =>
+    sql.unsafe(`INSERT INTO oauth_attempts (state_hash, binding_hash, nonce_hash, pepper_version, pkce_verifier_ct, pkce_key_id, provider, intent, expires_at) VALUES (decode(md5(random()::text) || md5(random()::text), 'hex'), decode('00','hex'), decode('00','hex'), 1, decode('00','hex'), 1, '${provider}', 'login', now() + interval '10 minutes')`);
+
+  it("aplica sem tocar nos dados: identidades existentes ganham metadata {} e a tentativa aceita 'microsoft' (e SÓ google|microsoft)", async () => {
+    const u = await addUser("ms-mig@x.com");
+    await upTo0019();
+    await sql`INSERT INTO user_identities (user_id, provider, issuer, subject) VALUES (${u}, 'google', 'https://accounts.google.com', 'sub-1')`;
+    await expect(attempt("microsoft")).rejects.toThrow(/oauth_attempts_provider_check/);
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0020));
+    const [row] = await sql`SELECT provider_metadata FROM user_identities WHERE subject = 'sub-1'`;
+    expect(row.provider_metadata).toEqual({});
+    await attempt("microsoft");
+    await attempt("google");
+    await expect(attempt("apple")).rejects.toThrow(/oauth_attempts_provider_check/);
+    await expect(sql`UPDATE user_identities SET provider_metadata = '[1]'::jsonb WHERE subject = 'sub-1'`).rejects.toThrow(/provider_metadata_object/);
+  });
+
+  it("a migração é atômica: falhando no meio (coluna já existente), a constraint nova não fica", async () => {
+    await upTo0019();
+    await sql`ALTER TABLE user_identities ADD COLUMN provider_metadata JSONB`; // conflito no meio do arquivo
+    await expect(sql.begin((trx) => trx.unsafe(MIGRATION_0020))).rejects.toThrow();
+    await expect(attempt("microsoft")).rejects.toThrow(/oauth_attempts_provider_check/);
   });
 });

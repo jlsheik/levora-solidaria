@@ -1,6 +1,5 @@
-import React, { useState } from "react";
-import { Spinner } from "./Spinner";
-import { ApiRequestError } from "../helpers/apiRequestError";
+import React from "react";
+import { OauthStartButton } from "./OauthStartButton";
 import { postGoogleStart } from "../endpoints/auth/google-start_POST.schema";
 import styles from "./GoogleButton.module.css";
 
@@ -22,41 +21,24 @@ interface GoogleButtonProps {
 }
 
 const MESSAGES: Record<string, string> = {
-  codigo_indisponivel: "Código de acesso inválido ou indisponível. Confira o código ou peça um novo à plataforma.",
   google_nao_vinculado: "Esta conta não está vinculada ao Google.",
   google_nao_configurado: "Entrar com o Google não está disponível neste ambiente.",
   google_indisponivel: "Não foi possível falar com o Google agora. Tente novamente em instantes.",
 };
 
 /** Inicia o fluxo Google: o servidor cria a tentativa (state/nonce/PKCE) e devolve a URL; o navegador só segue o redirecionamento. */
-export const GoogleButton: React.FC<GoogleButtonProps> = ({ intent, accessCode, children }) => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const start = async () => {
-    if (loading) return; // impede cliques/signups simultâneos
-    setError(null);
-    setLoading(true);
-    try {
-      const { authorizationUrl } = await postGoogleStart(intent === "signup" ? { intent, accessCode } : { intent });
-      window.location.assign(authorizationUrl);
-    } catch (err) {
-      setLoading(false);
-      if (err instanceof ApiRequestError && err.code && MESSAGES[err.code]) setError(MESSAGES[err.code]);
-      else if (err instanceof ApiRequestError && err.status === 429) setError("Muitas tentativas. Aguarde um pouco antes de tentar de novo.");
-      else setError("Não foi possível iniciar o login com o Google. Tente novamente.");
-    }
-  };
-
-  return (
-    <div className={styles.wrap}>
-      {error && <div className={styles.error} role="alert">{error}</div>}
-      <button type="button" className={styles.button} onClick={start} disabled={loading} aria-busy={loading}>
-        {loading ? <Spinner size="sm" /> : <GoogleG />}
-        <span>{loading ? "Abrindo o Google..." : children}</span>
-      </button>
-    </div>
-  );
-};
+export const GoogleButton: React.FC<GoogleButtonProps> = ({ intent, accessCode, children }) => (
+  <OauthStartButton
+    intent={intent}
+    accessCode={accessCode}
+    start={postGoogleStart}
+    logo={<GoogleG />}
+    loadingLabel="Abrindo o Google..."
+    failureMessage="Não foi possível iniciar o login com o Google. Tente novamente."
+    messages={MESSAGES}
+  >
+    {children}
+  </OauthStartButton>
+);
 
 export const OrDivider: React.FC<{ children: React.ReactNode }> = ({ children }) => <div className={styles.divider}>{children}</div>;

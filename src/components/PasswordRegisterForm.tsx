@@ -13,6 +13,7 @@ import { Input } from "./Input";
 import { Button } from "./Button";
 import { Spinner } from "./Spinner";
 import { GoogleButton, OrDivider } from "./GoogleButton";
+import { MicrosoftButton } from "./MicrosoftButton";
 import styles from "./PasswordRegisterForm.module.css";
 import {
   schema,
@@ -35,7 +36,7 @@ interface PasswordRegisterFormProps {
 
 /**
  * Cadastro em DOIS passos (Fase 92): (1) código de acesso, validado sem consumir; (2) só então aparecem as formas de criar a conta —
- * "Continuar com Google" ou e-mail e senha. O código nunca vai para a URL nem para o storage: vive só neste estado de componente
+ * "Continuar com Google", "Continuar com Microsoft" ou e-mail e senha. O código nunca vai para a URL nem para o storage: vive só neste estado de componente
  * e segue no CORPO das requisições; o servidor revalida em qualquer caminho (a validação aqui é só experiência de uso).
  */
 export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
@@ -195,6 +196,9 @@ export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
             <GoogleButton intent="signup" accessCode={accessCode}>
               Continuar com Google
             </GoogleButton>
+            <MicrosoftButton intent="signup" accessCode={accessCode}>
+              Continuar com Microsoft
+            </MicrosoftButton>
             <OrDivider>ou crie com e-mail e senha</OrDivider>
 
             <FormItem name="email">
