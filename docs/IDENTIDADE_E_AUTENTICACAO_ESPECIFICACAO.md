@@ -1255,3 +1255,13 @@ substitui a identidade (carimbos distintos). Nenhuma senha é criada em fluxos s
 
 **Qualificação do Google:** validado por testes locais com provedor **sintético** e por preview com provedor sintético; **NÃO validado contra o Google real** (roteiro em §17 do doc de auditoria). Não declarar "pronto para produção" antes disso.
 **Decisões:** e-mail ausente ⇒ falha neutra (produto); `email_verified` é atributo; `hd` não implementado; CAP/RISC fora de escopo. **Continuam não implementados:** Microsoft (Fase 93), Apple, passkeys, account linking completo, recuperação de senha.
+
+## 30. Estado após a Fase 93 (implementado)
+
+**Microsoft OIDC** (`docs/IDENTIDADE_FASE93_MICROSOFT_AUDITORIA.md`): Authorization Code + PKCE S256, authority `common` (padrão; `organizations`/`consumers`/tenant GUID por configuração), scopes `openid profile email` (sem Graph), nenhum token guardado. `jose` + `fetch` (sem MSAL; decisão no §15 do doc de auditoria). Migration `0020`: `oauth_attempts.provider ∈ {google, microsoft}` e `user_identities.provider_metadata` (JSONB, `tid`/`oid`/`ver`/`idp`, **sem papel de chave**).
+
+**Identidade (fecha §7.2/§25.8 com evidência):** `(provider='microsoft', issuer = https://login.microsoftonline.com/{tid}/v2.0, subject = sub)`. O `iss` do token tem de ser exatamente o emissor do `tid` do próprio token e o `tid` tem de ser permitido pelo authority; a chave que assinou é amarrada ao emissor que a Microsoft publica no JWKS (`issuer`/`cloud_instance_name`). `oid` divergente para o mesmo `(issuer, sub)` é anômalo e rejeitado. **Não** se migrou para `oid+tid`. E-mail/UPN/`preferred_username` nunca são chave; `email_verified` é **sempre false** para a Microsoft.
+
+**Estrutura:** fluxo OAuth compartilhado (`oauthStart`/`oauthCallback`/`oauthPrimitives`) + dois adaptadores (`oauthProviders`); endpoints Google e Microsoft finos; `claimOauthAttempt` filtra por provedor. Reauth e `account-delete` social-only usam o mesmo mecanismo da 92.1 (por provedor: `409 {google|microsoft}_nao_vinculado`).
+
+**Qualificação:** validado com provedor **sintético** (testes + preview local) e contra o **Discovery/JWKS reais** da Microsoft (somente leitura, sem credenciais). **NÃO validado:** login real (pessoal, corporativo, convidado), registro de aplicativo, consentimento, claims reais (§17 do doc de auditoria). Pendência relevante: contas corporativas podem não trazer `email` ⇒ cadastro falha de forma neutra (decisão de produto aberta). **Continuam não implementados:** Apple, passkeys, account linking completo, recuperação de senha, SMTP.

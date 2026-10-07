@@ -19,6 +19,8 @@ provedores, novos mecanismos de MFA. **Nada da Fase 89/90/91 foi reaberto**: o c
 > acesso/MFA/sessão; ele não simula nada do Google que não possamos comprovar. **O Google NÃO está declarado "pronto para produção"** — isso só ocorre depois do
 > roteiro de teste real do §17. Nenhuma execução contra o Google real aconteceu até aqui.
 
+> **Nota (Fase 93):** a lógica de `google-start`/`google-callback` descrita abaixo foi **movida sem mudança de comportamento** para o fluxo OAuth compartilhado (`src/helpers/oauthStart.tsx`, `oauthCallback.tsx`, `oauthPrimitives.tsx`, adaptador em `oauthProviders.tsx`), reutilizado pela Microsoft (`docs/IDENTIDADE_FASE93_MICROSOFT_AUDITORIA.md`). Os endpoints do Google continuam existindo como wrappers finos.
+
 ## 1. Princípio
 
 Google é um **método de autenticação**, não uma conta nova. A identidade LEVORA continua sendo `users.id`; a identidade externa é

@@ -526,6 +526,7 @@ export interface UserIdentities {
   issuer: string;
   lastUsedAt: Timestamp | null;
   provider: string;
+  providerMetadata: Generated<Json>;
   subject: string;
   userId: number;
 }
