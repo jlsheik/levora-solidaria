@@ -88,7 +88,7 @@ Como o `issuer` carrega o `tid`, a chave equivale a (aplicativo, tenant, usuári
 |---|---|---|
 | algoritmo | cabeçalho `alg == RS256` (whitelist; `none`/HS*/RS384 recusados), `kid` obrigatório; `jku`/`x5u`/`jwk` ignorados | `assinatura_invalida` / `chave_desconhecida` |
 | assinatura | chave do JWKS do Discovery pelo `kid` (cache 1 h; `kid` novo ⇒ 1 refresh por 60 s; falha temporária mantém o cache; sem cache ⇒ falha fechada) | `assinatura_invalida` / `chave_desconhecida` |
-| chaves aceitas | só `cloud_instance_name` ausente ou `microsoftonline.com`; chave **marcada** com `issuer` só assina esse `iss` (chave de contas pessoais não assina `iss` corporativo) | `chave_desconhecida` / `chave_issuer_divergente` |
+| chaves aceitas | só `cloud_instance_name` ausente ou `microsoftonline.com`; a chave **tem de declarar `issuer`** (ausente/vazio/não-string ⇒ rejeitada, fail-closed desde a 93.2) e ele, com `{tenantid}`→`tid`, tem de igualar o `iss` (chave de contas pessoais não assina `iss` corporativo) | `chave_desconhecida` / `chave_issuer_divergente` |
 | `aud` | == `MICROSOFT_CLIENT_ID`, único (lista ≠ 1 valor recusada); `azp` se presente == client id | `audience_invalida` / `azp_invalido` |
 | `ver` | == `"2.0"` | `versao_invalida` |
 | `tid` | GUID minúsculo; **obrigatório** | `tenant_invalido` |
@@ -219,7 +219,7 @@ Validação real (§17) · e-mail ausente em contas corporativas (§8) · re-vin
 | `aud` único == client id; `azp`; `ver == "2.0"`; `exp`/`iat`/`nbf` (±60 s); `nonce` (HMAC, tempo constante); `sub` 1–255 | 302–344 | "AUDIENCE", "VER", "exp e iat", "nonce…" |
 | JWKS: cache 1 h; `kid` novo ⇒ 1 refresh/60 s; falha temporária mantém o cache; sem cache falha fechada | 27–28, 188–189 | "JWKS: cache…rotação" e "falha TEMPORÁRIA" |
 
-**Resultado:** nenhum defeito comprovado ⇒ **nenhuma alteração do código de validação**. Observações (não são bugs): (a) o `iss` é comparado à forma `https://login.microsoftonline.com/{tid}/v2.0`, equivalente ao emissor anunciado com `{tenantid}` substituído (agora provado contra o Discovery real); (b) chaves **sem** `issuer` no JWKS são aceitas (nenhuma das 9 do JWKS real está nesse caso); (c) uma chave de modelo `{tenantid}` pode assinar `iss` pessoal — decisão deliberada: restringir mais arriscaria quebrar login real que não conseguimos testar. **A amarração chave × emissor continua validada só com chaves sintéticas no formato real**; o primeiro login real é o teste dela (um `chave_issuer_divergente` indicaria premissa errada, com falha segura).
+**Resultado (93.1):** nenhum defeito comprovado nos itens da tabela; a lacuna (b) abaixo foi encontrada depois e fechada na 93.2. Observações (não são bugs): (a) o `iss` é comparado à forma `https://login.microsoftonline.com/{tid}/v2.0`, equivalente ao emissor anunciado com `{tenantid}` substituído (agora provado contra o Discovery real); (b) ~~chaves sem `issuer` eram aceitas~~ — **corrigido na Fase 93.2 (§20): agora são rejeitadas (fail-closed)**; (c) uma chave de modelo `{tenantid}` pode assinar `iss` pessoal — decisão deliberada: restringir mais arriscaria quebrar login real que não conseguimos testar. **A amarração chave × emissor continua validada só com chaves sintéticas no formato real**; o primeiro login real é o teste dela (um `chave_issuer_divergente` indicaria premissa errada, com falha segura).
 
 ### 19.3 Checklist exato do App Registration (a executar no portal por quem tem acesso)
 1. Microsoft Entra ID → **Registros de aplicativo → Novo registro**. Nome específico da **LEVORA SOLIDÁRIA** (ex.: "Levora Solidária — dev").
@@ -245,3 +245,19 @@ O `sub` é por aplicativo: um **novo** Client ID gera **novos** `sub` ⇒ nenhum
 | Login com conta **pessoal**; com conta **corporativa/escolar**; conta convidada; consentimento real; claims reais (`iss`, `tid`, `oid`, `ver`, `email`, `idp`); amarração chave × emissor com token real; segredo/redirect URI reais | **NÃO TESTADO** (sem App Registration/credenciais) |
 
 **Claims reais observados:** nenhum (nenhum token real foi obtido). Roteiro do teste real: §17.
+
+## 20. Fase 93.2 — fechamento do issuer das chaves (fail-closed)
+
+**Antes (93/93.1):** a chave só era rejeitada se `jwk.issuer` fosse string **e** divergisse do `iss`; chave **sem** `issuer` pulava a checagem (e um teste aceitava essa condição). A ausência do campo funcionava como permissão implícita.
+
+**Depois (93.2):** a chave que verifica o ID token **tem de declarar `issuer`**. Regra (`verifyMicrosoftIdToken`, após validar `iss`/`tid`):
+1. `issuer` ausente, vazio/só espaços ou não-string ⇒ chave **não autorizada** (`chave_issuer_divergente`);
+2. `{tenantid}` no `issuer` é substituído pelo `tid` **já validado**;
+3. o resultado tem de ser **exatamente** igual ao `iss` do token; senão `chave_issuer_divergente`;
+4. a ausência do campo **nunca** vale como autorização. As demais regras (RS256, Discovery confiável, `tid`, `aud`, `exp`, `iat`, `nonce`, `sub`, nuvem pública) e o modelo de identidade `provider + issuer + sub` não mudaram.
+
+**Testes (microsoftSecurity):** chave sem `issuer` (10 formas: ausente, vazio, espaços, número, objeto, nulo, lista, sem esquema, `http`, modelo sem tenant) ⇒ rejeitada; `{tenantid}` do tenant ⇒ aceita; issuer exato do tenant ⇒ aceita; issuer de outro tenant / pessoal num token corporativo ⇒ rejeitada; nuvem soberana ⇒ continua `chave_desconhecida`; e2e de cadastro com chave sem `issuer` ⇒ nada criado, código intacto, auditoria; rotação e cache continuam. **Controle negativo:** voltar à checagem antiga (só quando `issuer` é string) derruba 3 testes.
+
+**Discovery/JWKS reais (opt-in `MICROSOFT_REAL_DISCOVERY=1`, repetido nesta fase):** continuam aceitos, e **todas as chaves públicas atuais do JWKS real declaram `issuer`** (o modelo `{tenantid}` ou o tenant pessoal) — logo a nova regra não rejeita chave real de hoje. Isto valida **somente metadados públicos**: **nenhum login Microsoft real foi feito** e a cadeia completa **não** foi testada com token de usuário real. Se, num login real, a Microsoft publicar chave sem `issuer`, o login falhará de forma segura (e isso será um achado, não uma brecha).
+
+**Correção do texto anterior:** onde o §19.2 dizia que chaves sem `issuer` eram aceitas, vale esta seção. **Estado:** autenticação Microsoft real **continua pendente**; a Microsoft **não** está pronta para produção.

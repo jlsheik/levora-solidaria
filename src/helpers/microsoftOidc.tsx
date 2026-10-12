@@ -333,9 +333,10 @@ export async function verifyMicrosoftIdToken(config: MicrosoftConfig, idToken: s
   if (typeof tid !== "string" || !GUID.test(tid)) throw new MicrosoftOidcError("tenant_invalido");
   if (claims.iss !== microsoftIssuerFor(tid)) throw new MicrosoftOidcError("issuer_invalido");
   if (!tenantAllowed(config, tid)) throw new MicrosoftOidcError("tenant_invalido");
-  // Defesa em profundidade: a chave que assinou é marcada pela Microsoft com o emissor para o qual vale (modelo `{tenantid}` ou o tenant
-  // pessoal). Uma chave de contas pessoais não assina `iss` corporativo e vice-versa.
-  if (typeof jwk.issuer === "string" && jwk.issuer.replace("{tenantid}", tid) !== claims.iss) throw new MicrosoftOidcError("chave_issuer_divergente");
+  // Fail-closed (Fase 93.2): a chave que assinou TEM de declarar o emissor para o qual vale (modelo `{tenantid}` ou o tenant pessoal), como o JWKS da
+  // Microsoft publica. Ausente, vazio ou não-string ⇒ a chave NÃO é autorizada (a falta do campo nunca vale como permissão). Com `{tenantid}`
+  // substituído pelo `tid` validado, tem de igualar o `iss` EXATAMENTE: chave de contas pessoais não assina `iss` corporativo e vice-versa.
+  if (typeof jwk.issuer !== "string" || jwk.issuer.trim().length === 0 || jwk.issuer.split("{tenantid}").join(tid) !== claims.iss) throw new MicrosoftOidcError("chave_issuer_divergente");
 
   if (typeof claims.nonce !== "string" || claims.nonce.length === 0 || claims.nonce.length > 256) throw new MicrosoftOidcError("nonce_invalido");
   if (!safeEqual(oauthHash("nonce", claims.nonce, pepperVersion), expectedNonceHash)) throw new MicrosoftOidcError("nonce_invalido");
