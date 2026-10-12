@@ -23,22 +23,20 @@ Foi criado no diretório próprio `DEFAULT DIRECTORY (joaolucaspereiratavaresout
 - O nome com acentos/em dash e a variante com espaços foram recusados pelo portal; o nome compacto acima foi criado com êxito. Não registrar outro aplicativo para contornar isso.
 - A permissão padrão `Microsoft Graph / User.Read` foi removida com sucesso para reduzir permissões. A página de permissões mostrou “Nenhuma permissão adicionada”.
 - A configuração de declarações opcionais está vazia na última verificação. Durante a tentativa anterior uma declaração incorreta `acct` foi adicionada e removida com sucesso; não consta atualmente na tabela. A declaração `email` ainda precisa ser configurada/validada com cuidado, mantendo o desenho de identidade mínima (`openid profile email`) e sem acrescentar acesso amplo ao Graph.
-- O portal agora mostra **1 segredo do cliente** com descrição `LEVORA SOLIDARIA Fase 93.3 - desenvolvimento local` e vencimento em **10/04/2027** (180 dias). O valor secreto foi omitido da saída de diagnóstico e **ainda não foi inserido no `.env` local**.
+- O portal tem **1 segredo do cliente** com descrição `LEVORA SOLIDARIA Fase 93.3 - desenvolvimento local`, vencimento em **10/04/2027**. O usuário confirmou que copiou o valor para o `.env` local ignorado pelo Git. O valor em si nunca foi lido de volta nem impresso em logs, chat ou checkpoint.
 
 ## Estado local do ambiente
 
 O arquivo `.env` **existe localmente e é ignorado pelo Git**. Foi confirmado sem imprimir valores:
 - `MICROSOFT_CLIENT_ID`: definido e corresponde ao Client ID do registro acima.
-- `MICROSOFT_CLIENT_SECRET`: vazio/ausente.
+- `MICROSOFT_CLIENT_SECRET`: definida (presença validada sem expor conteúdo).
 - `MICROSOFT_REDIRECT_URI`: definido e corresponde exatamente ao redirect URI registrado.
 - `MICROSOFT_TENANT`: definido como `common`.
 
-Último comando `npm run microsoft:preflight`:
-- Client ID: definida.
-- Client secret: AUSENTE.
-- Redirect URI: definida.
-- Tenant: definida.
-- Resultado: configuração não aceita por falta de secret; nenhum login/token real foi testado nesse comando.
+`npm run microsoft:preflight` executado em 2026-10-12 após salvar o segredo:
+- As quatro variáveis foram reconhecidas como definidas.
+- O Discovery oficial real de `common` foi aceito; o preflight terminou com exit code 0.
+- Isso ainda não valida troca de código nem ID token real.
 
 O código existente em `src/helpers/microsoftOidc.tsx` usa Authorization Code + PKCE S256 e scopes `openid profile email`; a auditoria documenta que não deve solicitar permissões Graph adicionais, nem `offline_access`. Consultar primeiro os testes/documentos existentes antes de alterar implementação.
 
@@ -61,3 +59,18 @@ O navegador utilizado é um perfil separado em `%LOCALAPPDATA%\LevoraMicrosoftPe
 - Não imprimir o conteúdo de `.env`, nem fazer `git add -f .env`.
 - Não dar consentimento de administrador amplo, adicionar permissões Graph não exigidas pelo código, ou mudar para assinatura paga.
 - Não declarar login “funcionando” antes de completar os testes reais exigidos.
+
+## Atualização de continuidade — preflight concluído e ambiente isolado
+
+Em 2026-10-12 o usuário confirmou que salvou o segredo localmente. O estado das quatro variáveis foi verificado só por presença; Client ID, redirect URI e tenant correspondem à configuração registrada; o .env continua ignorado pelo Git. O comando npm run microsoft:preflight terminou com código 0: Discovery real common aceito. Nenhum login real foi concluído nesta atualização.
+
+Não foi seguro migrar o banco local existente: nele há 3 administradores legados ativos e a migração 0015 exige escolha explícita de um único Platform Owner. Antes de avançar, foi criado backup íntegro em C:\Users\JL\code\levora-solidaria\backups\levora_solidaria_pre_fase93_20261012.dump (142568 bytes; SHA-256 3BDD4C5D0C1FE98E55FC7769A97189306B93B72784D505254306C299C52BB514; 334 itens no pg_restore --list). O banco original não recebeu migrações.
+
+Foi criado o banco de teste isolado levora_f933_test, usando npm run db:migrate apenas no banco vazio. As tabelas user_identities, registration_access_codes e oauth_attempts existem; há 19 entradas de migração. O .env deste worktree aponta para localhost:5433/levora_f933_test. Chaves auxiliares de desenvolvimento foram geradas localmente, sem serem impressas ou versionadas.
+
+Serviços locais iniciados:
+- API: PID 25328, npm run dev, 78 endpoints descobertos.
+- Vite: PID 19216, npm run client:dev, http://localhost:5173.
+- Health: http://localhost:3001/_api/__health respondeu HTTP 200 com status ok, 78 endpoints e API v1; /login respondeu HTTP 200.
+- Edge InPrivate aberto em http://localhost:5173/login. Próxima ação manual: clicar em “Entrar com Microsoft” na aba “Entrar” e autenticar uma conta pessoal. Não usar “Criar conta” ainda: o banco de teste está sem códigos de acesso. Caso o token valide e a conta ainda não esteja vinculada, o retorno “Esta conta não está vinculada à Microsoft” é esperado.
+- Não coletar nem registrar senha, MFA, código, state, token, cookie ou URL de callback completa. Microsoft OIDC permanece NÃO QUALIFICADO até testes reais pessoal e corporativo/escolar, e regressões relevantes.
