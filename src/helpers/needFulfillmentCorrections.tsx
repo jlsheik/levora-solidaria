@@ -144,6 +144,8 @@ export interface LedgerOperationPlan {
   allocationId: number;
   needId: number | null;
   needQuantity: number | null;
+  /** Quantidade alocada à organização (só para o indicador de excedente na auditoria; NÃO limita a operação). */
+  quantidadeAlocada: number;
   operacao: "correcao" | "estorno";
   vigenteFulfillmentId: string;
   headState: "ativa" | "estornada";
@@ -224,7 +226,7 @@ export async function lockAndPlanLedgerOperation(
 ): Promise<{ type: "plan"; plan: LedgerOperationPlan } | LedgerPlanError> {
   const allocation = await trx
     .selectFrom("opportunityAllocations")
-    .select(["id", "status"])
+    .select(["id", "status", "quantityAllocated"])
     .where("id", "=", params.allocationId)
     .where("organizationId", "=", params.organizationId)
     .forUpdate()
@@ -313,6 +315,7 @@ export async function lockAndPlanLedgerOperation(
     allocationId: params.allocationId,
     needId,
     needQuantity: need?.quantityNeeded ?? null,
+    quantidadeAlocada: Number(allocation.quantityAllocated),
     vigenteFulfillmentId: chain.vigenteFulfillmentId,
     headState: chain.headState,
     targetRowId: head.id,
@@ -520,6 +523,10 @@ export function buildLedgerAuditEntry(
     efeitoNoSaldoNovo: plan.efeitoNovo,
     excedenteAnterior: result.progressBefore?.surplus ?? 0,
     excedente: result.progressAfter?.surplus ?? 0,
+    // indicador de excedente em relação ao ALOCADO (política de excedentes: permitido, mas identificável)
+    quantidadeAlocada: plan.quantidadeAlocada,
+    acimaDaAlocacao: (plan.operacao === "estorno" ? 0 : plan.quantidadeNova) > plan.quantidadeAlocada,
+    excedenteAlocacao: Math.max(0, Math.round(((plan.operacao === "estorno" ? 0 : plan.quantidadeNova) - plan.quantidadeAlocada) * 1000) / 1000),
     efeitoEstoque: plan.stock ? "ajuste" : "nenhum",
     motivo: ctx.reason,
   };

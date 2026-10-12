@@ -1344,3 +1344,24 @@ garantia vem de a autoaprovação ser logicamente impossível na nova composiç�
 
 Continua **543** (460 → 504 → 543); a correção alterou um teste existente, não
 adicionou nenhum.
+
+
+---
+
+## AG. Fase 94 — política de excedentes: DECISÃO DE PRODUTO (dono) e comparação com a implementação
+
+**Decisão (tomada pelo dono, pós-Fase 94):** permitir recebimentos acima da quantidade alocada ou necessária, sem bloquear o registro da realidade física. Isto **confirma e fecha** o que a seção D.1 recomendava (P-L1/P-L2, já CONFIRMADAS na Fase 78) e acrescenta um requisito: o excedente de um **recebimento** deve ser **identificável na auditoria**.
+
+| Regra decidida | Já estava implementada? | Prova |
+|---|---|---|
+| recebido < alocado ⇒ parcial, sem bloqueio; = alocado ⇒ fluxo normal | **Sim** (nenhuma checagem de teto em `allocations-receive`) | `test/surplusPolicy.test.ts` (60, 100) |
+| recebido > alocado ⇒ permitido; o ledger registra o valor REAL, sem corte | **Sim** | idem (130 contra 100: linha `original` = 130; estoque +130) |
+| progresso derivado do ledger: `fulfilled` total, `requiredRemaining = max(0, needed − fulfilled)`, `surplus = max(0, fulfilled − needed)` | **Sim** (`needFulfillment.tsx`, fórmula única) | 250+120 contra 300 ⇒ `{370, 0, 70}` |
+| correção que ultrapassa alocado/necessário ⇒ permitida, motivo obrigatório, indicador de excedente | **Sim** (permitida, motivo obrigatório; indicador do EXCEDENTE DA NECESSIDADE em `excedente`/`excedenteAnterior`) | correção 100→150 contra 120 |
+| excedente não é nova doação nem migra para outra necessidade | **Sim** (doação = entrada física; ledger não transfere) | relatório: 1 doação; outra necessidade intacta |
+| permissões, dupla aprovação, auditoria e demais integridades continuam | **Sim** | 403 sem permissão; correção negativa e estorno ⇒ 202 + aprovação por outra pessoa |
+| excedente de um RECEBIMENTO identificável na auditoria, com ids e valores | **NÃO — lacuna fechada nesta fase** | abaixo |
+
+**Lacuna e correção mínima.** O evento `atribuicao.recebida` só levava item, quantidade recebida e movimento de estoque; não dizia se o recebimento passou do alocado nem do necessário. Agora o metadata (só ids e números) inclui: `needId`, `quantidadeAlocada`, `acimaDaAlocacao` (boolean), `excedenteAlocacao` (`max(0, recebido − alocado)`), `excedenteNecessidade` (quanto **este** recebimento acrescentou ao `surplus` da necessidade; 0 se a unidade divergiu e a linha não conta) e `progressoNecessidade` (`{fulfilled, requiredRemaining, surplus}` após o recebimento, ou `null` sem necessidade). Os eventos `atribuicao.recebimento_corrigido` / `_estornado` ganharam `quantidadeAlocada`, `acimaDaAlocacao` e `excedenteAlocacao` (relativos à quantidade resultante; estorno ⇒ 0) além dos `excedente`/`excedenteAnterior` já existentes. Nada é bloqueado e nenhuma validação foi removida (quantidade, limites, locks, aprovação).
+
+**Testes (`test/surplusPolicy.test.ts`, 13, Postgres descartável):** recebimento inferior/igual/superior ao alocado; superior ao necessário (incremento de excedente por recebimento, inclusive com a necessidade já satisfeita); sem transferência e sem inflar doações (relatório reconcilia: entradas, necessidade, estoque); correção positiva que gera excedente (par `reversal`+`correction`, original preservado, +físico, auditoria); sem motivo ⇒ 400; correção negativa com dupla aprovação e auditoria do aprovador; sem permissão ⇒ 403 sem efeito; estorno com retirada física (original intacto, excedente some, estoque −400) e estorno só contábil (estoque inalterado). Controle: sem as mudanças de auditoria 6 testes falham (os de indicador) e os de comportamento passam — confirmando que só o indicador era lacuna.
