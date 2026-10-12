@@ -25,7 +25,8 @@ import { Badge } from "../components/Badge";
 import { Skeleton } from "../components/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/Select";
 import { z } from "zod";
-import { HeartHandshake, Radio, Search, Send, AlertTriangle, Sparkles, ListChecks, RefreshCw } from "lucide-react";
+import { HeartHandshake, Radio, Search, Send, AlertTriangle, Sparkles, ListChecks, RefreshCw, Pencil } from "lucide-react";
+import { RenameSourceDialog } from "../components/RenameSourceDialog";
 import { toast } from "sonner";
 import styles from "./plataforma.module.css";
 
@@ -73,6 +74,7 @@ export default function PlatformPage() {
   const queryClient = useQueryClient();
   const [newSourceOpen, setNewSourceOpen] = useState(false);
   const [newDiscoveryOpen, setNewDiscoveryOpen] = useState(false);
+  const [renameSource, setRenameSource] = useState<{ id: number; name: string } | null>(null);
   const [allocateTarget, setAllocateTarget] = useState<{ id: number; title: string } | null>(null);
   const [expandedEvalId, setExpandedEvalId] = useState<number | null>(null);
 
@@ -247,11 +249,17 @@ export default function PlatformPage() {
                     <div className={styles.sourceName}>{s.name}</div>
                     <div className={styles.sourceMeta}>{sourceTypeLabels[s.type]} · conector: {s.connectorKey}</div>
                   </div>
-                  <Badge variant={s.status === "ativa" ? "success" : s.status === "erro" ? "destructive" : "secondary"}>
-                    {s.status === "nao_configurada" && <AlertTriangle size={12} />} {sourceStatusLabels[s.status]}
-                  </Badge>
+                  <div className={styles.sourceActions}>
+                    <Button variant="ghost" size="icon-sm" onClick={() => setRenameSource({ id: s.id, name: s.name })} aria-label={"Renomear a fonte " + s.name}>
+                      <Pencil size={14} />
+                    </Button>
+                    <Badge variant={s.status === "ativa" ? "success" : s.status === "erro" ? "destructive" : "secondary"}>
+                      {s.status === "nao_configurada" && <AlertTriangle size={12} />} {sourceStatusLabels[s.status]}
+                    </Badge>
+                  </div>
                 </li>
               ))}
+              <RenameSourceDialog source={renameSource} onOpenChange={(open) => !open && setRenameSource(null)} />
               {sourcesQuery.data && sourcesQuery.data.sources.length === 0 && (
                 <p className={styles.emptyText}>Nenhuma fonte cadastrada. Cadastre a fonte "manual" para começar a registrar descobertas.</p>
               )}
