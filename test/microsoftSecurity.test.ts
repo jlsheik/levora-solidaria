@@ -15,7 +15,7 @@ import { oauthHash } from "../src/helpers/oauthPrimitives";
 import { currentPepperVersion } from "../src/helpers/identityKeys";
 import { buildRequest, createTestUser, makeAccessCode, enrollTestMfa } from "./helpers";
 import {
-  approve, callback, CLIENT_ID, CORP_TID, installMicrosoft, location, makeMsKey, OTHER_CORP_TID, PERSONAL_TID, sessionCookieOf, startFlow, type MicrosoftSim, type MsClaims, type MsKey,
+  approve, callback, CLIENT_ID, CORP_TID, installMicrosoft, location, makeMsKey, makeMsKeyWithIssuer, OTHER_CORP_TID, PERSONAL_TID, sessionCookieOf, startFlow, type MicrosoftSim, type MsClaims, type MsKey,
 } from "./microsoftHarness";
 
 let sim: MicrosoftSim;
@@ -163,16 +163,65 @@ describe("validação do ID token (server-side, local)", () => {
     expect((await verify({ oid: null })).metadata.oid).toBeUndefined(); // oid ausente não impede a identidade (a chave é issuer+sub)
   });
 
-  it("JWKS: chave marcada pela Microsoft com o emissor — chave de contas pessoais não assina `iss` corporativo; chaves de nuvens soberanas são ignoradas; chave sem marcação vale", async () => {
+  it("JWKS: chave marcada pela Microsoft com o emissor — chave de contas pessoais não assina `iss` corporativo; chaves de nuvens soberanas são ignoradas", async () => {
     const msa = await makeMsKey("kid-msa", "msa");
     const gov = await makeMsKey("kid-gov", "aad", "microsoftonline.us");
-    const plain = await makeMsKey("kid-plain", "untagged");
-    sim.published.push(msa, gov, plain);
+    sim.published.push(msa, gov);
     expect((await verify({ tid: PERSONAL_TID }, { key: msa })).issuer).toBe(microsoftIssuerFor(PERSONAL_TID));
     await expectFailure(verify({ tid: CORP_TID }, { key: msa }), "chave_issuer_divergente");
     expect((await verify({ tid: CORP_TID }, { key: sim.signingKey })).issuer).toBe(microsoftIssuerFor(CORP_TID));
     await expectFailure(verify({}, { key: gov }), "chave_desconhecida");
-    expect((await verify({}, { key: plain })).subject).toBe(U.sub);
+  });
+
+  it("FAIL-CLOSED: chave SEM `issuer` (ausente, vazio, não-string, malformado) nunca autoriza o token; a ausência do campo não é permissão", async () => {
+    const bad: Array<[string, unknown]> = [
+      ["ausente", undefined], ["vazio", ""], ["só espaços", "   "], ["número", 42], ["objeto", { a: 1 }], ["nulo", null], ["lista", [`https://login.microsoftonline.com/${CORP_TID}/v2.0`]],
+      ["sem esquema", `login.microsoftonline.com/${CORP_TID}/v2.0`], ["http", `http://login.microsoftonline.com/${CORP_TID}/v2.0`], ["modelo sem tenant", "https://login.microsoftonline.com//v2.0"],
+    ];
+    const keys = await Promise.all(bad.map(([name, issuer]) => makeMsKeyWithIssuer(`kid-bad-${name}`, issuer)));
+    sim.published.push(...keys); // todas publicadas ANTES da 1ª validação (o JWKS é lido uma vez; sem depender de refresh)
+    for (const key of keys) await expectFailure(verify({}, { key }), "chave_issuer_divergente");
+  });
+
+  it("chave com issuer {tenantid}: aceita só para o tenant do token; issuer de OUTRO tenant ou o pessoal num token corporativo ⇒ rejeitada; issuer exato do tenant também vale", async () => {
+    const template = await makeMsKeyWithIssuer("kid-template", "https://login.microsoftonline.com/{tenantid}/v2.0");
+    const exact = await makeMsKeyWithIssuer("kid-exact", microsoftIssuerFor(CORP_TID));
+    const other = await makeMsKeyWithIssuer("kid-other", microsoftIssuerFor(OTHER_CORP_TID));
+    const personal = await makeMsKeyWithIssuer("kid-personal", microsoftIssuerFor(PERSONAL_TID));
+    sim.published.push(template, exact, other, personal);
+    expect((await verify({ tid: CORP_TID }, { key: template })).issuer).toBe(microsoftIssuerFor(CORP_TID));
+    expect((await verify({ tid: OTHER_CORP_TID }, { key: template })).issuer).toBe(microsoftIssuerFor(OTHER_CORP_TID));
+    expect((await verify({ tid: CORP_TID }, { key: exact })).subject).toBe(U.sub);
+    await expectFailure(verify({ tid: OTHER_CORP_TID }, { key: exact }), "chave_issuer_divergente");
+    await expectFailure(verify({ tid: CORP_TID }, { key: other }), "chave_issuer_divergente");
+    await expectFailure(verify({ tid: CORP_TID }, { key: personal }), "chave_issuer_divergente");
+  });
+
+  it("e2e: cadastro com token assinado por chave sem `issuer` ⇒ falha neutra, nada criado, código intacto, motivo só na auditoria", async () => {
+    const key = await makeMsKeyWithIssuer("kid-sem-issuer", undefined);
+    sim.published.push(key);
+    const { code, id } = await makeAccessCode();
+    const flow = await startFlow("signup", code);
+    const res = await callback(flow, approve(sim, flow, U, { signWith: key }));
+    expect(location(res)).toBe("/login?microsoft=erro&motivo=falha");
+    expect(await signedUpCount()).toBe(0);
+    expect((await codeRow(id)).redeemedAt).toBeNull();
+    expect(JSON.stringify(await audits("usuario.microsoft_identity_rejected"))).toContain("chave_issuer_divergente");
+  });
+
+  it("rotação e cache continuam: chave nova COM issuer entra pela rotação; a mesma chave sem issuer não entra mesmo publicada", async () => {
+    expect((await verify({})).subject).toBe(U.sub);
+    await verify({});
+    expect(sim.fetchCount.jwks).toBe(1);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 2 * 60 * 1000);
+    const noIssuer = await makeMsKeyWithIssuer("kid-rot-sem", undefined);
+    sim.published.push(noIssuer);
+    await expectFailure(verify({}, { key: noIssuer, now: Date.now() }), "chave_issuer_divergente");
+    vi.setSystemTime(Date.now() + 2 * 60 * 1000);
+    const next = await makeMsKey("kid-rot-ok", "aad");
+    sim.rotate(next);
+    expect((await verify({}, { key: next, now: Date.now() })).subject).toBe(U.sub);
   });
 
   it("JWKS: cache (1 fetch), kids desconhecidos em rajada NÃO martelam a Microsoft, rotação dispara UM refresh depois do cooldown, chave antiga deixa de valer", async () => {

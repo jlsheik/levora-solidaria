@@ -47,6 +47,14 @@ export async function makeMsKey(kid: string, kind: "aad" | "msa" | "untagged" = 
   return { ...base, issuerTag, cloud, jwk: { ...base.jwk, issuer: issuerTag, cloud_instance_name: cloud } };
 }
 
+/** Chave com o campo `issuer` do JWKS controlado pelo teste (ausente = undefined; também valores malformados). */
+export async function makeMsKeyWithIssuer(kid: string, issuer: unknown): Promise<MsKey> {
+  const base = await makeKey(kid);
+  const jwk: Record<string, unknown> = { ...base.jwk, cloud_instance_name: "microsoftonline.com" };
+  if (issuer !== undefined) jwk.issuer = issuer;
+  return { ...base, jwk: jwk as MsKey["jwk"] };
+}
+
 export interface MsClaims {
   sub?: string | null;
   email?: string | null;

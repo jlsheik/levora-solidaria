@@ -34,6 +34,11 @@ describe.skipIf(!enabled)("Discovery/JWKS REAIS da Microsoft (somente leitura, s
     const res = await fetch("https://login.microsoftonline.com/common/discovery/v2.0/keys");
     const jwks = (await res.json()) as { keys: Array<{ kid: string; kty: string; cloud_instance_name?: string; issuer?: string }> };
     expect(jwks.keys.length).toBeGreaterThan(0);
+    // política fail-closed da Fase 93.2: TODA chave pública atual do JWKS real declara `issuer` (modelo {tenantid} ou o tenant pessoal)
+    for (const k of jwks.keys.filter((x) => (x.cloud_instance_name ?? "microsoftonline.com") === "microsoftonline.com")) {
+      expect(typeof k.issuer, k.kid).toBe("string");
+      expect(["https://login.microsoftonline.com/{tenantid}/v2.0", "https://login.microsoftonline.com/" + MICROSOFT_PERSONAL_TENANT_ID + "/v2.0"], k.kid).toContain(k.issuer);
+    }
     const publicKey = jwks.keys.find((k) => k.kty === "RSA" && (k.cloud_instance_name ?? "microsoftonline.com") === "microsoftonline.com")!;
     const nonceHash = oauthHash("nonce", "n".repeat(43), currentPepperVersion());
     const forge = async (kid: string) => {
