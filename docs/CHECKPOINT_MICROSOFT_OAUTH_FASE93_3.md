@@ -3,8 +3,9 @@
 **Última verificação:** 2026-10-12 (horário de Brasília)  
 **Workspace:** `C:\Users\JL\code\levora-f933`  
 **Branch:** `fase-93-3-microsoft-qualificacao`  
-**HEAD confirmado:** `2f34aa2254002a7c75bf9caab3cf9851aca6c5e4` (`2f34aa2 Fase 93.3: registra qualificacao real Microsoft bloqueada por configuracao`)  
-**Estado Git na verificação:** limpo antes deste checkpoint; `.env` é ignorado pelo Git.
+**HEAD inicial da fase:** `2f34aa2254002a7c75bf9caab3cf9851aca6c5e4` (`2f34aa2 Fase 93.3: registra qualificacao real Microsoft bloqueada por configuracao`)  
+**Checkpoints commitados:** `3422010` (estado inicial), `e356ce7` (segredo criado, aguardando cópia local).  
+**Estado Git após o checkpoint:** limpo; `.env` é ignorado pelo Git.
 
 ## Objetivo e restrições
 
