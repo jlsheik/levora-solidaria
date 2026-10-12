@@ -34,6 +34,13 @@
   flex-wrap: wrap;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  flex-wrap: wrap;
+}
+
 .title {
   font-family: var(--font-family-display);
   font-size: 1.75rem;

@@ -35,7 +35,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "../components/DropdownMenu";
-import { ArrowLeft, ShieldAlert, Users, ScrollText, UserPlus, X, MoreVertical, LogOut } from "lucide-react";
+import { ArrowLeft, ShieldAlert, Users, ScrollText, UserPlus, X, MoreVertical, LogOut, Pencil } from "lucide-react";
+import { RenameOrganizationDialog } from "../components/RenameOrganizationDialog";
 import { toast } from "sonner";
 import styles from "./organizacoes.$organizationId.module.css";
 
@@ -96,6 +97,7 @@ export default function OrganizationDetailPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"administrador" | "operador" | "voluntario">("operador");
   const [memberDialog, setMemberDialog] = useState<MemberDialog | null>(null);
+  const [renameOpen, setRenameOpen] = useState(false);
   const { authState } = useAuth();
   const myUserId = authState.type === "authenticated" ? authState.user.id : null;
 
@@ -272,9 +274,17 @@ export default function OrganizationDetailPage() {
               {org.city}/{org.state} · Seu papel: {membershipRoleLabels[org.myRole]}
             </p>
           </div>
-          <Badge variant={org.status === "ativa" ? "success" : org.status === "suspensa" ? "destructive" : "secondary"}>
-            {org.status === "ativa" ? "Ativa" : org.status === "suspensa" ? "Suspensa" : "Em análise"}
-          </Badge>
+          <div className={styles.headerActions}>
+            {org.myRole === "proprietario" && org.status === "ativa" && (
+              <Button variant="outline" size="sm" onClick={() => setRenameOpen(true)} aria-label="Renomear organização">
+                <Pencil size={14} /> Renomear
+              </Button>
+            )}
+            <Badge variant={org.status === "ativa" ? "success" : org.status === "suspensa" ? "destructive" : "secondary"}>
+              {org.status === "ativa" ? "Ativa" : org.status === "suspensa" ? "Suspensa" : "Em análise"}
+            </Badge>
+          </div>
+          <RenameOrganizationDialog organizationId={organizationId} currentName={org.name} open={renameOpen} onOpenChange={setRenameOpen} />
         </header>
       )}
 
