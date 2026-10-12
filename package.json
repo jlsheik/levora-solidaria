@@ -23,7 +23,8 @@
     "platform:bootstrap-owner": "tsx db/platform-bootstrap-cli.ts owner",
     "platform:owner-recovery": "tsx db/platform-bootstrap-cli.ts owner-recovery",
     "platform:bootstrap-revoke": "tsx db/platform-bootstrap-cli.ts revoke",
-    "platform:bootstrap-status": "tsx db/platform-bootstrap-cli.ts status"
+    "platform:bootstrap-status": "tsx db/platform-bootstrap-cli.ts status",
+    "microsoft:preflight": "tsx scripts/microsoft-preflight.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1139.0",
