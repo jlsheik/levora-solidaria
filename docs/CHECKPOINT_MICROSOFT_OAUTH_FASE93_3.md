@@ -74,3 +74,10 @@ Serviços locais iniciados:
 - Health: http://localhost:3001/_api/__health respondeu HTTP 200 com status ok, 78 endpoints e API v1; /login respondeu HTTP 200.
 - Edge InPrivate aberto em http://localhost:5173/login. Próxima ação manual: clicar em “Entrar com Microsoft” na aba “Entrar” e autenticar uma conta pessoal. Não usar “Criar conta” ainda: o banco de teste está sem códigos de acesso. Caso o token valide e a conta ainda não esteja vinculada, o retorno “Esta conta não está vinculada à Microsoft” é esperado.
 - Não coletar nem registrar senha, MFA, código, state, token, cookie ou URL de callback completa. Microsoft OIDC permanece NÃO QUALIFICADO até testes reais pessoal e corporativo/escolar, e regressões relevantes.
+
+## Regressões automatizadas após isolar o ambiente
+
+- A primeira tentativa de regressões foi inválida por falta do .env.test no worktree. Corrigido localmente com um .env.test ignorado pelo Git, banco levora_f933_vitest_test dedicado e JWT de teste sintético; nenhum código-fonte do produto foi alterado por essa correção de ambiente.
+- Reexecução: microsoftAuth.test.ts + microsoftSecurity.test.ts + microsoftLifecycle.test.ts — 3 arquivos passaram, 93/93 testes passaram.
+- Teste opt-in de leitura pública: microsoftRealDiscovery.test.ts com MICROSOFT_REAL_DISCOVERY=1 — 3/3 testes passaram. Ele validou Discovery/JWKS públicos de common, organizations e consumers; não usa credenciais e não é login real.
+- A autenticação real com conta pessoal continua aguardando interação manual na janela Edge InPrivate. O teste corporativo/escolar também permanece pendente; não declarar a Fase 93.3 homologada.
