@@ -1,12 +1,13 @@
 import { z } from "zod";
 import superjson from "superjson";
+import { nonNegativeQuantity } from "../helpers/quantityRules.js";
 
 export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),
   name: z.string().min(2, "Informe o nome do item"),
   unit: z.string().min(1, "Informe a unidade de medida"),
   category: z.string().optional(),
-  initialQuantity: z.coerce.number().nonnegative().optional(),
+  initialQuantity: nonNegativeQuantity("Quantidade inicial inválida").optional(),
 });
 
 export type OutputType = {

@@ -223,3 +223,87 @@ describe("opportunity-registry (registro central): quantity — OPCIONAL; soment
     expect(await snapshot()).toEqual(before);
   });
 });
+
+import { handle as postItem } from "../src/endpoints/inventory-items_POST";
+import { handle as postCapacity } from "../src/endpoints/organization-capacities_POST";
+
+const itemCount = async (orgId: number) => Number((await db.selectFrom("inventoryItems").select((eb) => eb.fn.countAll<string>().as("n")).where("organizationId", "=", orgId).executeTakeFirstOrThrow()).n);
+
+describe("inventory-items (cadastro do item): initialQuantity — OPCIONAL, ≥ 0; permissão `inventario.lance`", () => {
+  const call = (b: Base, initialQuantity: unknown, cookie = b.owner.cookie) =>
+    postItem(post("inventory-items", cookie, { organizationId: b.orgId, name: `Item ${Math.random()}`, unit: "kg", ...(initialQuantity === undefined ? {} : { initialQuantity }) }));
+  const NEGATIVE_OR_BAD = INVALID_NUMBERS.filter((v) => v !== 0); // zero É permitido aqui (item sem saldo inicial)
+
+  for (const value of [...NEGATIVE_OR_BAD, ...INVALID_TYPES]) {
+    it(`inválido ${JSON.stringify(value)} ⇒ 400; o item NÃO é criado (nem parcialmente), sem estoque e sem auditoria`, async () => {
+      const b = await base();
+      const items = await itemCount(b.orgId);
+      const before = await snapshot();
+      expect((await call(b, value)).status).toBe(400);
+      expect(await itemCount(b.orgId)).toBe(items);
+      expect(await snapshot()).toEqual(before);
+    });
+  }
+
+  it("0 e ausente: cria o item SEM entrada de estoque", async () => {
+    const b = await base();
+    for (const v of [0, undefined]) {
+      const before = await snapshot();
+      expect((await call(b, v)).status).toBe(200);
+      const after = await snapshot();
+      expect(after.stock).toBe(before.stock);
+    }
+  });
+
+  for (const value of [0.001, 12.345, MAX, "7.5"]) {
+    it(`válido ${value} ⇒ 200; item criado com UMA entrada de estoque do valor exato`, async () => {
+      const b = await base();
+      const before = await snapshot();
+      expect((await call(b, value)).status).toBe(200);
+      const after = await snapshot();
+      expect(after.stock).toBe(before.stock + 1);
+      const tx = await db.selectFrom("stockTransactions").select("delta").orderBy("id", "desc").executeTakeFirstOrThrow();
+      expect(Number(tx.delta)).toBe(Number(value));
+    });
+  }
+
+  it("permissão: sem `inventario.lance` ⇒ 403; nada criado", async () => {
+    const b = await base();
+    const before = await snapshot();
+    const items = await itemCount(b.orgId);
+    expect((await call(b, 5, b.voluntario.cookie)).status).toBe(403);
+    expect(await itemCount(b.orgId)).toBe(items);
+    expect(await snapshot()).toEqual(before);
+  });
+});
+
+describe("organization-capacities: maxCapacity — OBRIGATÓRIA, ≥ 0; permissão `organizacao.gerencie`", () => {
+  const call = (b: Base, maxCapacity: unknown, cookie = b.owner.cookie) =>
+    postCapacity(post("organization-capacities", cookie, { organizationId: b.orgId, category: "alimentos", unit: "kg", ...(maxCapacity === undefined ? {} : { maxCapacity }) }));
+  const capacities = async (orgId: number) => Number((await db.selectFrom("organizationCapacities").select((eb) => eb.fn.countAll<string>().as("n")).where("organizationId", "=", orgId).executeTakeFirstOrThrow()).n);
+
+  for (const value of [...INVALID_NUMBERS.filter((v) => v !== 0), ...INVALID_TYPES, undefined]) {
+    it(`inválido ${JSON.stringify(value) ?? "ausente"} ⇒ 400 e nada gravado`, async () => {
+      const b = await base();
+      const before = await snapshot();
+      expect((await call(b, value)).status).toBe(400);
+      expect(await capacities(b.orgId)).toBe(0);
+      expect(await snapshot()).toEqual(before);
+    });
+  }
+
+  for (const value of [0, 0.001, 12.345, MAX]) {
+    it(`válido ${value} ⇒ 200 com o valor exato`, async () => {
+      const b = await base();
+      expect((await call(b, value)).status).toBe(200);
+      const [c] = await db.selectFrom("organizationCapacities").select("maxCapacity").where("organizationId", "=", b.orgId).execute();
+      expect(Number(c.maxCapacity)).toBe(value);
+    });
+  }
+
+  it("permissão: sem `organizacao.gerencie` ⇒ 403; nada gravado", async () => {
+    const b = await base();
+    expect((await call(b, 10, b.voluntario.cookie)).status).toBe(403);
+    expect(await capacities(b.orgId)).toBe(0);
+  });
+});

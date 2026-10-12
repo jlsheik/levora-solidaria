@@ -45,3 +45,10 @@ export const nonZeroQuantity = (message: string) =>
     .refine((v) => v !== 0, message)
     .refine((v) => Math.abs(v) <= QUANTITY_MAX, "Quantidade acima do máximo permitido")
     .refine(hasAtMostThreeDecimals, "No máximo 3 casas decimais");
+
+/** Quantidade NÃO NEGATIVA (zero permitido): quantidade inicial do item, capacidade máxima. */
+export const nonNegativeQuantity = (message: string) =>
+  strictNumber(message)
+    .refine((v) => v >= 0, message)
+    .refine((v) => v <= QUANTITY_MAX, "Quantidade acima do máximo permitido")
+    .refine(hasAtMostThreeDecimals, "No máximo 3 casas decimais");
