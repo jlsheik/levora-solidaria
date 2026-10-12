@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, afterEach } from "vitest";
 import { SignJWT } from "jose";
-import { __setMicrosoftTransportForTests, buildAuthorizationUrl, MicrosoftOidcError, verifyMicrosoftIdToken, type MicrosoftConfig } from "../src/helpers/microsoftOidc";
+import { __setMicrosoftTransportForTests, buildAuthorizationUrl, microsoftIssuerFor, MICROSOFT_PERSONAL_TENANT_ID, MicrosoftOidcError, verifyMicrosoftIdToken, type MicrosoftConfig } from "../src/helpers/microsoftOidc";
 import { currentPepperVersion } from "../src/helpers/identityKeys";
 import { oauthHash } from "../src/helpers/oauthPrimitives";
 
@@ -53,6 +53,14 @@ describe.skipIf(!enabled)("Discovery/JWKS REAIS da Microsoft (somente leitura, s
     if (sovereign) {
       const gov = await verifyMicrosoftIdToken(cfg("common"), await forge(sovereign.kid), nonceHash, currentPepperVersion()).catch((e) => e);
       expect((gov as MicrosoftOidcError).motivo).toBe("chave_desconhecida");
+    }
+  }, 60_000);
+  it("regra documentada pela Microsoft: emissor anunciado com {tenantid} trocado pelo tid == o iss que o código exige (common, organizations, consumers)", async () => {
+    const corp = "72f988bf-86f1-41af-91ab-2d7cd011db47";
+    for (const tenant of ["common", "organizations", "consumers"]) {
+      const doc = (await (await fetch(`https://login.microsoftonline.com/${tenant}/v2.0/.well-known/openid-configuration`)).json()) as { issuer: string };
+      const tid = tenant === "consumers" ? MICROSOFT_PERSONAL_TENANT_ID : corp;
+      expect(doc.issuer.replace("{tenantid}", tid), tenant).toBe(microsoftIssuerFor(tid));
     }
   }, 60_000);
 });

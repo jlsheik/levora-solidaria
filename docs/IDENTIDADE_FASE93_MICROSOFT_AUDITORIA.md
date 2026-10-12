@@ -192,3 +192,56 @@ o desenho de state/PKCE/cache sem benefício. **Reavaliar** se a LEVORA passar a
 
 Validação real (§17) · e-mail ausente em contas corporativas (§8) · re-vinculação auditada por `oid` se o registro do aplicativo for trocado (§5) · account linking explícito · allowlist de tenants (hoje só
 `MICROSOFT_TENANT` único) · `xms_edov`/e-mail verificado pelo domínio (não usado de propósito) · Apple (fase própria) · CAE/revogação contínua (fora de escopo).
+
+## 19. Fase 93.1 — vulnerabilidade, auditoria de issuer/chave e preparação do teste real
+
+> **Estado honesto:** as credenciais Microsoft **não estavam configuradas** neste ambiente (`MICROSOFT_CLIENT_ID/SECRET/REDIRECT_URI` ausentes; conferido só por presença, sem imprimir valores). **Nenhum login Microsoft real foi executado**; nenhum claim real foi observado. A parte real desta fase parou na preparação (§19.3–19.4). A Microsoft **continua NÃO validada** e **não** está "pronta para produção".
+
+### 19.1 `source-map-js` (GHSA-68fv-2mgg-jv7q / CVE-2026-93749)
+- **Advisory (confirmado na API do GitHub Advisories):** severidade alta, CVSS `AV:N/AC:L/PR:N/…/A:H`, afeta `>= 1.0.0, < 1.2.2`, corrigido em **1.2.2**. Falha: o deslocamento de linha por seção de *indexed source maps* não é validado; um valor enorme bloqueia o event loop de forma síncrona. Só dispara quando o pacote **processa um source map malicioso**.
+- **Cadeia (`npm explain`, instalação limpa `npm ci` no worktree):** `source-map-js@1.2.1` (dev) ← `postcss@8.5.28` ← `vite@6.4.3` (build/dev server do frontend) e ← `magicast@0.5.5` ← `@vitest/coverage-v8` (cobertura de testes). Ambos os pais declaram `^1.2.1`, que **aceita 1.2.2**.
+- **Exposição real:** só dependência de **desenvolvimento/build**. `npm ls --omit=dev source-map-js` ⇒ vazio; o `Dockerfile` instala o runtime com `npm ci --omit=dev`; nenhum código de `src/`, `server/` ou `db/` importa o pacote. **Não há evidência de que a API em execução fosse explorável remotamente por esse caminho.** O risco residual era local/de CI (um source map hostil processado por vite/postcss ou pela cobertura).
+- **Correção (menor possível):** `npm update source-map-js` ⇒ **só o `package-lock.json`** (3 linhas: versão/URL/integridade 1.2.1 → 1.2.2). Sem `overrides`, sem atualizar pais, `package.json` sem mudança de dependências. Depois: `npm ls` mostra 1.2.2 nas duas cadeias (nenhuma 1.2.1 restante) e `npm audit` ⇒ **0 vulnerabilidades**.
+- **Nota de ambiente:** nos worktrees anteriores `node_modules` era junção para outro worktree (por isso o `npm explain` ali saía "extraneous"); esta fase usa instalação própria para auditar a árvore real sem alterar a dos outros worktrees.
+
+### 19.2 Auditoria de issuer e chave (leitura do código real + teste que prova cada etapa)
+`src/helpers/microsoftOidc.tsx`. Regra da Microsoft para multitenant: trocar `{tenantid}` do emissor anunciado pelo `tid` do token e comparar o valor **exato** com `iss`; validar também o emissor da **chave** que assinou.
+
+| Requisito | Onde (linha) | Prova |
+|---|---|---|
+| Discovery só de `login.microsoftonline.com`, HTTPS, sem porta/credenciais, caminho dentro do tenant | `isMicrosoftEndpoint` (127) | `microsoftAuth` "Discovery adulterado" (7 variantes) |
+| Emissor anunciado == o esperado para o authority (modelo `{tenantid}` p/ common/organizations; fixo p/ consumers/GUID) | `expectedDiscoveryIssuer` (140), uso (157) | idem; **real (opt-in):** emissor do Discovery real com `{tenantid}`→tid == `microsoftIssuerFor(tid)` nos 3 authorities |
+| `alg` só RS256, `kid` obrigatório, kid → chave do JWKS (nunca `jku`/`x5u`) | 289–291 | `microsoftSecurity` assinatura/kid (RS384, HS256, none) |
+| `iss` == `https://login.microsoftonline.com/{tid}/v2.0` com `tid` do token (GUID minúsculo) | 333–334 | "ISSUER" (11 variantes) e "TID" |
+| `tid` permitido pelo authority | 265, 335 | "authority organizations/consumers/GUID" |
+| emissor da **chave** (`issuer` do JWKS, `{tenantid}`→tid) == `iss` | 338 | "JWKS: chave marcada pela Microsoft…" |
+| nuvens soberanas fora (`cloud_instance_name`) | 171, 180 | idem + **real (opt-in):** chave de nuvem soberana do JWKS real ⇒ `chave_desconhecida` |
+| `aud` único == client id; `azp`; `ver == "2.0"`; `exp`/`iat`/`nbf` (±60 s); `nonce` (HMAC, tempo constante); `sub` 1–255 | 302–344 | "AUDIENCE", "VER", "exp e iat", "nonce…" |
+| JWKS: cache 1 h; `kid` novo ⇒ 1 refresh/60 s; falha temporária mantém o cache; sem cache falha fechada | 27–28, 188–189 | "JWKS: cache…rotação" e "falha TEMPORÁRIA" |
+
+**Resultado:** nenhum defeito comprovado ⇒ **nenhuma alteração do código de validação**. Observações (não são bugs): (a) o `iss` é comparado à forma `https://login.microsoftonline.com/{tid}/v2.0`, equivalente ao emissor anunciado com `{tenantid}` substituído (agora provado contra o Discovery real); (b) chaves **sem** `issuer` no JWKS são aceitas (nenhuma das 9 do JWKS real está nesse caso); (c) uma chave de modelo `{tenantid}` pode assinar `iss` pessoal — decisão deliberada: restringir mais arriscaria quebrar login real que não conseguimos testar. **A amarração chave × emissor continua validada só com chaves sintéticas no formato real**; o primeiro login real é o teste dela (um `chave_issuer_divergente` indicaria premissa errada, com falha segura).
+
+### 19.3 Checklist exato do App Registration (a executar no portal por quem tem acesso)
+1. Microsoft Entra ID → **Registros de aplicativo → Novo registro**. Nome específico da **LEVORA SOLIDÁRIA** (ex.: "Levora Solidária — dev").
+2. **Tipos de conta com suporte:** "Contas em qualquer diretório organizacional (multilocatário) **e contas Microsoft pessoais** (como Skype, Xbox)". Casa com `MICROSOFT_TENANT=common` (padrão). Para outro público, ajuste junto `MICROSOFT_TENANT` (§3).
+3. **URI de redirecionamento — plataforma "Web"** (não SPA, não cliente público), valor **exatamente** igual a `MICROSOFT_REDIRECT_URI`:
+   - dev: `http://localhost:5173/_api/v1/auth/microsoft-callback` (o proxy do Vite repassa `/_api` à API; `http://localhost` é permitido);
+   - staging/produção: `https://<domínio-público>/_api/v1/auth/microsoft-callback` (HTTPS obrigatório fora de localhost; o código recusa `http` fora de localhost).
+   O servidor usa **somente** esse valor (nunca `Host`/`Origin`/`Referer`/query — há teste).
+4. **Certificados e segredos → Novo segredo do cliente:** copiar o **valor** (não o ID) direto para o ambiente seguro; nunca em chat, Git ou relatório.
+5. **Configuração de token → Adicionar declaração opcional → ID → `email`** (recomendado). Sem isso, contas **corporativas/gerenciadas** podem não trazer `email` no ID token e o **cadastro** falha de forma neutra (`email_ausente`); o **login** de identidade já vinculada não depende de e-mail. Mesmo presente, o e-mail é **atributo**, nunca identidade, e nunca verificado.
+6. **Permissões de API:** nada além do que `openid profile email` já concede (sem Microsoft Graph, sem `offline_access`, sem permissões administrativas).
+7. Variáveis (somente ambiente local/seguro, nunca versionadas): `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_REDIRECT_URI`, (opcional) `MICROSOFT_TENANT`. Conferir com **`npm run microsoft:preflight`** (não imprime client id/segredo; só presença, redirect URI esperado e se o **Discovery real** é aceito; não faz login).
+8. **Separação de produtos:** LEVORA SOLIDÁRIA e LEVORA CRM usam **App Registrations, client IDs, segredos, callbacks e tabelas de identidade distintos**; nada é reutilizado entre eles sem decisão arquitetural explícita (o `sub` é por aplicativo, logo identidades de um não valem no outro).
+
+### 19.4 Continuidade se o App Registration/client ID for substituído
+O `sub` é por aplicativo: um **novo** Client ID gera **novos** `sub` ⇒ nenhuma identidade Microsoft existente casa mais (os usuários não entrariam por Microsoft). Não migramos para `oid` nesta fase. Procedimento seguro (a formalizar em fase própria, **não implementado**): (1) preferir **não** trocar o registro; (2) se inevitável, manter o antigo ativo até concluir; (3) a re-vinculação por usuário exige **reautenticação por outro método** (senha/MFA LEVORA) e comparação do `oid`+`tid` guardados em `provider_metadata` com os do novo token, com auditoria; (4) nunca re-vincular por e-mail.
+
+### 19.5 Resultados: real × sintético × não testado
+| Caso | Status |
+|---|---|
+| Discovery de `common`/`organizations`/`consumers` aceito pelo nosso código; emissor `{tenantid}`→tid == `iss` exigido; JWKS real lido/filtrado, kid real encontrado, nuvem soberana recusada | **VALIDADO contra a Microsoft real** (somente leitura, sem credenciais; `MICROSOFT_REAL_DISCOVERY=1`) |
+| Validação completa do ID token, state/nonce/PKCE, replay, cancelamento, identidade não vinculada, cadastro com código, login vinculado, MFA LEVORA, reauth Microsoft-only, exclusão, concorrência, IDOR, tokens com issuer/aud/nonce inválidos | **VALIDADO somente por teste sintético** (+ preview local com provedor sintético na Fase 93) |
+| Login com conta **pessoal**; com conta **corporativa/escolar**; conta convidada; consentimento real; claims reais (`iss`, `tid`, `oid`, `ver`, `email`, `idp`); amarração chave × emissor com token real; segredo/redirect URI reais | **NÃO TESTADO** (sem App Registration/credenciais) |
+
+**Claims reais observados:** nenhum (nenhum token real foi obtido). Roteiro do teste real: §17.
