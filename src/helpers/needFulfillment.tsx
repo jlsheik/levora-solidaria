@@ -2,6 +2,7 @@ import type { Kysely, Transaction } from "kysely";
 import { sql } from "kysely";
 import type { DB } from "./schema.js";
 import { normalize } from "./opportunityMatching.js";
+import { roundQuantity } from "./quantityRules.js";
 
 /**
  * Ledger append-only de EVENTOS de atendimento de necessidades
@@ -272,7 +273,8 @@ export interface NeedProgress {
 export function computeNeedProgress(quantityNeeded: number, fulfilled: number): NeedProgress {
   return {
     fulfilled,
-    requiredRemaining: Math.max(0, quantityNeeded - fulfilled),
-    surplus: Math.max(0, fulfilled - quantityNeeded),
+    // diferenças na escala da coluna (3 casas): 0,3 − 0,1 = 0,2 (não 0,19999999999999998)
+    requiredRemaining: Math.max(0, roundQuantity(quantityNeeded - fulfilled)),
+    surplus: Math.max(0, roundQuantity(fulfilled - quantityNeeded)),
   };
 }

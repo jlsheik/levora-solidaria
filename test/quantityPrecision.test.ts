@@ -12,6 +12,8 @@ import { schema as allocSchema } from "../src/endpoints/opportunity-allocations_
 import { schema as oppSchema } from "../src/endpoints/opportunities_POST.schema";
 import { schema as registrySchema } from "../src/endpoints/opportunity-registry_POST.schema";
 import { handle as postNeed } from "../src/endpoints/needs_POST";
+import { computeNeedProgress } from "../src/helpers/needFulfillment";
+import { roundQuantity } from "../src/helpers/quantityRules";
 import { createAuthenticatedUser, createTestOrganization, createTestSource, createTestOpportunityRegistry, createTestInventoryItem, buildRequest } from "./helpers";
 
 async function env() {
@@ -81,5 +83,33 @@ describe("quantidades fora da precisão/limite da coluna são recusadas com 400 
       for (const bad of BAD) expect(parse(bad).success, `${name} ${bad}`).toBe(false);
       expect(parse(12.345).success, `${name} válido`).toBe(true);
     }
+  });
+});
+
+describe("tipos inválidos e aritmética exata de quantidades (Fase 94, continuação)", () => {
+  it("true, null, lista, objeto, texto e notação científica/hexadecimal NÃO viram quantidade (antes: true virava 1)", async () => {
+    const e = await env();
+    for (const quantity of [true, false, null, [], {}, "abc", "", "1e3", "0x10", "  "]) {
+      const res = await postStock(post("stock-transactions", e.owner.cookie, { organizationId: e.orgId, itemId: e.itemId, type: "entrada", quantity, reason: "tipo inválido" }));
+      expect(res.status, JSON.stringify(quantity)).toBe(400);
+      const need = await postNeed(post("needs", e.owner.cookie, { organizationId: e.orgId, title: "Cestas", quantityNeeded: quantity, unit: "kg", priority: "media" }));
+      expect(need.status, JSON.stringify(quantity)).toBe(400);
+    }
+    expect(await stockCount(e.orgId)).toBe(0);
+  });
+
+  it("strings decimais continuam aceitas (formulários): \"12.345\" e \" 7 \"", async () => {
+    const e = await env();
+    for (const quantity of ["12.345", " 7 ", "0.001"]) {
+      const res = await postStock(post("stock-transactions", e.owner.cookie, { organizationId: e.orgId, itemId: e.itemId, type: "entrada", quantity, reason: "string decimal" }));
+      expect(res.status, String(quantity)).toBe(200);
+    }
+  });
+
+  it("diferenças na escala da coluna: 0,3 − 0,1 = 0,2 e 0,1 + 0,2 = 0,3 (sem resíduo binário) no progresso da necessidade", () => {
+    expect(roundQuantity(0.1 + 0.2)).toBe(0.3);
+    expect(computeNeedProgress(0.3, 0.1)).toEqual({ fulfilled: 0.1, requiredRemaining: 0.2, surplus: 0 });
+    expect(computeNeedProgress(0.3, 0.4)).toEqual({ fulfilled: 0.4, requiredRemaining: 0, surplus: 0.1 });
+    expect(computeNeedProgress(500, 120)).toEqual({ fulfilled: 120, requiredRemaining: 380, surplus: 0 });
   });
 });

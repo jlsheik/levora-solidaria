@@ -7,6 +7,7 @@ import { schema } from "./opportunity-allocations_POST.schema.js";
 import { sql } from "kysely";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
+import { roundQuantity } from "../helpers/quantityRules.js";
 
 const ALLOCATABLE_STATUSES = ["validada", "aguardando_destinacao", "reservada"];
 
@@ -77,10 +78,11 @@ export async function handle(request: Request) {
           .executeTakeFirst();
 
         const alreadyAllocated = Number(allocatedRow?.total ?? 0);
-        if (alreadyAllocated + input.quantityAllocated > Number(opportunity.quantity)) {
+        // soma em number acumula erro binário (0,1 + 0,2 > 0,3): compara na escala da coluna (3 casas)
+        if (roundQuantity(alreadyAllocated + input.quantityAllocated) > roundQuantity(Number(opportunity.quantity))) {
           return {
             type: "over_allocation" as const,
-            available: Number(opportunity.quantity) - alreadyAllocated,
+            available: roundQuantity(Number(opportunity.quantity) - alreadyAllocated),
           };
         }
       }

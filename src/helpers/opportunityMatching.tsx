@@ -5,6 +5,7 @@ import { getNeedFulfillmentBalanceBatch, computeNeedProgress } from "./needFulfi
 import { sql } from "kysely";
 import type { Transaction } from "kysely";
 import type { DB, Json, NeedPriority } from "./schema.js";
+import { roundQuantity } from "./quantityRules.js";
 
 /**
  * Motor de correspondência — determinístico + IA como apoio, nunca como
@@ -151,7 +152,7 @@ export async function runMatchingForOpportunity(
       .where("status", "!=", "cancelada")
       .executeTakeFirst();
     const alreadyAllocated = Number(allocatedRow?.total ?? 0);
-    let remaining = opportunity.quantity !== null ? Number(opportunity.quantity) - alreadyAllocated : null;
+    let remaining = opportunity.quantity !== null ? roundQuantity(Number(opportunity.quantity) - alreadyAllocated) : null;
     if (remaining !== null && remaining <= 0) {
       return { skipped: true, reason: "quantidade_totalmente_atribuida", allocationsCreated: [], discarded: [] };
     }
