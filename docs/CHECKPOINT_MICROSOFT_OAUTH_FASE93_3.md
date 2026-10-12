@@ -22,7 +22,7 @@ Foi criado no diretório próprio `DEFAULT DIRECTORY (joaolucaspereiratavaresout
 - O nome com acentos/em dash e a variante com espaços foram recusados pelo portal; o nome compacto acima foi criado com êxito. Não registrar outro aplicativo para contornar isso.
 - A permissão padrão `Microsoft Graph / User.Read` foi removida com sucesso para reduzir permissões. A página de permissões mostrou “Nenhuma permissão adicionada”.
 - A configuração de declarações opcionais está vazia na última verificação. Durante a tentativa anterior uma declaração incorreta `acct` foi adicionada e removida com sucesso; não consta atualmente na tabela. A declaração `email` ainda precisa ser configurada/validada com cuidado, mantendo o desenho de identidade mínima (`openid profile email`) e sem acrescentar acesso amplo ao Graph.
-- Nenhum segredo do cliente foi criado até a última verificação.
+- O portal agora mostra **1 segredo do cliente** com descrição `LEVORA SOLIDARIA Fase 93.3 - desenvolvimento local` e vencimento em **10/04/2027** (180 dias). O valor secreto foi omitido da saída de diagnóstico e **ainda não foi inserido no `.env` local**.
 
 ## Estado local do ambiente
 
@@ -45,14 +45,14 @@ O código existente em `src/helpers/microsoftOidc.tsx` usa Authorization Code + 
 
 1. Retomar o **mesmo** registro `LevoraSolidariaAuth93`; verificar identidade de diretório e redirect URI, sem recriar aplicativo.
 2. Se necessário, configurar apenas escopos OIDC mínimos `email`, `openid`, `profile`; não selecionar `offline_access` nem `User.Read`. Configurar a declaração opcional `email` no token ID somente após verificar a semântica suportada pelo fluxo e sem ampliar permissões indevidas.
-3. Criar um segredo de cliente de curta duração (a UI recomenda 180 dias). Seu valor será mostrado uma única vez. O valor **não pode** ser impresso em snapshots, logs, saída de terminal ou chat. Salvá-lo diretamente no `.env` local ignorado pelo Git. Nunca salvar Secret ID no lugar do valor do segredo.
+3. O segredo de cliente de 180 dias já foi criado. **Não criar outro** sem antes confirmar se o atual está utilizável. O valor aparece uma única vez no portal e ainda precisa ser copiado localmente para `MICROSOFT_CLIENT_SECRET=` em `.env`. Não imprimir o valor em snapshots, logs, terminal ou chat; não confundir o Secret ID com o valor.
 4. Executar `npm run microsoft:preflight`; deve informar presença das variáveis e validar o Discovery real sem mostrar segredos.
 5. Executar testes reais de OAuth por conta pessoal e por conta corporativa/escolar, com o usuário fazendo diretamente senha/MFA/consentimentos quando necessário. Verificar `iss`, `tid`, `email` e o issuer da chave contra os tokens reais sem armazenar tokens brutos ou credenciais.
 6. Rodar as verificações de regressão documentadas, atualizar a auditoria e manter o status como **não qualificado** até a evidência exigida estar completa.
 
 ## Continuidade de UI
 
-O navegador utilizado é um perfil separado em `%LOCALAPPDATA%\LevoraMicrosoftPersonalProfile`, aberto pelo helper local `%LOCALAPPDATA%\Temp\entra-personal-browser.cjs`. Processo Node anteriormente ativo: PID 17924. A página estava no painel “Adicionar um segredo de cliente” (sem secret criado); duração recomendada visível: 180 dias. O helper é apenas mecanismo de navegação e não deve ler/imprimir valores de segredos. Se a conexão for interrompida, primeiro inspecionar os registros existentes e os segredos já criados no portal **antes de repetir qualquer mutação**.
+O navegador utilizado é um perfil separado em `%LOCALAPPDATA%\LevoraMicrosoftPersonalProfile`, aberto pelo helper local `%LOCALAPPDATA%\Temp\entra-personal-browser.cjs`. Processo Node atual: PID 27316. O portal confirmou `Segredos do cliente (1)` e vencimento em 10/04/2027; o helper substitui o conteúdo adjacente a `Valor` por `[valor oculto]`. O segredo não consta ainda no `.env`. Se a conexão for interrompida, primeiro inspecionar os registros existentes e os segredos já criados **antes de repetir qualquer mutação**.
 
 ## Não fazer
 
