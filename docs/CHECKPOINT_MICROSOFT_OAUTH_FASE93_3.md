@@ -62,7 +62,7 @@ O navegador utilizado é um perfil separado em `%LOCALAPPDATA%\LevoraMicrosoftPe
 
 ## Atualização de continuidade — preflight concluído e ambiente isolado
 
-Em 2026-10-12 o usuário confirmou que salvou o segredo localmente. O estado das quatro variáveis foi verificado só por presença; Client ID, redirect URI e tenant correspondem à configuração registrada; o .env continua ignorado pelo Git. O comando npm run microsoft:preflight terminou com código 0: Discovery real common aceito. Nenhum login real foi concluído nesta atualização.
+Em 2026-10-12 o usuário confirmou que salvou o segredo localmente. O estado das quatro variáveis foi verificado só por presença; Client ID, redirect URI e tenant correspondem à configuração registrada; o .env continua ignorado pelo Git. O comando npm run microsoft:preflight terminou com código 0: Discovery real common aceito. O primeiro fluxo real com uma conta pessoal foi concluído até a consulta do vínculo: o app retornou “conta não vinculada à Microsoft”, a resposta de negócio esperada depois da validação do ID token e da busca por (provider, issuer, subject). Isso confirma que o fluxo OIDC real alcançou a etapa posterior à validação, mas ainda não qualifica login em conta já vinculada.
 
 Não foi seguro migrar o banco local existente: nele há 3 administradores legados ativos e a migração 0015 exige escolha explícita de um único Platform Owner. Antes de avançar, foi criado backup íntegro em C:\Users\JL\code\levora-solidaria\backups\levora_solidaria_pre_fase93_20261012.dump (142568 bytes; SHA-256 3BDD4C5D0C1FE98E55FC7769A97189306B93B72784D505254306C299C52BB514; 334 itens no pg_restore --list). O banco original não recebeu migrações.
 
@@ -72,7 +72,7 @@ Serviços locais iniciados:
 - API: PID 25328, npm run dev, 78 endpoints descobertos.
 - Vite: PID 19216, npm run client:dev, http://localhost:5173.
 - Health: http://localhost:3001/_api/__health respondeu HTTP 200 com status ok, 78 endpoints e API v1; /login respondeu HTTP 200.
-- Edge InPrivate aberto em http://localhost:5173/login. Próxima ação manual: clicar em “Entrar com Microsoft” na aba “Entrar” e autenticar uma conta pessoal. Não usar “Criar conta” ainda: o banco de teste está sem códigos de acesso. Caso o token valide e a conta ainda não esteja vinculada, o retorno “Esta conta não está vinculada à Microsoft” é esperado.
+- Teste real de conta pessoal efetuado em Edge InPrivate: após “Entrar com Microsoft” e autenticar manualmente, a tela retornou “Esta conta não está vinculada à Microsoft”, resultado esperado no ramo de negócio posterior à verificação do ID token e da busca por identidade. Verificação read-only do banco levora_f933_test após esse callback: users=0, user_identities com provider Microsoft=0, oauth_attempts=1 com status failed=1. Nenhuma conta foi criada nem identidade vinculada, conforme esperado para intent=login. Não usar “Criar conta” nesta fase: o banco de teste não tem códigos de acesso.
 - Não coletar nem registrar senha, MFA, código, state, token, cookie ou URL de callback completa. Microsoft OIDC permanece NÃO QUALIFICADO até testes reais pessoal e corporativo/escolar, e regressões relevantes.
 
 ## Regressões automatizadas após isolar o ambiente
@@ -81,3 +81,15 @@ Serviços locais iniciados:
 - Reexecução: microsoftAuth.test.ts + microsoftSecurity.test.ts + microsoftLifecycle.test.ts — 3 arquivos passaram, 93/93 testes passaram.
 - Teste opt-in de leitura pública: microsoftRealDiscovery.test.ts com MICROSOFT_REAL_DISCOVERY=1 — 3/3 testes passaram. Ele validou Discovery/JWKS públicos de common, organizations e consumers; não usa credenciais e não é login real.
 - A autenticação real com conta pessoal continua aguardando interação manual na janela Edge InPrivate. O teste corporativo/escolar também permanece pendente; não declarar a Fase 93.3 homologada.
+
+## Resultado do primeiro login real — conta pessoal
+
+O usuário concluiu um fluxo real com uma conta Microsoft pessoal e viu a mensagem “Esta conta não está vinculada à Microsoft”. No código, essa resposta é retornada apenas depois de exchangeAndVerify concluir a validação do ID token e a consulta da identidade por provider + issuer + subject não encontrar vínculo. Portanto, o teste demonstra que o Authorization Code + PKCE, a troca do código e a validação real do ID token chegaram ao ramo esperado de identidade ainda não vinculada; não é evidência de login numa conta previamente associada.
+
+Verificação read-only no banco isolado levora_f933_test após o callback:
+- users: 0.
+- user_identities Microsoft: 0.
+- oauth_attempts: 1, status failed: 1 (resultado esperado ao não encontrar vínculo).
+- Nenhum usuário ou vínculo foi criado. Não foi inspecionado nem guardado qualquer token, e-mail, cookie, code ou state.
+
+Próxima ação: testar uma conta corporativa/escolar autorizada. Na janela InPrivate, repetir “Entrar com Microsoft”; no seletor da Microsoft, escolher “Usar outra conta”/“Entrar com outra conta” para não reutilizar a sessão pessoal. O resultado de “não vinculada” também será esperado se ainda não houver identidade corporativa vinculada. Confirmar só o texto visível, nunca enviar credenciais ou dados do token.
