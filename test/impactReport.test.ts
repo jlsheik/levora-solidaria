@@ -508,9 +508,12 @@ describe("Fase 85 — segurança: permissão relatorios.leia e isolamento entre 
     const rA = await report(a);
     const text = await rA.text();
     expect(text).not.toContain("SEGREDO-DA-ORG-B");
-    expect(text).not.toContain("999");
-    expect(text).not.toContain("555");
+    // Quantidades da org B (999 e 555) NÃO podem aparecer como NÚMEROS no relatório de A. A checagem é estrutural: procurar a
+    // substring "999"/"555" no JSON inteiro falhava ao acaso quando um timestamp (ms) ou o horário de geração continha esses dígitos.
+    expect(text).not.toMatch(/"(quantity|entradas|saidas|ajustes|netChange|balanceAtStart|balanceAtEnd|currentStock|fulfilled|periodNet|quantityTo|quantityFrom|delta|netCounted|recebido|correcoes)":-?(999|555|1100)(.0+)?[,}]/);
     const dataA = superjsonParse<Report>(text);
+    const numbers = JSON.stringify(dataA, (_k, v) => (typeof v === "number" ? v : v instanceof Date || typeof v === "string" ? undefined : v)).match(/-?d+(.d+)?/g)?.map(Number) ?? [];
+    expect(numbers.filter((n) => [999, 555, 1100].includes(Math.abs(n)))).toEqual([]);
     expect(dataA.itemMovements.map((m) => m.itemId)).toEqual([a.itemId]);
     expect(dataA.needs.rows.map((n) => n.id)).toEqual([a.needId]);
     expect(dataA.summary.auditEventCount).toBeGreaterThan(0);
@@ -546,10 +549,14 @@ describe("Fase 85 — desempenho: sem N+1 (número de consultas constante)", () 
   async function countQueries(fn: () => Promise<unknown>) {
     const proto = Object.getPrototypeOf(db.getExecutor()) as { executeQuery: (...args: unknown[]) => Promise<unknown> };
     const spy = vi.spyOn(proto, "executeQuery");
+    // A limpeza oportunista de sessões (getServerUserSession) roda com probabilidade fixa e acrescenta 1 DELETE ao acaso — numa
+    // medição e não na outra, isso fazia o teste falhar de vez em quando. Desliga-se o sorteio SÓ durante a contagem.
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.999999);
     try {
       await fn();
       return spy.mock.calls.length;
     } finally {
+      random.mockRestore();
       spy.mockRestore();
     }
   }

@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { positiveQuantity } from "../helpers/quantityRules.js";
 import superjson from "superjson";
 
 export const schema = z.object({
   opportunityId: z.coerce.number().int().positive(),
   organizationId: z.coerce.number().int().positive(),
-  quantityAllocated: z.coerce.number().positive("Informe uma quantidade maior que zero"),
+  quantityAllocated: positiveQuantity("Informe uma quantidade maior que zero"),
   notes: z.string().optional(),
   // Opcional (Fase 45): quando informado, precisa ser uma need ABERTA, com
   // requiredRemaining > 0, da MESMA organização — validado no servidor,

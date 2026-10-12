@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { positiveQuantity } from "../helpers/quantityRules.js";
 import superjson from "superjson";
 
 export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),
   opportunityId: z.coerce.number().int().positive(),
   itemId: z.coerce.number().int().positive(),
-  quantityReceived: z.coerce.number().positive("Informe a quantidade realmente recebida"),
+  quantityReceived: positiveQuantity("Informe a quantidade realmente recebida"),
   notes: z.string().optional(),
 });
 
