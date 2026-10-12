@@ -5,19 +5,21 @@ Implementa §7.2, §25.8 e §25.9 da `docs/IDENTIDADE_E_AUTENTICACAO_ESPECIFICAC
 Nada das Fases 89–92.1 foi reaberto: `users.id` segue sendo a identidade interna; `provisionUserWithAccessCode`, MFA, sessão, reauth por
 identidade (`primary_reauth_at`) e `account-delete` são os mesmos — a Microsoft só entra como **mais um método de autenticação primária**.
 
+> **ESTADO MAIS RECENTE (12/10/2026):** App Registration exclusivo criado; segredo guardado localmente; preflight 0. Login real com conta pessoal chegou ao ramo “não vinculada” após troca do código e validação do ID token. Regressões sintéticas 93/93 e Discovery/JWKS real 3/3. Não existe login real de identidade já vinculada; o usuário não tem conta corporativa/escolar nem código de cadastro válido neste momento. Não declarar produção homologada.
+>
 > **STATUS DE VALIDAÇÃO (Fase 93) — leia antes de qualquer decisão de produção.**
 >
-> | VALIDADO (sintético) | VALIDADO CONTRA A MICROSOFT REAL (somente leitura, sem credenciais) | NÃO VALIDADO (depende de aplicativo registrado + contas reais) |
+> | VALIDADO (sintético) | VALIDADO CONTRA A MICROSOFT REAL | AINDA PENDENTE (depende de contas reais) |
 > |---|---|---|
-> | validação do ID token (assinatura RS256/JWKS, `iss` por `tid`, `aud`, `ver`, `tid`, `exp`, `iat`, `nonce`, `sub`) com chaves geradas na hora | **Discovery real** de `common`, `organizations` e `consumers` aceito pela nossa validação (emissor `{tenantid}` / tenant pessoal, hosts, caminhos); URL de autorização oficial montada | **login real** com conta Microsoft **pessoal** |
+> | validação do ID token (assinatura RS256/JWKS, `iss` por `tid`, `aud`, `ver`, `tid`, `exp`, `iat`, `nonce`, `sub`) com chaves geradas na hora | **Discovery real** de `common`, `organizations` e `consumers` aceito pela nossa validação (emissor `{tenantid}` / tenant pessoal, hosts, caminhos); URL de autorização oficial montada; login pessoal real chegou ao ramo não vinculado após troca e validação do ID token | login final com identidade Microsoft previamente vinculada |
 > | state de uso único, vínculo de navegador, PKCE, replay, tipos de conta (pessoal × corporativa × convidada) e política do authority | **JWKS real** lido, filtrado (nuvens soberanas fora) e consultado por `kid` (assinatura falsa ⇒ `assinatura_invalida`; `kid` inventado ⇒ `chave_desconhecida`) | login real com conta **corporativa/escolar** e conta **convidada** |
-> | concorrência A–J, IDOR, MFA LEVORA após Microsoft, access code, anti-enumeração, reauth e exclusão Microsoft-only | | **registro de aplicativo** (tipos de conta, redirect URI exato, segredo), **tela de consentimento** real |
+> | concorrência A–J, IDOR, MFA LEVORA após Microsoft, access code, anti-enumeração, reauth e exclusão Microsoft-only | | tela de consentimento/cancelamento real |
 > | preview local com provedor Microsoft sintético (desktop/375/390/768, claro/escuro) | | **claims reais de produção** (`iss`, `tid`, `oid`, `ver`, `email` ausente/presente, `idp`), amarração `issuer` da chave × `iss` com tokens reais |
 >
 > **`sintético ≠ Microsoft de produção`.** O provedor sintético prova a NOSSA validação e a integração com código de acesso/MFA/sessão; não prova nada
-> que dependa da Microsoft real. A validação "real" acima é **só do Discovery/JWKS públicos** (`test/microsoftRealDiscovery.test.ts`, opt-in
-> `MICROSOFT_REAL_DISCOVERY=1`): não há aplicativo, conta, token nem consentimento. **A Microsoft NÃO está declarada "pronta para produção"** — isso só
-> ocorre depois do roteiro do §17. Nenhum login real aconteceu até aqui.
+> que dependa da Microsoft real. Os testes de Discovery/JWKS reais são **somente leitura de metadados públicos** (`test/microsoftRealDiscovery.test.ts`, opt-in
+> `MICROSOFT_REAL_DISCOVERY=1`); um login pessoal real também chegou ao ramo de identidade não vinculada, sem persistir token nem claims brutos. **A Microsoft NÃO está declarada "pronta para produção"** — isso só
+> ocorre depois do roteiro do §17. O login final de uma identidade previamente vinculada continua pendente.
 
 ## 1. Princípio
 
@@ -274,3 +276,21 @@ O `sub` é por aplicativo: um **novo** Client ID gera **novos** `sub` ⇒ nenhum
 2. Colocar `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` (o **valor** do segredo) e `MICROSOFT_REDIRECT_URI` num `.env` local ignorado pelo Git (nunca no chat) e rodar `npm run microsoft:preflight` até o Discovery real ser aceito.
 3. Disponibilizar uma conta **pessoal** (Outlook/Hotmail) e uma conta **corporativa/escolar** autorizadas, e um código de acesso válido; as senhas/MFA/consentimento da Microsoft são digitados **pela própria pessoa** no navegador.
 Depois disso, executar o roteiro do §17 e registrar aqui: `iss`, `tid`, presença de `email`, `issuer` da chave usada e a igualdade `{tenantid}`→`tid` == `iss` observada (sem tokens nem dados pessoais).
+
+
+## Atualização de continuidade — limitação humana confirmada e reteste seguro (2026-10-12)
+
+O usuário confirmou que **não possui atualmente uma conta LEVORA vinculada à Microsoft**, não dispõe de uma conta corporativa/escolar Microsoft para o cenário adicional e **não consegue emitir um código de acesso válido neste momento**. Não insistir nesse teste agora e não contornar os controles criando usuário/vínculo/código fictício em banco de aplicação. Essa limitação humana não impede executar regressões sintéticas isoladas.
+
+### Verificações repetidas nesta retomada
+
+- npm run test -- test/microsoftAuth.test.ts test/microsoftSecurity.test.ts test/microsoftLifecycle.test.ts: **3 arquivos, 93/93 testes passaram**, exit code 0. Inclui cadastro sintético com código gerado pelo helper de teste, criação de identidade Microsoft sintética, login vinculado, controles de segurança, ciclo de vida, MFA, exclusão/reauth e concorrência. Isso comprova a nossa implementação com fixtures, não autenticação real de uma conta vinculada.
+- MICROSOFT_REAL_DISCOVERY=1 npm run test -- test/microsoftRealDiscovery.test.ts: **1 arquivo, 3/3 testes passaram**, exit code 0. Discovery/JWKS públicos de common, organizations e consumers, sem credenciais ou login.
+- npm run microsoft:preflight: **exit code 0**. As variáveis obrigatórias estão definidas apenas por presença, o redirect URI corresponde à configuração local e o Discovery real foi aceito; nenhum segredo foi impresso.
+- A tentativa real anterior com conta Microsoft pessoal chegou à resposta de negócio “Esta conta não está vinculada à Microsoft”. O banco isolado registrou somente a tentativa OAuth falha esperada; não criou usuário nem user_identities Microsoft. O caminho real demonstra troca/validação do ID token antes de procurar o vínculo, mas não prova o login final de conta já vinculada.
+
+### Próximos limites e retomada
+
+Nenhum código de acesso é necessário para a intenção **login**; o código só é necessário para **cadastro**. Para a qualificação real restante, dependem de uma interação humana futura uma conta Microsoft corporativa/escolar autorizada e, caso se queira provar o cadastro real de uma identidade nova, um código legítimo emitido pelo fluxo administrativo. Não gerar bypass nem inserir linhas artificiais no banco da aplicação para simular esses fatos.
+
+**Estado continua: Microsoft OIDC NÃO QUALIFICADA para produção.** Enquanto a conta corporativa/escolar não estiver disponível, seguir apenas com auditorias, regressões sintéticas isoladas e documentação; manter explícita a distinção entre verificações locais/sintéticas e login real. Worktree inicial estava limpo em 31bf0dc; nenhuma alteração de código de produto foi feita nesta retomada.
