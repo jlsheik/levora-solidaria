@@ -112,6 +112,18 @@ describe("claims controlados por quem administra o tenant (email, name): higiene
     for (const email of ["Pessoa@Contoso.COM", "nome.sobrenome+tag@sub.contoso.com.br", "a_b-c@contoso.org"]) expect((await verify({ email })).email, email).toBe(email.toLowerCase());
   });
 
+  it("sem estado entre chamadas: um e-mail rejeitado não faz o PRÓXIMO (outro usuário/requisição) escapar da checagem de caracteres invisíveis/bidi", async () => {
+    const ZW = String.fromCharCode(0x200b);
+    const RLO = String.fromCharCode(0x202e);
+    const sequence = ["x" + ZW + "y@contoso.com", RLO + "a@contoso.com", "ok@contoso.com", "b" + ZW + "@contoso.com", ZW + "c@contoso.com", "a@" + RLO + "contoso.com", "a@contoso.com"];
+    const expected = [null, null, "ok@contoso.com", null, null, null, "a@contoso.com"];
+    for (let round = 0; round < 3; round++) {
+      const got = [];
+      for (const email of sequence) got.push((await verify({ email })).email);
+      expect(got).toEqual(expected);
+    }
+  });
+
   it("e2e: cadastro com e-mail malformado ⇒ falha neutra (email_ausente), nada criado, código intacto", async () => {
     const { code, id } = await makeAccessCode();
     const flow = await startFlow("signup", code);
