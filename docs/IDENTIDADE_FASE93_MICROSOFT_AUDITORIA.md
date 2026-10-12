@@ -261,3 +261,16 @@ O `sub` é por aplicativo: um **novo** Client ID gera **novos** `sub` ⇒ nenhum
 **Discovery/JWKS reais (opt-in `MICROSOFT_REAL_DISCOVERY=1`, repetido nesta fase):** continuam aceitos, e **todas as chaves públicas atuais do JWKS real declaram `issuer`** (o modelo `{tenantid}` ou o tenant pessoal) — logo a nova regra não rejeita chave real de hoje. Isto valida **somente metadados públicos**: **nenhum login Microsoft real foi feito** e a cadeia completa **não** foi testada com token de usuário real. Se, num login real, a Microsoft publicar chave sem `issuer`, o login falhará de forma segura (e isso será um achado, não uma brecha).
 
 **Correção do texto anterior:** onde o §19.2 dizia que chaves sem `issuer` eram aceitas, vale esta seção. **Estado:** autenticação Microsoft real **continua pendente**; a Microsoft **não** está pronta para produção.
+
+## 21. Fase 93.3 — tentativa de qualificação real (2026-10-12): BLOQUEADA POR CONFIGURAÇÃO/VALIDAÇÃO HUMANA
+
+**Ambiente:** worktree `levora-f933` (branch `fase-93-3-microsoft-qualificacao`, derivada de `ff29bd6`), Windows, instalação local.
+**Resultado do `npm run microsoft:preflight`:** `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` e `MICROSOFT_REDIRECT_URI` **AUSENTES** (e nenhuma linha `MICROSOFT_*` no `.env` local do repositório principal; `.env` está no `.gitignore`); `MICROSOFT_TENANT` ausente (padrão `common`). Nada foi enviado à Microsoft; nenhum login, token ou claim real existe.
+
+**Estado:** nenhum cenário real (pessoal, corporativo/escolar, MFA, reauth, exclusão, negativos) foi exercitado. **Não qualificada. A Microsoft NÃO está pronta para produção.** Nenhum código foi alterado; o fail-closed da 93.2 permanece. Nenhum token foi fabricado nem valor de teste usado no lugar de credenciais.
+
+**Ações humanas pendentes (únicas que desbloqueiam):**
+1. Criar o App Registration conforme §19.3 (contas organizacionais + pessoais; plataforma Web; redirect `http://localhost:5173/_api/v1/auth/microsoft-callback`; *optional claim* `email` no ID token; sem permissões Graph) — exclusivo da LEVORA SOLIDÁRIA (não reutilizar registro do LEVORA CRM).
+2. Colocar `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` (o **valor** do segredo) e `MICROSOFT_REDIRECT_URI` num `.env` local ignorado pelo Git (nunca no chat) e rodar `npm run microsoft:preflight` até o Discovery real ser aceito.
+3. Disponibilizar uma conta **pessoal** (Outlook/Hotmail) e uma conta **corporativa/escolar** autorizadas, e um código de acesso válido; as senhas/MFA/consentimento da Microsoft são digitados **pela própria pessoa** no navegador.
+Depois disso, executar o roteiro do §17 e registrar aqui: `iss`, `tid`, presença de `email`, `issuer` da chave usada e a igualdade `{tenantid}`→`tid` == `iss` observada (sem tokens nem dados pessoais).
