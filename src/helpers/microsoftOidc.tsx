@@ -277,6 +277,29 @@ function tenantAllowed(config: MicrosoftConfig, tid: string) {
 
 const short = (v: unknown, max: number) => (typeof v === "string" && v.trim().length > 0 && v.length <= max ? v.trim() : null);
 
+// Controle (C0/C1), separadores de linha/parágrafo e marcas de formatação/bidi/zero-width: nunca em nome nem e-mail.
+const UNSAFE_CHARS = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
+const ADDRESS_FORBIDDEN = /[\s@<>"',;:()[\]\\]/;
+
+/** `local@dominio.tld` simples (um só `@`, sem espaços/controle/aspas/vírgula/colchetes/HTML), minúsculo; qualquer outra coisa ⇒ null (tratado como ausente). */
+function safeEmail(raw: string): string | null {
+  const value = raw.trim().toLowerCase();
+  if (value.length === 0 || value.length > 320 || UNSAFE_CHARS.test(value)) return null;
+  UNSAFE_CHARS.lastIndex = 0;
+  const parts = value.split("@");
+  if (parts.length !== 2) return null;
+  const [local, domain] = parts;
+  if (local.length < 1 || local.length > 64 || ADDRESS_FORBIDDEN.test(local)) return null;
+  if (domain.length < 3 || ADDRESS_FORBIDDEN.test(domain) || !domain.includes(".") || domain.startsWith(".") || domain.endsWith(".") || domain.includes("..")) return null;
+  return value;
+}
+
+/** Nome para exibição: caracteres perigosos viram espaço, espaços colapsam; vazio ⇒ null. */
+function cleanDisplayName(raw: string): string | null {
+  const cleaned = raw.replace(UNSAFE_CHARS, " ").replace(/\s+/g, " ").trim();
+  return cleaned.length > 0 ? cleaned : null;
+}
+
 /**
  * Valida o ID token: assinatura (RS256 pelo JWKS; `kid` obrigatório), `iss` == https://login.microsoftonline.com/{tid}/v2.0 (tid do próprio
  * token, no formato GUID) e o `tid` permitido pelo authority configurado, `aud` == client_id (único), `ver` == "2.0", exp, iat (não no futuro
@@ -354,8 +377,8 @@ export async function verifyMicrosoftIdToken(config: MicrosoftConfig, idToken: s
   if (idp) metadata.idp = idp;
 
   // E-mail: SOMENTE o claim `email` (nunca preferred_username/upn, que são nomes legíveis mutáveis) e só como atributo.
-  const rawEmail = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
-  const email = rawEmail.length > 0 && rawEmail.length <= 320 && rawEmail.includes("@") ? rawEmail : null;
-  const name = short(claims.name, 120);
+  // Quem administra um tenant controla estes valores: só entram se tiverem FORMA de e-mail/nome (higiene, não prova de posse).
+  const email = typeof claims.email === "string" ? safeEmail(claims.email) : null;
+  const name = typeof claims.name === "string" && claims.name.length <= 120 ? cleanDisplayName(claims.name) : null;
   return { issuer: claims.iss as string, subject: sub, email, emailVerified: false, name, metadata };
 }

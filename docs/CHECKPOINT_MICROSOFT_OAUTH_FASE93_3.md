@@ -115,3 +115,10 @@ O usuário confirmou que **não possui atualmente uma conta LEVORA vinculada à 
 Nenhum código de acesso é necessário para a intenção **login**; o código só é necessário para **cadastro**. Para a qualificação real restante, dependem de uma interação humana futura uma conta Microsoft corporativa/escolar autorizada e, caso se queira provar o cadastro real de uma identidade nova, um código legítimo emitido pelo fluxo administrativo. Não gerar bypass nem inserir linhas artificiais no banco da aplicação para simular esses fatos.
 
 **Estado continua: Microsoft OIDC NÃO QUALIFICADA para produção.** Enquanto a conta corporativa/escolar não estiver disponível, seguir apenas com auditorias, regressões sintéticas isoladas e documentação; manter explícita a distinção entre verificações locais/sintéticas e login real. Worktree inicial estava limpo em 31bf0dc; nenhuma alteração de código de produto foi feita nesta retomada.
+
+## Atualização — continuação independente de conta real/código (2026-10-12)
+
+- Auditoria ponta a ponta e novos testes de resiliência/higiene: ver §22 de `docs/IDENTIDADE_FASE93_MICROSOFT_AUDITORIA.md`.
+- Código alterado (defeito demonstrado): `safeEmail`/`cleanDisplayName` em `src/helpers/microsoftOidc.tsx` (e-mail malformado ⇒ ausente; nome sem controle/bidi). Testes: `test/microsoftResilience.test.ts` (13). Microsoft sintético: 106/106.
+- Evidência real nova (sem dado sensível): o evento de auditoria `login_microsoft_falhou/identidade_nao_vinculada` do login pessoal prova que o ID token real passou por TODA a validação (inclui o `issuer` da chave fail-closed) antes da busca de vínculo.
+- **Continua NÃO QUALIFICADA.** Pendentes humanos: conta corporativa/escolar, identidade vinculada/cadastro (exige código legítimo emitido pelo fluxo administrativo), MFA/reauth/exclusão reais, negativos reais. Não fabricar conta/código/vínculo no banco.
