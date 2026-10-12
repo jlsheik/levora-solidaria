@@ -1,5 +1,9 @@
 # Checkpoint de continuidade — LEVORA SOLIDÁRIA / Microsoft OIDC — Fase 93.3
 
+> **ESTADO MAIS RECENTE — 12/10/2026:** App Registration exclusivo da LEVORA SOLIDÁRIA existe; o segredo está no .env local ignorado pelo Git; preflight 0. O login real com conta pessoal chegou ao ramo “Esta conta não está vinculada à Microsoft”, após troca do código e validação do ID token; nenhum usuário/vínculo foi criado. Regressões sintéticas: 93/93; Discovery/JWKS públicos reais: 3/3. O usuário não tem conta corporativa/escolar nem código válido disponível agora. Não insistir nesse teste, não fabricar identidade/código na base da aplicação e não declarar produção homologada.
+
+
+
 **Última verificação:** 2026-10-12 (horário de Brasília)  
 **Workspace:** `C:\Users\JL\code\levora-f933`  
 **Branch:** `fase-93-3-microsoft-qualificacao`  
@@ -93,3 +97,21 @@ Verificação read-only no banco isolado levora_f933_test após o callback:
 - Nenhum usuário ou vínculo foi criado. Não foi inspecionado nem guardado qualquer token, e-mail, cookie, code ou state.
 
 Próxima ação: testar uma conta corporativa/escolar autorizada. Na janela InPrivate, repetir “Entrar com Microsoft”; no seletor da Microsoft, escolher “Usar outra conta”/“Entrar com outra conta” para não reutilizar a sessão pessoal. O resultado de “não vinculada” também será esperado se ainda não houver identidade corporativa vinculada. Confirmar só o texto visível, nunca enviar credenciais ou dados do token.
+
+
+## Atualização de continuidade — limitação humana confirmada e reteste seguro (2026-10-12)
+
+O usuário confirmou que **não possui atualmente uma conta LEVORA vinculada à Microsoft**, não dispõe de uma conta corporativa/escolar Microsoft para o cenário adicional e **não consegue emitir um código de acesso válido neste momento**. Não insistir nesse teste agora e não contornar os controles criando usuário/vínculo/código fictício em banco de aplicação. Essa limitação humana não impede executar regressões sintéticas isoladas.
+
+### Verificações repetidas nesta retomada
+
+- npm run test -- test/microsoftAuth.test.ts test/microsoftSecurity.test.ts test/microsoftLifecycle.test.ts: **3 arquivos, 93/93 testes passaram**, exit code 0. Inclui cadastro sintético com código gerado pelo helper de teste, criação de identidade Microsoft sintética, login vinculado, controles de segurança, ciclo de vida, MFA, exclusão/reauth e concorrência. Isso comprova a nossa implementação com fixtures, não autenticação real de uma conta vinculada.
+- MICROSOFT_REAL_DISCOVERY=1 npm run test -- test/microsoftRealDiscovery.test.ts: **1 arquivo, 3/3 testes passaram**, exit code 0. Discovery/JWKS públicos de common, organizations e consumers, sem credenciais ou login.
+- npm run microsoft:preflight: **exit code 0**. As variáveis obrigatórias estão definidas apenas por presença, o redirect URI corresponde à configuração local e o Discovery real foi aceito; nenhum segredo foi impresso.
+- A tentativa real anterior com conta Microsoft pessoal chegou à resposta de negócio “Esta conta não está vinculada à Microsoft”. O banco isolado registrou somente a tentativa OAuth falha esperada; não criou usuário nem user_identities Microsoft. O caminho real demonstra troca/validação do ID token antes de procurar o vínculo, mas não prova o login final de conta já vinculada.
+
+### Próximos limites e retomada
+
+Nenhum código de acesso é necessário para a intenção **login**; o código só é necessário para **cadastro**. Para a qualificação real restante, dependem de uma interação humana futura uma conta Microsoft corporativa/escolar autorizada e, caso se queira provar o cadastro real de uma identidade nova, um código legítimo emitido pelo fluxo administrativo. Não gerar bypass nem inserir linhas artificiais no banco da aplicação para simular esses fatos.
+
+**Estado continua: Microsoft OIDC NÃO QUALIFICADA para produção.** Enquanto a conta corporativa/escolar não estiver disponível, seguir apenas com auditorias, regressões sintéticas isoladas e documentação; manter explícita a distinção entre verificações locais/sintéticas e login real. Worktree inicial estava limpo em 31bf0dc; nenhuma alteração de código de produto foi feita nesta retomada.
