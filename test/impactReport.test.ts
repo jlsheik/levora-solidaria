@@ -301,15 +301,93 @@ describe("Fase 85 — P-R1/P-R5: acumulado + período + hoje; intervalo semiaber
     expect(old.donations.rows).toHaveLength(0);
   });
 
-  it("período vazio e período parcial: itens e doações só do que está no intervalo; saldo no fim inclui o histórico anterior", async () => {
+  it("período sem movimentação: o item COM saldo anterior aparece só com o saldo (movimentação do período zerada); doações e cartões continuam só do período", async () => {
     const e = await setupEnv();
     await insertManualEntry(e, new Date("2026-01-05T12:00:00Z"), 30);
     await insertManualEntry(e, new Date("2026-02-05T12:00:00Z"), 20);
     const empty = await reportData(e, { start: new Date("2026-05-01T00:00:00Z"), end: new Date("2026-05-31T00:00:00Z") });
-    expect(empty.itemMovements).toEqual([]);
-    expect(empty.summary.donations.total).toBe(0);
+    expect(empty.itemMovements).toHaveLength(1);
+    expect(empty.itemMovements[0]).toMatchObject({ itemId: e.itemId, entradas: 0, saidas: 0, ajustes: 0, ajustesRede: 0, ajustesOutros: 0, netChange: 0, balanceAtStart: 50, balanceAtEnd: 50, currentStock: 50 });
+    expect(empty.summary.donations.total).toBe(0); // o saldo anterior NÃO é doação do período
+    expect(empty.donations.rows).toHaveLength(0);
     const feb = await reportData(e, { start: new Date("2026-02-01T00:00:00Z"), end: new Date("2026-03-01T00:00:00Z") });
     expect(feb.itemMovements[0]).toMatchObject({ entradas: 20, balanceAtStart: 30, balanceAtEnd: 50 });
+  });
+});
+
+describe("Fase 94 — inclusão na tabela 'Movimentação por item': movimentação no período OU saldo final ≠ 0", () => {
+  const exit = (e: Env, itemId: number, at: Date, quantity: number) =>
+    db.insertInto("stockTransactions").values({ organizationId: e.orgId, itemId, type: "saida", delta: String(-quantity), reason: "Saída", createdByUserId: e.owner.userId, createdAt: at }).execute();
+  const ledgerAndStockCounts = async (orgId: number) => ({
+    st: Number((await db.selectFrom("stockTransactions").select((eb) => eb.fn.countAll<string>().as("n")).where("organizationId", "=", orgId).executeTakeFirstOrThrow()).n),
+    nf: Number((await db.selectFrom("needFulfillments").select((eb) => eb.fn.countAll<string>().as("n")).where("organizationId", "=", orgId).executeTakeFirstOrThrow()).n),
+  });
+
+  async function scenario() {
+    const e = await setupEnv();
+    const withMovement = e.itemId; // A: entrada DENTRO do período
+    const onlyBalance = (await createTestInventoryItem(e.orgId, e.owner.userId, { unit: "kg" })).id; // B: saldo anterior, nenhuma movimentação no período
+    const zeroBalance = (await createTestInventoryItem(e.orgId, e.owner.userId, { unit: "kg" })).id; // C: entrou e saiu ANTES do período (saldo 0), sem movimentação no período
+    const futureOnly = (await createTestInventoryItem(e.orgId, e.owner.userId, { unit: "kg" })).id; // D: só tem movimento DEPOIS do fim do período
+    await insertManualEntry(e, new Date("2026-03-10T12:00:00Z"), 40, withMovement);
+    await insertManualEntry(e, new Date("2026-01-10T12:00:00Z"), 25, onlyBalance);
+    await insertManualEntry(e, new Date("2026-01-11T12:00:00Z"), 15, zeroBalance);
+    await exit(e, zeroBalance, new Date("2026-01-12T12:00:00Z"), 15);
+    await insertManualEntry(e, new Date("2026-04-20T12:00:00Z"), 99, futureOnly);
+    return { e, withMovement, onlyBalance, zeroBalance, futureOnly };
+  }
+  const period = { start: new Date("2026-03-01T00:00:00Z"), end: new Date("2026-04-01T00:00:00Z") };
+
+  it("A com movimentação e B só com saldo aparecem; C (saldo final zero, sem movimentação) e D (só movimento futuro) ficam fora", async () => {
+    const { e, withMovement, onlyBalance, zeroBalance, futureOnly } = await scenario();
+    const r = await reportData(e, period);
+    const ids = r.itemMovements.map((m) => m.itemId);
+    expect(ids).toContain(withMovement);
+    expect(ids).toContain(onlyBalance);
+    expect(ids).not.toContain(zeroBalance);
+    expect(ids).not.toContain(futureOnly);
+    const A = r.itemMovements.find((m) => m.itemId === withMovement)!;
+    const B = r.itemMovements.find((m) => m.itemId === onlyBalance)!;
+    expect(A).toMatchObject({ entradas: 40, saidas: 0, ajustes: 0, netChange: 40, balanceAtStart: 0, balanceAtEnd: 40 });
+    expect(B).toMatchObject({ entradas: 0, saidas: 0, ajustes: 0, ajustesRede: 0, ajustesOutros: 0, netChange: 0, balanceAtStart: 25, balanceAtEnd: 25, currentStock: 25 });
+    expect(r.itemMovements.map((m) => m.itemName)).toEqual([...r.itemMovements.map((m) => m.itemName)].sort((x, y) => x.localeCompare(y)));
+  });
+
+  it("incluir linhas só-de-saldo NÃO infla nada: cartões, doações e Σ da movimentação do período são os mesmos de antes; reconcilia com o estoque real e o ledger", async () => {
+    const { e, withMovement, onlyBalance } = await scenario();
+    const before = await ledgerAndStockCounts(e.orgId);
+    const r = await reportData(e, period);
+    expect(await ledgerAndStockCounts(e.orgId)).toEqual(before); // nenhum movimento artificial, ledger intocado
+    expect(r.summary.donations.total).toBe(1); // só a entrada de 40 dentro do período
+    expect(r.donations.rows.map((d) => d.quantity)).toEqual([40]);
+    expect(r.itemMovements.reduce((acc, m) => acc + m.entradas, 0)).toBe(40);
+    expect(r.itemMovements.reduce((acc, m) => acc + m.netChange, 0)).toBe(40);
+    for (const m of r.itemMovements) {
+      const sums = await db.selectFrom("stockTransactions").select((eb) => [eb.fn.sum("delta").as("total")]).where("organizationId", "=", e.orgId).where("itemId", "=", m.itemId).executeTakeFirstOrThrow();
+      expect(m.currentStock, `item ${m.itemId}: saldo × Σ stock_transactions`).toBe(Number(sums.total ?? 0));
+      expect(m.balanceAtStart + m.netChange, `item ${m.itemId}: inicial + movimentação = final`).toBe(m.balanceAtEnd);
+    }
+    // o saldo de B é o real acumulado até o fim do período, mesmo sem nenhuma movimentação nele
+    const sumB = await db.selectFrom("stockTransactions").select((eb) => [eb.fn.sum("delta").as("total")]).where("itemId", "=", onlyBalance).where("createdAt", "<", period.end).executeTakeFirstOrThrow();
+    expect(r.itemMovements.find((m) => m.itemId === onlyBalance)!.balanceAtEnd).toBe(Number(sumB.total));
+    expect(withMovement).toBeGreaterThan(0);
+  });
+
+  it("filtro por item continua valendo: o item só com saldo aparece quando filtrado, e outros itens não aparecem", async () => {
+    const { e, onlyBalance, zeroBalance } = await scenario();
+    const onlyB = await reportData(e, { ...period, itemId: onlyBalance });
+    expect(onlyB.itemMovements.map((m) => m.itemId)).toEqual([onlyBalance]);
+    const zero = await reportData(e, { ...period, itemId: zeroBalance });
+    expect(zero.itemMovements).toEqual([]);
+  });
+
+  it("item cujo saldo vira zero DENTRO do período aparece (tem movimentação) e o saldo anterior não entra como movimentação", async () => {
+    const e = await setupEnv();
+    await insertManualEntry(e, new Date("2026-01-10T12:00:00Z"), 30);
+    await exit(e, e.itemId, new Date("2026-03-15T12:00:00Z"), 30);
+    const r = await reportData(e, period);
+    expect(r.itemMovements).toHaveLength(1);
+    expect(r.itemMovements[0]).toMatchObject({ entradas: 0, saidas: 30, netChange: -30, balanceAtStart: 30, balanceAtEnd: 0, currentStock: 0 });
   });
 });
 

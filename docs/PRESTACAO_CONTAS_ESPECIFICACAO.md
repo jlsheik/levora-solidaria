@@ -140,6 +140,8 @@ cartões globais são **contagens**.
 
 ### 4.2 Movimentação física por item (tabela existente, **mantida**)
 
+> **Regra de inclusão (decisão do dono, Fase 94):** o item aparece quando (1) teve movimentação `created_at ∈ [início, fim)` **ou** (2) tem saldo final (acumulado até `fim`) **≠ 0**. Item sem movimentação e com saldo final zero fica fora. Para item só com saldo, Entradas/Saídas/Ajustes/Líquido do período são **0** (o saldo anterior não é movimentação), Saldo inicial = Saldo final = acumulado real; nenhum movimento é criado e os cartões/totais de movimentação não mudam. (Antes: só itens com movimentação — decisão da Fase 85, substituída.)
+
 Origem de **cada** coluna (todas de `stock_transactions`, sem duplicar o ledger):
 
 | Coluna | Cálculo |

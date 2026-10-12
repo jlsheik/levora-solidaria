@@ -288,7 +288,7 @@ export default function ImpactReportPage() {
 
               <h3 className={styles.sectionTitle}>Movimentação de estoque por item</h3>
               {data.itemMovements.length === 0 ? (
-                <p className={styles.emptyText}>Nenhuma movimentação de estoque neste período.</p>
+                <p className={styles.emptyText}>Nenhuma movimentação e nenhum saldo de estoque neste período.</p>
               ) : (
                 <>
                   <div className={`${styles.tableScroll} ${styles.desktopOnly}`}>

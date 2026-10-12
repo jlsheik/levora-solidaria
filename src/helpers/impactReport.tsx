@@ -343,7 +343,10 @@ export async function buildImpactReport(db: Kysely<DB>, params: ImpactReportPara
     LEFT JOIN need_fulfillments nf ON nf.stock_transaction_id = st.id AND nf.organization_id = ${org}
     WHERE st.organization_id = ${org} ${stItem}
     GROUP BY i.id, i.name, i.unit
+    -- Inclusão (decisão de produto, Fase 94): o item aparece se teve movimentação no período OU tem saldo final ≠ 0 (acumulado até o fim).
+    -- Item só com saldo: entradas/saídas/ajustes do período = 0 (o saldo anterior NÃO é movimentação); nada é criado no ledger.
     HAVING count(*) FILTER (WHERE st.created_at >= ${s} AND st.created_at < ${e}) > 0
+        OR coalesce(sum(st.delta) FILTER (WHERE st.created_at < ${e}), 0) <> 0
     ORDER BY i.name, i.id
   `.execute(db)
   ).rows;
