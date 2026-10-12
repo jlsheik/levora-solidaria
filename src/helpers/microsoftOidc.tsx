@@ -279,13 +279,14 @@ const short = (v: unknown, max: number) => (typeof v === "string" && v.trim().le
 
 // Controle (C0/C1), separadores de linha/parágrafo e marcas de formatação/bidi/zero-width: nunca em nome nem e-mail.
 const UNSAFE_CHARS = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
+// Versão SEM a flag g para `.test` (um regex global guarda lastIndex entre chamadas e deixaria passar o caractere seguinte de outra requisição).
+const UNSAFE_CHAR = new RegExp(UNSAFE_CHARS.source);
 const ADDRESS_FORBIDDEN = /[\s@<>"',;:()[\]\\]/;
 
 /** `local@dominio.tld` simples (um só `@`, sem espaços/controle/aspas/vírgula/colchetes/HTML), minúsculo; qualquer outra coisa ⇒ null (tratado como ausente). */
 function safeEmail(raw: string): string | null {
   const value = raw.trim().toLowerCase();
-  if (value.length === 0 || value.length > 320 || UNSAFE_CHARS.test(value)) return null;
-  UNSAFE_CHARS.lastIndex = 0;
+  if (value.length === 0 || value.length > 320 || UNSAFE_CHAR.test(value)) return null;
   const parts = value.split("@");
   if (parts.length !== 2) return null;
   const [local, domain] = parts;

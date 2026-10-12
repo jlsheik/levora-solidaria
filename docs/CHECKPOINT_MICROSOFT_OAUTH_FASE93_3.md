@@ -122,3 +122,9 @@ Nenhum código de acesso é necessário para a intenção **login**; o código s
 - Código alterado (defeito demonstrado): `safeEmail`/`cleanDisplayName` em `src/helpers/microsoftOidc.tsx` (e-mail malformado ⇒ ausente; nome sem controle/bidi). Testes: `test/microsoftResilience.test.ts` (13). Microsoft sintético: 106/106.
 - Evidência real nova (sem dado sensível): o evento de auditoria `login_microsoft_falhou/identidade_nao_vinculada` do login pessoal prova que o ID token real passou por TODA a validação (inclui o `issuer` da chave fail-closed) antes da busca de vínculo.
 - **Continua NÃO QUALIFICADA.** Pendentes humanos: conta corporativa/escolar, identidade vinculada/cadastro (exige código legítimo emitido pelo fluxo administrativo), MFA/reauth/exclusão reais, negativos reais. Não fabricar conta/código/vínculo no banco.
+
+## Atualização — revisão de 8a5a0c0 e higiene de segredos (2026-10-12)
+
+- Defeito achado na revisão e corrigido: regex global com `.test()` guardava `lastIndex` entre chamadas (e-mail seguinte podia escapar da checagem de invisíveis/bidi). Teste de regressão em `test/microsoftResilience.test.ts`.
+- Novo `test/secretsHygiene.test.ts`; varredura do segredo real/JWT/chaves do `.env` na árvore e no histórico: 0 ocorrências (só contagens, nenhum valor impresso).
+- Parte executável da Slice 93.3 concluída; **Microsoft continua NÃO QUALIFICADA**. Detalhes: §23 da auditoria.
