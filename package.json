@@ -13,6 +13,7 @@
     "build:server": "tsc -p tsconfig.server.json && node scripts/copy-server-assets.cjs",
     "start": "node dist-server/server/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "qa:visual": "node scripts/qa-visual/run.mjs",
     "db:migrate": "tsx db/migrate.ts",
     "db:migrate:incremental": "tsx db/run-migrations.ts",
     "seed:staging": "node dist-server/db/seed-staging.js",
