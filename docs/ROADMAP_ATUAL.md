@@ -54,7 +54,7 @@ DOCUMENTAÇÃO DESATUALIZADA**.
 | Discovery / conectores | Contrato `SourceConnector` + conector `manual`; nenhum conector real e **nenhum código chama `run()`** | `helpers/connectors*.tsx` (excluídos do build do servidor) | Seção 6 |
 | IA | Apoio opcional no matching; sem chave configurada; agentes dos documentos (Scout, Outreach…) não existem | `aiClient.tsx` usado só em `opportunityMatching.tsx` | Seção 6 |
 | Observabilidade | `__health`, logs, `background_task_runs`, auditoria; sem métricas nem alertas | `server/index.ts`, `docs/PRODUCTION_READINESS.md` §13–14 | Pós-MVP |
-| Edição de dados | Cria, mas não edita: organização, necessidade (título/quantidade/prioridade), item de inventário, fonte | Inventário completo de endpoints (Fase 71) | Sem decisão registrada; levar ao dono quando surgir demanda |
+| Edição de dados | **Edita (Fase 94, autorizado pelo dono):** nome da organização (`organization-name`), nome da fonte (`source-name`) e título/descrição/prioridade da necessidade (`need-details`). **Continua sem editar:** quantidade, unidade, item vinculado e status da necessidade, demais campos de organização e fonte, itens de inventário | `test/organizationName.test.ts`, `sourceName.test.ts`, `needDetails.test.ts`; §10 | Edição de quantidade/unidade/item/status e de itens de inventário depende de regras de ledger/progresso/estoque/matching ainda não decididas — levar ao dono |
 | Autenticação de conta | Sem troca/redefinição de senha | `docs/SECURITY.md`, `docs/RATE_LIMITING.md` já registram | Seção 6 (depende de SMTP) |
 
 ## 3. CONCLUÍDO (Fase 73) — gestão de membros
@@ -96,7 +96,7 @@ do projeto decidir (registrados em "instrução explícita" nas Fases 27–45).
 | CSRF/XSS em navegador real | ADIADO | L934 | — |
 | Logística em etapas para oportunidades locais | ADIADO | L273 | Decisão deliberada |
 | Tarefas de notificação e indicadores | ADIADO | L190 | Dependem de notificações, que não existem |
-| `Input` com `width:100%` + `content-box` | PENDENTE | Fase 69 | Corrigir alteraria a altura de todos os campos |
+| `Input` com `width:100%` + `content-box` | **RESOLVIDO (a42c912, Fase 94)** | `Input.module.css` agora é `box-sizing: border-box`; excesso de 26/18 px → 0 em 25 diálogos × 4 larguras e 12 telas; altura dos campos 58 → 40 px (textarea 114 → 96 px) | Ver §10, “Acessibilidade visual dos componentes compartilhados” |
 
 ## 6. BLOQUEADO
 
