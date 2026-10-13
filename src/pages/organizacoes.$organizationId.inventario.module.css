@@ -227,7 +227,7 @@
 
 .deltaNegative {
   font-family: var(--font-family-monospace);
-  color: var(--error);
+  color: var(--error-text);
   font-weight: 600;
   flex-shrink: 0;
 }

@@ -136,7 +136,7 @@
 
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--error);
+    color: var(--error-text);
 
     animation: slideDown var(--animation-duration-normal) ease-out;
   }
@@ -154,7 +154,7 @@
 
   .error button {
     margin-left: auto;
-    color: var(--error);
+    color: var(--error-text);
     flex-shrink: 0;
   }
 }
