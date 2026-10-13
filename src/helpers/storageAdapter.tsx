@@ -23,6 +23,7 @@ export interface StorageAdapter {
   readonly provider: "local" | "s3";
   upload(input: { organizationId: number; buffer: Buffer; contentType: string }): Promise<StoredFileRef>;
   download(storageKey: string): Promise<Buffer>;
+  /** Remove o objeto. Chave já inexistente = sucesso; qualquer outra falha do armazenamento LANÇA (o chamador decide como registrar — nada é engolido aqui). */
   delete(storageKey: string): Promise<void>;
 }
 
@@ -44,7 +45,11 @@ class LocalDiskStorageAdapter implements StorageAdapter {
   }
 
   async delete(storageKey: string): Promise<void> {
-    await unlink(this.resolveSafePath(storageKey)).catch(() => undefined);
+    try {
+      await unlink(this.resolveSafePath(storageKey));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; // já não existe = objetivo cumprido
+    }
   }
 
   // storageKey vem do banco (não de entrada de usuário diretamente), mas
@@ -113,10 +118,10 @@ class S3StorageAdapter implements StorageAdapter {
   }
 
   async delete(storageKey: string): Promise<void> {
-    if (!S3_KEY_SHAPE.test(storageKey)) return; // best-effort, mas nunca fora do formato
+    if (!S3_KEY_SHAPE.test(storageKey)) return; // nunca vai à rede com chave fora do formato (o app só cria chaves nesse formato)
     const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await this.clientPromise;
-    await client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: storageKey })).catch(() => undefined);
+    await client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: storageKey })); // DeleteObject de chave inexistente responde 204; falhas reais propagam
   }
 }
 
@@ -134,3 +139,36 @@ export function buildStorageAdapter(env: NodeJS.ProcessEnv = process.env): Stora
 }
 
 export const storageAdapter: StorageAdapter = buildStorageAdapter();
+
+/**
+ * Erro CONTROLADO de provedor: o valor gravado em `files.storageProvider` é desconhecido, ou o provedor existe mas não está configurado neste ambiente
+ * (ex.: arquivo que foi para o S3 e o processo atual subiu sem as variáveis S3_*). Nunca há fallback para outro armazenamento: ler a chave de um provedor
+ * no outro seria ler (ou apagar) o objeto errado.
+ */
+export class StorageProviderError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StorageProviderError";
+  }
+}
+
+const S3_ENV_KEYS = ["S3_BUCKET", "S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const;
+const byProviderCache = new Map<string, StorageAdapter>();
+
+/**
+ * Adaptador do provedor GRAVADO no registro do arquivo (`files.storageProvider`, escrito no upload com `stored.storageProvider`), e não o do provedor
+ * configurado agora: assim, trocar o armazenamento padrão entre disco e S3 não torna os arquivos antigos inacessíveis. Valor desconhecido ou provedor
+ * sem configuração lança `StorageProviderError`. Chame SÓ depois de autorizar a requisição (nada toca o armazenamento antes disso).
+ */
+export function adapterForProvider(provider: string, env: NodeJS.ProcessEnv = process.env): StorageAdapter {
+  if (provider !== "local" && provider !== "s3") throw new StorageProviderError(`Provedor de armazenamento desconhecido: ${JSON.stringify(String(provider).slice(0, 40))}`);
+  if (env === process.env && storageAdapter.provider === provider) return storageAdapter;
+  if (provider === "local") {
+    let a = byProviderCache.get("local"); if (!a) { a = new LocalDiskStorageAdapter(); byProviderCache.set("local", a); } return a;
+  }
+  if (S3_ENV_KEYS.some((k) => !env[k])) throw new StorageProviderError("O provedor s3 não está configurado neste ambiente");
+  const cacheKey = `s3|${S3_ENV_KEYS.map((k) => env[k]).join("|")}|${env.S3_ENDPOINT ?? ""}`;
+  let a = env === process.env ? byProviderCache.get(cacheKey) : undefined;
+  if (!a) { a = buildStorageAdapter(env); if (env === process.env) byProviderCache.set(cacheKey, a); }
+  return a;
+}

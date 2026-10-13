@@ -18,6 +18,8 @@ export class FakeS3 {
   /** Falha aplicada a GetObject (e opcionalmente a PutObject/Delete) — por padrão nenhuma. */
   fault: FaultMode = "none";
   faultOnPut = false;
+  /** DeleteObject responde 500 (armazenamento indisponível na hora da compensação). */
+  faultOnDelete = false;
   private server: http.Server;
   private sockets = new Set<import("node:net").Socket>();
   endpoint = "";
@@ -71,7 +73,9 @@ export class FakeS3 {
       this.objects.set(key, { body, contentType: req.headers["content-type"] as string | undefined });
       res.writeHead(200, { ETag: '"fake-etag"' }); return res.end();
     }
-    if (req.method === "DELETE") { this.objects.delete(key); res.writeHead(204); return res.end(); }
+    if (req.method === "DELETE") {
+      if (this.faultOnDelete) return this.xml(res, 500, "InternalError", "We encountered an internal error");
+      this.objects.delete(key); res.writeHead(204); return res.end(); }
     if (req.method === "GET") {
       if (this.fault === "hang") return; // nunca responde
       if (this.fault === "access-denied") return this.xml(res, 403, "AccessDenied", "Access Denied");

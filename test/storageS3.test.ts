@@ -24,6 +24,8 @@ vi.mock("../src/helpers/storageAdapter", async () => {
       download: (...a: Parameters<typeof actual.storageAdapter.download>) => holder.adapter!.download(...a),
       delete: (...a: Parameters<typeof actual.storageAdapter.delete>) => holder.adapter!.delete(...a),
     },
+    // a rota resolve o adaptador pelo provedor GRAVADO no registro; aqui o único provedor é o S3 real apontado ao servidor local
+    adapterForProvider: (p: string) => { if (p !== "s3") return actual.adapterForProvider(p, {} as NodeJS.ProcessEnv); return holder.adapter!; },
   };
 });
 
@@ -44,7 +46,7 @@ const env = (over: Record<string, string> = {}) => ({ S3_BUCKET: BUCKET, S3_REGI
 
 beforeAll(async () => { s3 = new FakeS3(); await s3.start(); adapter = buildStorageAdapter(env()); holder.adapter = adapter; });
 afterAll(async () => { await s3.stop(); });
-afterEach(() => { s3.fault = "none"; s3.faultOnPut = false; });
+afterEach(() => { s3.fault = "none"; s3.faultOnPut = false; s3.faultOnDelete = false; });
 
 describe("adaptador S3 real contra um endpoint HTTP local", () => {
   it("é o adaptador S3 (não o de disco) quando as variáveis S3_* existem, e o de disco sem elas", () => {

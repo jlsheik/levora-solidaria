@@ -99,9 +99,28 @@ do SDK só emite aviso, por isso não é usado).
 
 **Limites, sem apresentar como coberto:** o servidor local **não valida a assinatura SigV4** nem implementa versionamento, ACL ou URLs pré-assinadas (o app não as usa: o download sempre passa pelo
 servidor); **não prova compatibilidade com um bucket real** (AWS, R2, MinIO) — isso exige credenciais e infraestrutura fora do repositório; o download é carregado inteiro em memória (limite de 8 MB
-no upload) e **não** é transmitido em streaming ao cliente; a rota ignora a coluna `files.storageProvider` (se o armazenamento configurado mudar, arquivos antigos do outro provedor viram erro 500
-genérico, sem migração); a limpeza do blob quando o INSERT no banco falha (`delete` no `catch` do upload) não tem teste dedicado para S3; objeto ausente no S3 responde 500 (inconsistência do
-servidor), não 404.
+no upload) e **não** é transmitido em streaming ao cliente; objeto ausente no S3 responde 500 (inconsistência do servidor), não 404. (A coluna `files.storageProvider` e a compensação do INSERT, antes lacunas, estão tratadas na seção seguinte.)
+
+## Consistência: falha do INSERT, falha da limpeza e `files.storageProvider` (Fase 94)
+
+**Fluxo do upload:** validações (sessão, permissão, base64 estrito, tamanho, bytes × tipo) → grava o objeto no provedor ATUAL → INSERT em `files` + linha de auditoria na MESMA transação → resposta.
+Nada é gravado antes de a validação passar (testado: bytes ≠ tipo, base64 inválido, tipo proibido, sem sessão, outra organização e falha do próprio provedor não deixam objeto nem linha; o provedor nem é chamado).
+
+**Compensação.** Se o INSERT ou a auditoria falhar (a transação inteira é desfeita), o upload remove **somente o objeto criado por aquela tentativa** (`stored.storageKey`, um uuid gerado naquele instante; não há como colidir com
+objeto preexistente, de outra organização ou referenciado por outro registro) e devolve o erro genérico de sempre (500, "Não foi possível enviar o arquivo", sem detalhes do banco nem do armazenamento).
+Testado nos dois provedores (`test/uploadConsistency.test.ts`) com falhas REAIS do Postgres (gatilhos criados só no teste): o objeto some do disco/bucket, nenhuma linha fica, objetos de outra organização e o objeto de outro registro
+continuam intactos e acessíveis pelo download.
+
+**Se a própria remoção falhar** (armazenamento indisponível): o `delete` dos adaptadores agora **lança** em falha real (antes engolia tudo; chave já inexistente continua sendo sucesso). O upload não esconde: grava no log do servidor uma linha
+`ARQUIVO_ORFAO provider=<local|s3> key=<org>/<uuid> organizationId=<id>: …` (sem credenciais) e mesmo assim devolve o erro original do banco. **Garantia que NÃO existe:** limpeza automática com o armazenamento fora do ar — o objeto fica órfão (nenhuma
+linha em `files` o referencia, então nenhuma tela o mostra) até alguém removê-lo. **Diagnóstico/recuperação:** procurar `ARQUIVO_ORFAO` nos logs; a chave registrada identifica o objeto; remover pelo console do provedor (S3: o objeto `<bucket>/<key>`; disco:
+`STORAGE_LOCAL_DIR/<key>`) depois de conferir que nenhuma linha de `files` usa essa `storage_key`. Não há varredura periódica de órfãos (decisão pendente se for desejada).
+
+**`files.storageProvider`.** Evidência: coluna `TEXT NOT NULL` sem default nem CHECK, criada na migração `0002_files.sql` junto com o adaptador, **gravada em cada upload com o provedor que de fato guardou o arquivo** (`stored.storageProvider`): é o provedor POR ARQUIVO, não uma
+configuração global. Antes, a rota de download ignorava a coluna e lia sempre pelo provedor configurado agora (arquivos do outro provedor viravam erro 500 ao trocar a configuração). Agora `files-download` usa `adapterForProvider(file.storageProvider)`, **depois** da autorização:
+`local` → disco; `s3` → S3 (exige as quatro variáveis `S3_*`); qualquer outro valor, ou `s3` sem configuração, lança `StorageProviderError` → 500 genérico, **sem fallback** e sem tocar em armazenamento. A chave de um provedor nunca é lida no outro (os formatos de chave continuam validados
+por adaptador). Não houve migração (o modelo já suportava); não existe rota de exclusão de arquivo. Testado: arquivo local servido do disco com o S3 configurado (e o inverso), sem consultar o provedor errado, valores inválidos (`gcs`, `LOCAL`, vazio, ` s3`, `s3;local`, `../local`), autorização antes da escolha do provedor.
+**Limites:** mudar o provedor padrão só afeta NOVOS uploads; migrar arquivos entre provedores continua manual; um CHECK no banco para a coluna não foi criado (a validação é no código).
 
 ## Configuração (opcional)
 

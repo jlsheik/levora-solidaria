@@ -94,8 +94,14 @@ export async function handle(request: Request) {
         return row;
       });
     } catch (dbError) {
-      // Não deixa um blob órfão no storage se o registro no banco falhar.
-      await storageAdapter.delete(stored.storageKey);
+      // Compensação: remove SÓ o objeto criado por ESTA tentativa (chave nova, uuid gerado agora), para não deixar blob órfão se o banco falhar.
+      // Se a remoção também falhar (armazenamento indisponível) o blob fica órfão: isso NÃO é escondido — vira uma linha de log com marcador fixo,
+      // provedor e chave (sem credenciais) para a limpeza manual (docs/UPLOAD_DE_ARQUIVOS.md) — e o erro original do banco continua sendo o devolvido.
+      try {
+        await storageAdapter.delete(stored.storageKey);
+      } catch (cleanupError) {
+        console.error(`ARQUIVO_ORFAO provider=${stored.storageProvider} key=${stored.storageKey} organizationId=${input.organizationId}: o registro no banco falhou e a remoção do objeto também (${cleanupError instanceof Error ? cleanupError.name : "erro"})`);
+      }
       throw dbError;
     }
 

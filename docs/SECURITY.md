@@ -166,7 +166,10 @@ da API (`default-src 'none'`; mesmo um HTML antigo servido inline **não executo
 demonstrada), 401 sem sessão, 403 para outra organização (no download **e** no envio), 404 inexistente, 400 id inválido, nome nunca vira caminho.
 `Content-Disposition: inline` foi **mantido** para as quatro imagens/PDF: o botão "ver comprovante" abre o arquivo no navegador; o risco de
 renderizar conteúdo do usuário na origem autenticada é tratado por lista fechada de tipos + conferência dos bytes + nosniff + CSP da API, não só
-pelo `Content-Disposition`. **Armazenamento S3:** o adaptador foi exercitado com o SDK real contra um servidor S3 **local** (`test/storageS3.test.ts`; ver `docs/UPLOAD_DE_ARQUIVOS.md`): chave só no formato `<org>/<uuid>` (uma chave adulterada
+pelo `Content-Disposition`. **Consistência (Fase 94):** o upload compensa a falha do banco removendo só o objeto que ele mesmo criou (testado em disco e S3 com falhas reais do Postgres); se a remoção também falha, a inconsistência vira um log `ARQUIVO_ORFAO` com provedor e chave (sem credenciais), não um silêncio — não há limpeza automática com o armazenamento fora do ar. O download escolhe o adaptador pelo
+`files.storageProvider` gravado no registro, depois da autorização, e valor desconhecido ou provedor não configurado é erro controlado sem fallback (ver `docs/UPLOAD_DE_ARQUIVOS.md`).
+
+**Armazenamento S3:** o adaptador foi exercitado com o SDK real contra um servidor S3 **local** (`test/storageS3.test.ts`; ver `docs/UPLOAD_DE_ARQUIVOS.md`): chave só no formato `<org>/<uuid>` (uma chave adulterada
 no banco era enviada ao S3 com segmentos `..`; corrigido), timeout de inatividade de 30 s (antes um S3 mudo pendurava o download), autorização antes de qualquer leitura no armazenamento e erros sem vazar bucket,
 endpoint, chaves ou assinatura. **Não feito (decisão/infraestrutura):** varredura de malware, reencodar imagens, isolar uploads em outra origem (não há necessidade demonstrada: nenhum tipo renderizável como
 documento ativo é aceito) e compatibilidade com um bucket **real** (AWS/R2/MinIO) — o servidor local não valida assinaturas e não substitui um teste com credenciais de um serviço de verdade.
