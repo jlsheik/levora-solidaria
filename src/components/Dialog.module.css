@@ -32,6 +32,12 @@
       cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  /* Tema escuro: texto na cor primária (botão outline "Cancelar", links) sobre --popup (hsl 20 18% 15%) dá 4,48:1, abaixo do 4,5:1 do AA para texto
+     normal. Dentro do diálogo o fundo passa a ser --card (hsl 20 18% 14%, 4,63:1); o token --popup continua igual para os demais popups. */
+  :global(.dark) .content {
+    background-color: var(--card);
+  }
+
   .close {
     position: absolute;
     top: var(--spacing-4);

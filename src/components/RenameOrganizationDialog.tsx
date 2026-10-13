@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./Dialog";
@@ -23,6 +23,11 @@ export const RenameOrganizationDialog: React.FC<RenameOrganizationDialogProps> =
   const queryClient = useQueryClient();
   const [name, setName] = useState(currentName);
   const [error, setError] = useState<string | null>(null);
+  const hintId = useId();
+  // Diálogo controlado de fora (sem DialogTrigger): o Radix não sabe para onde devolver o foco ao fechar. Guarda quem abriu (ainda focado em
+  // `onOpenAutoFocus`) e o refoca ao fechar (Escape, Cancelar, salvar); após um erro devolve o foco ao Salvar (desabilitado durante o envio).
+  const openerRef = useRef<HTMLElement | null>(null);
+  const saveRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -50,9 +55,23 @@ export const RenameOrganizationDialog: React.FC<RenameOrganizationDialogProps> =
     },
   });
 
+  useEffect(() => {
+    if (mutation.isError) saveRef.current?.focus();
+  }, [mutation.isError]);
+
   return (
     <Dialog open={open} onOpenChange={(next) => !mutation.isPending && onOpenChange(next)}>
-      <DialogContent>
+      <DialogContent
+        onOpenAutoFocus={() => {
+          openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        }}
+        onCloseAutoFocus={(e) => {
+          if (openerRef.current?.isConnected) {
+            e.preventDefault();
+            openerRef.current.focus();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Renomear organização</DialogTitle>
           <DialogDescription>
@@ -71,10 +90,11 @@ export const RenameOrganizationDialog: React.FC<RenameOrganizationDialogProps> =
         >
           <label className={styles.field}>
             <span>Nome da organização</span>
-            <Input value={name} maxLength={ORGANIZATION_NAME_MAX + 20} autoComplete="off" onChange={(e) => setName(e.target.value)} aria-invalid={invalid} disabled={mutation.isPending} />
+            <Input value={name} maxLength={ORGANIZATION_NAME_MAX + 20} autoComplete="off" onChange={(e) => setName(e.target.value)} aria-invalid={invalid} aria-describedby={invalid ? hintId : undefined} disabled={mutation.isPending} />
             <span className={styles.counter}>{trimmed.length}/{ORGANIZATION_NAME_MAX}</span>
           </label>
-          {trimmed.length > ORGANIZATION_NAME_MAX && <p className={styles.hint}>O nome pode ter no máximo {ORGANIZATION_NAME_MAX} caracteres.</p>}
+          {trimmed.length < ORGANIZATION_NAME_MIN && <p id={hintId} className={styles.hint}>O nome precisa ter pelo menos {ORGANIZATION_NAME_MIN} caracteres.</p>}
+          {trimmed.length > ORGANIZATION_NAME_MAX && <p id={hintId} className={styles.hint}>O nome pode ter no máximo {ORGANIZATION_NAME_MAX} caracteres.</p>}
           {error && (
             <div className={styles.error} role="alert">
               {error}
@@ -84,7 +104,7 @@ export const RenameOrganizationDialog: React.FC<RenameOrganizationDialogProps> =
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={mutation.isPending}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={invalid || unchanged || mutation.isPending}>
+            <Button ref={saveRef} type="submit" disabled={invalid || unchanged || mutation.isPending}>
               {mutation.isPending ? "Salvando..." : "Salvar nome"}
             </Button>
           </DialogFooter>
