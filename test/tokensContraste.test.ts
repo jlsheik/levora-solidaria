@@ -190,6 +190,21 @@ describe("CSS dos componentes compartilhados (contrato estático)", () => {
     expect(sw.replace(/\/\*[\s\S]*?\*\//g, "")).not.toMatch(/--shadow-focus/);
   });
 
+  it("FileDropzone: limite com --input-border, anel de foco no contêiner e mensagem de erro que quebra (achados do qa:visual)", () => {
+    const css = read("src/components/FileDropzone.module.css");
+    expect(css).toMatch(/\.dropzone \{[^}]*border: 2px solid var\(--input-border\);/);
+    // o <input type=file> é escondido (1px): o foco por teclado precisa aparecer no contêiner
+    expect(css).toMatch(/\.dropzone:has\(input:focus-visible\) \{\s*border-color: var\(--primary\);\s*box-shadow:\s*0 0 0 2px var\(--background\),\s*0 0 0 4px var\(--primary\);/);
+    expect(css).toMatch(/@supports not selector\(:has\(\*\)\) \{\s*\.dropzone:focus-within \{/);
+    // trechos sem espaço ("image/jpeg,image/png,image/webp") estouravam o diálogo em 375/390 px
+    expect(css).toMatch(/\.error span \{\s*min-width: 0;\s*overflow-wrap: anywhere;\s*\}/);
+    // o componente em si (textos, tipos aceitos, validações) NÃO foi alterado: só estilo
+    const tsx = read("src/components/FileDropzone.tsx");
+    expect(tsx).toContain("Invalid file type. Accepted:");
+    expect(tsx).toContain("aria-label=\"File upload\"");
+    expect(tsx).toContain("aria-label=\"Clear error\"");
+  });
+
   it("os 13 usos de <Button variant=\"outline\"> continuam usando a variante (sem trocar por classes locais)", () => {
     const files = [
       "src/components/EditNeedDialog.tsx", "src/components/ReceiptHistoryPanel.tsx", "src/components/RenameOrganizationDialog.tsx", "src/components/RenameSourceDialog.tsx",

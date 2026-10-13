@@ -46,10 +46,18 @@ export const PROBE_SOURCE = String.raw`
       ring: shadows.length ? { kind: 'shadow', color: shadows[shadows.length - 1], layers: shadows.length } : outline ? { kind: 'outline', color: outline.color, layers: 1 } : null,
       fontSizePx: parseFloat(cs.fontSize), fontWeight: cs.fontWeight, opacity: parseFloat(cs.opacity), boxSizing: cs.boxSizing,
       rect: { x: r.x, y: r.y, w: r.width, h: r.height, right: r.right }, parentContentRight: pr.right - parseFloat(pcs.paddingRight) - parseFloat(pcs.borderRightWidth || 0), viewport: innerWidth,
-      hover: el.matches(':hover'), active: el.matches(':active'), focusVisible: el.matches(':focus-visible'), checked: el.getAttribute('aria-checked'), state: el.getAttribute('data-state'),
+      hover: el.matches(':hover'), active: el.matches(':active'), focusVisible: el.matches(':focus-visible'), focusWithin: el.matches(':focus-within'), checked: el.getAttribute('aria-checked'), state: el.getAttribute('data-state'),
       dark: document.body.classList.contains('dark'), thumb, ariaInvalid: el.getAttribute('aria-invalid'),
     };
   };
-  window.__qa = { rgba, stack, find, target, center, hitsTarget, describe };
+  // dimensões ÚTEIS da página (o que a página enxerga, não o tamanho da janela externa) e contenção horizontal da página/diálogo
+  const pageMetrics = () => {
+    const d = document.querySelector('[role=dialog]'); const dr = d ? d.getBoundingClientRect() : null;
+    return { innerWidth, innerHeight, clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, dpr: devicePixelRatio, dialog: d ? { left: dr.left, right: dr.right, top: dr.top, bottom: dr.bottom, scrollWidth: d.scrollWidth, clientWidth: d.clientWidth } : null };
+  };
+  const focusInner = (css) => { const el = target(); const inner = el && el.querySelector(css); if (!inner) return false; inner.focus(); return document.activeElement === inner; };
+  // cor opaca de um token CSS (ex.: --surface), para fundos que são gradiente (o backgroundColor não os representa)
+  const tokenColor = (name) => { const v = getComputedStyle(document.body).getPropertyValue(name).trim(); if (!v) return null; const c = rgba(v); return [c[0], c[1], c[2]]; };
+  window.__qa = { rgba, stack, find, target, center, hitsTarget, describe, pageMetrics, focusInner, tokenColor };
 })();
 `;

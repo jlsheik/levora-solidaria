@@ -29,13 +29,15 @@ export function findBrowser(name, exists = existsSync, env = process.env, platfo
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Encerra um processo e seus filhos (no Windows, `taskkill /T`). */
-export function killTree(child) {
-  if (!child || child.exitCode !== null || child.pid === undefined) return;
+export function killTree(target) {
+  const pid = typeof target === "number" ? target : target?.pid;
+  if (typeof target === "object" && target && target.exitCode !== null) return;
+  if (pid === undefined) return;
   try {
-    if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
-    else process.kill(-child.pid, "SIGKILL");
+    if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+    else process.kill(-pid, "SIGKILL");
   } catch {
-    try { child.kill("SIGKILL"); } catch { /* já encerrado */ }
+    try { process.kill(pid, "SIGKILL"); } catch { /* já encerrado */ }
   }
 }
 
@@ -76,13 +78,15 @@ class Cdp {
 }
 
 /** Abre o navegador e devolve { cdp, version, close }. Lança se não conseguir (o chamador classifica como ENV). */
-export async function launchBrowser(exe) {
+export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone } = {}) {
   const profile = mkdtempSync(path.join(tmpdir(), "levora-qa-profile-"));
+  onProfile?.(profile);
   const args = ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-extensions", "--disable-background-networking", "--window-size=1280,900", "about:blank"];
   const child = spawn(exe, args, { stdio: "ignore", windowsHide: true, detached: process.platform !== "win32" });
+  onSpawn?.(child.pid, "browser");
   const cleanup = async () => {
     killTree(child);
-    for (let i = 0; i < 8; i++) { try { rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 }); return; } catch { await sleep(300); } }
+    for (let i = 0; i < 8; i++) { try { rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 }); onProfileGone?.(profile); return; } catch { await sleep(300); } }
   };
   try {
     let port; let tries = 0;

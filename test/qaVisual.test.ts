@@ -4,12 +4,21 @@
  * componentes renderizados é feita por `npm run qa:visual` (Edge/Chrome), que não roda no CI.
  */
 import { describe, it, expect } from "vitest";
+import { mkdtempSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 // @ts-expect-error módulo .mjs sem tipos (script de QA, fora do tsconfig)
 import { contrastRatio, relativeLuminance, compositeOver, requiredRatio, isLargeText, evaluateContrast, STATUS, THRESHOLDS, round2 } from "../scripts/qa-visual/lib/contrast.mjs";
 // @ts-expect-error módulo .mjs sem tipos
 import { assertDisposableDatabase, deriveQaUrlFromTestUrl, readEnvValue } from "../scripts/qa-visual/lib/guard.mjs";
 // @ts-expect-error módulo .mjs sem tipos
-import { Report, EXIT } from "../scripts/qa-visual/lib/report.mjs";
+import { Report, EXIT, comboKey, expectedCombos, coverageGaps } from "../scripts/qa-visual/lib/report.mjs";
+// @ts-expect-error módulo .mjs sem tipos
+import { VIEWPORTS, viewportKey, viewportMatches, emulationParams, parseViewportsOption } from "../scripts/qa-visual/lib/viewport.mjs";
+// @ts-expect-error módulo .mjs sem tipos
+import { Cleanups } from "../scripts/qa-visual/lib/cleanup.mjs";
+// @ts-expect-error módulo .mjs sem tipos
+import { planRecovery, recoverOrphans, RunState, readState, OURS } from "../scripts/qa-visual/lib/orphans.mjs";
 // @ts-expect-error módulo .mjs sem tipos
 import { candidatePaths, findBrowser } from "../scripts/qa-visual/lib/browser.mjs";
 // @ts-expect-error módulo .mjs sem tipos
@@ -158,7 +167,9 @@ describe("consistência dos cenários e do autoteste", () => {
     for (const s of SCENARIOS) {
       expect(["guest", "owner", "volunteer"]).toContain(s.user);
       expect(s.path.startsWith("/")).toBe(true);
-      expect(["button", "switch", "field", "errorText"]).toContain(s.measure);
+      expect(["button", "switch", "field", "errorText", "text", "boundary", "dropzoneFocus"]).toContain(s.measure);
+      for (const step of s.steps) expect(Object.keys(step).length === 1 && ("click" in step || "setFile" in step)).toBe(true);
+      for (const vp of s.viewports ?? []) expect(VIEWPORTS.some((v: { w: number }) => v.w === vp.w)).toBe(true);
       expect(typeof s.target.css).toBe("string");
       if (states[s.measure]) for (const st of s.states) expect(states[s.measure]).toContain(st);
       if (s.info) expect(s.states.every((st: string) => ["normal", "disabled"].includes(st))).toBe(true);
@@ -174,11 +185,128 @@ describe("consistência dos cenários e do autoteste", () => {
     expect(buttonStates("Switch (desabilitado)").has("disabled")).toBe(true);
   });
   it("cada mutação do autoteste aponta para cenários reais; há sentinelas de ausência e de estado impossível", () => {
-    for (const m of MUTATIONS) { expect(m.css.length).toBeGreaterThan(5); for (const id of m.scenarios) expect(scenarioIds.has(id), `${m.id} → ${id}`).toBe(true); }
+    for (const m of MUTATIONS) { expect(((m.css ?? m.js) as string).length).toBeGreaterThan(5); for (const w of m.viewports ?? [1280]) expect(VIEWPORTS.some((v: { w: number }) => v.w === w), `${m.id} viewport ${w}`).toBe(true); for (const id of m.scenarios) expect(scenarioIds.has(id), `${m.id} → ${id}`).toBe(true); }
     expect(new Set(MUTATIONS.map((m: { id: string }) => m.id)).size).toBe(MUTATIONS.length);
     expect(SENTINELS.map((s: { expect: string }) => s.expect).sort()).toEqual(["MISSING", "UNMEASURABLE"]);
     // cobertura das correções: ghost, primary, destructive, outline, switch, borda, tamanho e erro têm uma regressão injetável
     const covered = new Set(MUTATIONS.flatMap((m: { scenarios: string[] }) => m.scenarios));
     for (const id of ["needs-ghost-edit-icon", "needs-primary-new", "matching-destructive-confirm", "needs-edit-dialog-cancel", "matching-switch", "login-field-border-sizing", "login-error-text"]) expect(covered.has(id), id).toBe(true);
+  });
+});
+
+describe("viewports (375×812, 390×844, 768×1024, 1280×900) e conferência das dimensões úteis", () => {
+  it("a matriz tem exatamente os 4 viewports pedidos; só os de telefone usam emulação mobile", () => {
+    expect(VIEWPORTS.map(viewportKey)).toEqual(["375x812", "390x844", "768x1024", "1280x900"]);
+    expect(VIEWPORTS.map((v: { mobile: boolean }) => v.mobile)).toEqual([true, true, false, false]);
+    expect(emulationParams(VIEWPORTS[0])).toEqual({ width: 375, height: 812, deviceScaleFactor: 1, mobile: true });
+  });
+  it("as dimensões registradas precisam bater com o que a PÁGINA enxerga (tolerância de 1px)", () => {
+    const vp = { w: 390, h: 844 };
+    expect(viewportMatches(vp, { innerWidth: 390, innerHeight: 844 })).toBe(true);
+    expect(viewportMatches(vp, { innerWidth: 391, innerHeight: 843 })).toBe(true);
+    expect(viewportMatches(vp, { innerWidth: 980, innerHeight: 2121 })).toBe(false); // layout de 980px sem meta viewport / emulação não aplicada
+    expect(viewportMatches(vp, { innerWidth: 390, innerHeight: 700 })).toBe(false);
+  });
+  it("--viewports aceita largura ou WxH, rejeita desconhecido e vazio", () => {
+    expect(parseViewportsOption("375,1280x900").map(viewportKey)).toEqual(["375x812", "1280x900"]);
+    expect(parseViewportsOption(undefined)).toHaveLength(4);
+    expect(() => parseViewportsOption("320")).toThrow(/desconhecido/);
+    expect(() => parseViewportsOption(" , ")).toThrow(/vazio/);
+  });
+  it("todo cenário roda nos 4 viewports, salvo declaração explícita", () => {
+    const sub = SCENARIOS.filter((s: { viewports?: unknown[] }) => s.viewports);
+    expect(sub.map((s: { id: string }) => s.id)).toEqual([]); // nenhum cenário atual restringe viewports: cobertura integral
+  });
+});
+
+describe("cobertura da matriz: o que não aparece no relatório é lacuna, nunca aprovação", () => {
+  const scenarios = [{ id: "a" }, { id: "b" }];
+  const expected = expectedCombos({ browsers: ["edge", "chrome"], scenarios, viewports: ["375x812", "1280x900"], themes: ["light", "dark"] });
+  const row = (browser: string, scenario: string, viewport: string, theme: string) => ({ browser, scenario, viewport, theme, status: "PASS" });
+  it("gera navegador × cenário × viewport × tema (2×2×2×2 = 16) e respeita viewports do cenário", () => {
+    expect(expected).toHaveLength(16);
+    expect(expected).toContain(comboKey("chrome", "b", "1280x900", "dark"));
+    expect(expectedCombos({ browsers: ["edge"], scenarios: [{ id: "x", viewports: ["375x812"] }], viewports: ["375x812", "1280x900"], themes: ["light"] })).toEqual(["edge|x|375x812|light"]);
+  });
+  it("combinação sem nenhuma linha vira lacuna; com uma linha (mesmo FAIL/MISSING) está coberta", () => {
+    const rows = expected.filter((k: string) => k !== comboKey("edge", "a", "375x812", "dark")).map((k: string) => { const [b, s, v, t] = k.split("|"); return row(b, s, v, t); });
+    expect(coverageGaps(rows, expected)).toEqual(["edge|a|375x812|dark"]);
+    const missing = { ...row("edge", "a", "375x812", "dark"), status: "MISSING" };
+    expect(coverageGaps([...rows, missing], expected)).toEqual([]);
+  });
+  it("um cenário que só gerou erro NÃO conta como aprovado: o código de saída reflete UNMEASURABLE/MISSING", () => {
+    const r = new Report();
+    r.add({ browser: "edge", version: "v", scenario: "s", target: "t", variant: "x", viewport: "375x812", theme: "light", state: "execução", kind: "estado", status: "UNMEASURABLE" });
+    expect(r.counts().PASS).toBe(0);
+    expect(r.exitCode()).toBe(EXIT.UNMEASURED);
+  });
+  it("o resumo separa verificações por navegador e viewport (não são componentes independentes)", () => {
+    const r = new Report();
+    r.add({ ...row("edge", "a", "375x812", "light"), version: "v", target: "t", variant: "x", state: "n", kind: "text" });
+    r.add({ ...row("chrome", "a", "375x812", "light"), version: "v", target: "t", variant: "x", state: "n", kind: "text", status: "FAIL" });
+    expect(r.byBrowserViewport()).toEqual(["edge 375x812: 1 PASS", "chrome 375x812: 0 PASS, 1 outros"]);
+    expect(r.format().join("\n")).toMatch(/não componentes independentes/);
+  });
+});
+
+describe("limpeza de recursos (sucesso, falha e execução morta à força)", () => {
+  it("Cleanups roda em ordem inversa, continua depois de uma falha e é idempotente", async () => {
+    const order: string[] = []; const c = new Cleanups();
+    c.add("banco", async () => { order.push("banco"); });
+    c.add("api", async () => { order.push("api"); throw new Error("falhou ao parar a API"); });
+    c.add("navegador", async () => { order.push("navegador"); });
+    const errors = await c.runAll();
+    expect(order).toEqual(["navegador", "api", "banco"]); // o banco só cai depois de parar o resto, mesmo com a falha no meio
+    expect(errors).toEqual([{ name: "api", message: "falhou ao parar a API" }]);
+    await c.runAll(); // segunda chamada (Ctrl+C + fim normal) não repete nada
+    expect(order).toHaveLength(3);
+  });
+  it("planRecovery: execução anterior viva e nossa = ocupado; órfãos só se o PID ainda for processo NOSSO", () => {
+    const state = { orchestrator: 10, children: [{ pid: 11, kind: "api" }, { pid: 12, kind: "browser" }, { pid: 13, kind: "vite" }], profiles: ["/tmp/levora-qa-profile-x"], database: "levora_qa" };
+    const cmd: Record<number, string> = { 10: "node scripts/qa-visual/run.mjs", 11: "node tsx scripts/qa-visual/api.ts", 12: "msedge --user-data-dir=/tmp/levora-qa-profile-x", 13: "notepad.exe" };
+    const busy = planRecovery(state, { alive: () => true, cmdline: (p: number) => cmd[p] });
+    expect(busy).toMatchObject({ busy: true, pid: 10 });
+    const dead = planRecovery(state, { alive: (p: number) => p !== 10, cmdline: (p: number) => cmd[p] });
+    expect(dead).toMatchObject({ busy: false, kill: [11, 12], database: "levora_qa", profiles: ["/tmp/levora-qa-profile-x"] }); // 13 (PID reaproveitado por outro programa) NÃO é encerrado
+    expect(planRecovery(null, { alive: () => true, cmdline: () => "" })).toEqual({ busy: false, kill: [], profiles: [], database: null });
+    expect(OURS.test("qa-visual")).toBe(true);
+    expect(OURS.test("notepad.exe")).toBe(false);
+  });
+  it("recoverOrphans: encerra, apaga só perfis levora-qa-profile-*, derruba o banco e limpa o registro", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "qa-orphans-test-"));
+    const file = path.join(dir, "active.json");
+    const profile = path.join(dir, "levora-qa-profile-abc"); mkdirSync(profile);
+    const alien = path.join(dir, "outra-pasta"); mkdirSync(alien);
+    const rs = new RunState(file); rs.s.orchestrator = 99999991; // um PID que não existe
+    rs.addChild(99999992, "browser"); rs.addProfile(profile); rs.addProfile(alien); rs.setDatabase("levora_f94_qa");
+    const killed: number[] = []; const dropped: string[] = [];
+    const out = await recoverOrphans({ file, alive: (p: number) => p === 99999992, cmdline: () => "msedge levora-qa-profile-abc", actions: { killTree: async (p: number) => { killed.push(p); }, removeDir: async (d: string) => { rmSync(d, { recursive: true, force: true }); }, dropDb: async (n: string) => { dropped.push(n); } } });
+    expect(out).toMatchObject({ busy: false, killed: [99999992], database: "levora_f94_qa" });
+    expect(killed).toEqual([99999992]); expect(dropped).toEqual(["levora_f94_qa"]);
+    expect(existsSync(profile)).toBe(false); // perfil nosso: apagado
+    expect(existsSync(alien)).toBe(true); // diretório que não é nosso: preservado
+    expect(readState(file)).toBeNull();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  it("RunState persiste cada recurso e remove o registro no fim", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "qa-state-test-")); const file = path.join(dir, "s.json");
+    const rs = new RunState(file); rs.begin(); rs.addChild(5, "api"); rs.addProfile("p"); rs.setDatabase("x_qa");
+    expect(readState(file)).toMatchObject({ children: [{ pid: 5, kind: "api" }], profiles: ["p"], database: "x_qa" });
+    expect(JSON.stringify(readState(file))).not.toMatch(/postgres:\/\//); // nunca guarda credenciais
+    rs.dropChild(5); rs.dropProfile("p"); rs.clearDatabase();
+    expect(readState(file)).toMatchObject({ children: [], profiles: [], database: null });
+    rs.end(); expect(readState(file)).toBeNull();
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("novos cenários: variação negativa do inventário e FileDropzone", () => {
+  const byId = new Map(SCENARIOS.map((s: { id: string }) => [s.id, s]));
+  it("existem, com semente que os alimenta (saída de 1 kg e atribuição aceita)", () => {
+    for (const id of ["inventory-delta-negative", "inventory-delta-positive", "inventory-delta-icon-out", "dropzone-title", "dropzone-subtitle", "dropzone-border", "dropzone-keyboard-focus", "dropzone-error-text", "dropzone-error-clear"]) expect(byId.has(id), id).toBe(true);
+    const neg = byId.get("inventory-delta-negative") as { sign: string };
+    expect(new RegExp(neg.sign).test("-1 kg")).toBe(true); expect(new RegExp(neg.sign).test("1 kg")).toBe(false); // o sinal precisa estar no texto, não só na cor
+    const err = byId.get("dropzone-error-text") as { steps: Array<Record<string, { fileName?: string }>> };
+    expect(err.steps.some((st) => st.setFile && /invalido/.test(st.setFile.fileName ?? ""))).toBe(true);
   });
 });

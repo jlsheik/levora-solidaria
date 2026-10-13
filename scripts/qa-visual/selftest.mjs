@@ -1,5 +1,6 @@
 // Autoteste do detector: cada MUTAÇÃO injeta, SÓ NO NAVEGADOR (nunca no CSS de produção), uma regressão conhecida e exige que o cenário
 // correspondente falhe. As SENTINELAS exigem que o detector diferencie "elemento ausente" (MISSING) e "estado impossível" (UNMEASURABLE).
+// `viewports` (larguras) padrão = [1280]; as mutações de layout responsivo usam larguras de telefone/tablet.
 import { SCENARIOS } from "./scenarios.mjs";
 
 export const MUTATIONS = [
@@ -11,6 +12,13 @@ export const MUTATIONS = [
   { id: "campo-borda-subtil", describe: "borda do campo volta ao --border", css: "input,textarea{border-color:var(--border) !important}", scenarios: ["login-field-border-sizing"], target: "borda" },
   { id: "campo-content-box", describe: "campo volta a content-box (estoura o contêiner)", css: "input,textarea{box-sizing:content-box !important}", scenarios: ["login-field-border-sizing"], target: "largura" },
   { id: "erro-escuro-4-07", describe: "texto de erro volta ao --error no tema escuro", css: '.dark [class*="_formMessage_"]{color:hsl(4,68%,58%) !important}', scenarios: ["login-error-text"], theme: "dark" },
+  // ---- responsivo / componentes acrescentados
+  { id: "campo-estoura-o-contêiner-em-375", describe: "campo mais largo que o contêiner no telefone (375)", css: "input{width:130% !important}", scenarios: ["login-field-border-sizing"], viewports: [375], target: "mais largo" }, // no telefone o navegador móvel encolhe a página: vira "conteúdo mais largo que o viewport"
+  { id: "pagina-com-rolagem-horizontal-em-375", describe: "página força rolagem horizontal no telefone (375)", css: "body{min-width:700px !important}", scenarios: ["login-field-border-sizing"], viewports: [375], target: "mais largo" },
+  { id: "delta-negativo-preto-no-escuro", describe: "variação negativa do inventário perde a cor legível no escuro", css: '.dark [class*="_deltaNegative_"]{color:#000 !important}', scenarios: ["inventory-delta-negative"], theme: "dark", viewports: [390] },
+  { id: "delta-negativo-sem-sinal", describe: "variação negativa sem o sinal (dependeria só da cor)", js: "document.querySelectorAll('[class*=_deltaNegative_]').forEach((e) => { if (e.textContent.startsWith('-')) e.textContent = e.textContent.slice(1); });", scenarios: ["inventory-delta-negative"], viewports: [390] },
+  { id: "dropzone-sem-foco", describe: "contêiner do FileDropzone sem indicador de foco por teclado", css: 'label[class*="_dropzone_"]:focus-within{box-shadow:none !important;outline:none !important}', scenarios: ["dropzone-keyboard-focus"], viewports: [768] },
+  { id: "dropzone-erro-no-escuro-ilegivel", describe: "texto de erro do FileDropzone volta a cor de baixo contraste no escuro", css: '.dark [class*="_error_"] span{color:#5a3b36 !important}', scenarios: ["dropzone-error-text"], theme: "dark", viewports: [375] },
 ];
 
 const base = SCENARIOS.find((s) => s.id === "needs-primary-new");
