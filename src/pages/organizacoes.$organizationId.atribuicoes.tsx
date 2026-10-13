@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { z } from "zod";
 import { ArrowLeft, Network, PackageCheck, FileCheck, X } from "lucide-react";
 import { toast } from "sonner";
+import { isAllowedProofUrl } from "../helpers/proofUrl";
 import styles from "./organizacoes.$organizationId.atribuicoes.module.css";
 
 const statusLabels: Record<string, string> = {
@@ -38,7 +39,7 @@ const receiveSchema = z.object({
   itemId: z.coerce.number().int().positive({ message: "Selecione o item recebido" }),
   quantityReceived: z.coerce.number().positive("Informe a quantidade recebida"),
   notes: z.string().optional(),
-  proofUrl: z.string().optional(),
+  proofUrl: z.string().refine((v) => v === "" || isAllowedProofUrl(v), "Informe um endereço http(s) válido para o comprovante").optional(),
 });
 
 function fileToBase64(file: File): Promise<string> {
@@ -230,7 +231,8 @@ export default function OrganizationAllocationsPage() {
                           <li key={ev.id} className={styles.timelineRow}>
                             <strong>{logisticsEventLabels[ev.eventType]}</strong> — {ev.actorDisplayName ?? "sistema"} · {new Date(ev.occurredAt).toLocaleString("pt-BR")}
                             {ev.notes ? ` — ${ev.notes}` : ""}
-                            {ev.proofUrl && (
+                            {ev.proofUrl && !isAllowedProofUrl(ev.proofUrl) && " — comprovante com endereço não permitido (não exibido)"}
+                            {ev.proofUrl && isAllowedProofUrl(ev.proofUrl) && (
                               <>
                                 {" — "}
                                 <a href={ev.proofUrl} target="_blank" rel="noopener noreferrer" className={styles.proofLink}>

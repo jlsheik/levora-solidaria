@@ -98,32 +98,46 @@ classe de vulnerabilidade de SQL injection por constução.
 
 ## CSRF — por que este app não usa um token explícito
 
-Auditado de propósito (não por omissão) antes de decidir se um token CSRF
-seria necessário. Três propriedades independentes da arquitetura atual já
-tornam CSRF clássico não explorável, sem precisar de um mecanismo dedicado:
+Auditado de propósito (não por omissão). **Atualizado na Fase 94** depois de testar em navegador real (`npm run qa:security`, ver
+[`docs/QA_VISUAL.md`](QA_VISUAL.md)): o raciocínio original tinha uma lacuna e ela foi fechada.
 
-1. **Cookie de sessão `SameSite=Lax`** ([`getSetServerSession.tsx`](../src/helpers/getSetServerSession.tsx)) —
-   não é enviado em requisições POST/fetch cross-site (só em navegação
-   GET de topo), que é exatamente o vetor que CSRF explora.
-2. **Sem CORS configurado** (`server/index.ts`) — nenhuma origem externa
-   recebe `Access-Control-Allow-Credentials`, então nem um `fetch`
-   JavaScript cross-origin com credenciais é possível.
-3. **Corpo obrigatoriamente serializado em `superjson`** — todo endpoint
-   que muda estado faz `superjson.parse(await request.text())`. Um
-   `<form>` HTML simples não consegue gerar esse payload (produz
-   `application/x-www-form-urlencoded` ou `multipart/form-data`, que
-   falha o parse antes de qualquer efeito colateral) — testado
-   explicitamente em `test/securityHardening.test.ts`.
-4. **Autenticação é 100% via cookie**, sem token/header alternativo — não
-   existe um caminho de autenticação secundário que pudesse contornar o
-   `SameSite=Lax` acima.
+**O que a medição mostrou (antes da correção).** Três origens foram exercitadas contra a pilha local, com a sessão do dono aberta no navegador:
 
-Isso deixaria de valer se, no futuro, alguém: adicionar CORS com
-credenciais para uma origem não confiável; rebaixar `SameSite` para
-`None`; ou criar um caminho de autenticação via token/query-string.
-`test/auth.test.ts` trava os atributos do cookie
-(`HttpOnly`/`Secure`/`SameSite=Lax`) como teste de regressão para o
-primeiro caso.
+| Origem do atacante | Cookie enviado? | Resultado da escrita forjada |
+|---|---|---|
+| **Outro site** (`localhost` → app em `127.0.0.1`), `Sec-Fetch-Site: cross-site` | não (`SameSite=Lax`) | bloqueado (401) |
+| **Outra origem do MESMO site** (outra porta do mesmo host), `Sec-Fetch-Site: same-site` | **sim** | **criava o registro** com `fetch`/XHR/`sendBeacon` `text/plain` e com formulário `enctype="text/plain"` (4 de 4 tipos "simples") |
+| Mesma origem (controle legítimo) | sim | criado (esperado) |
+
+A afirmação antiga "(3) um `<form>` não gera esse payload" era **falsa**: `enctype="text/plain"` produz `nome=valor` e um nome/valor bem
+escolhido forma JSON válido, e o servidor lia o corpo de **qualquer** Content-Type (`express.raw({ type: "*/*" })`). `SameSite=Lax` só protege
+entre SITES; subdomínios/portas do mesmo domínio registrável (ex.: um subdomínio comprometido ou com conteúdo de terceiros) continuavam
+enviando o cookie. `fetch` com `application/json` já era barrado (exige preflight CORS e a API não responde CORS).
+
+**Defesa atual** (sem token, sem estado; [`src/helpers/csrfGuard.ts`](../src/helpers/csrfGuard.ts), ligada em `server/index.ts` antes da leitura do corpo):
+
+1. **Cookie `SameSite=Lax`** ([`getSetServerSession.tsx`](../src/helpers/getSetServerSession.tsx)) — não vai em POST entre sites.
+2. **Sem CORS** — nenhuma origem externa recebe `Access-Control-Allow-Credentials`; um `fetch` `application/json` de outra origem nem é enviado.
+3. **Fetch Metadata** — toda escrita (`POST`, etc.) com `Sec-Fetch-Site` diferente de `same-origin`/`none` recebe **403**. O navegador define esse
+   cabeçalho; a página do atacante não consegue forjá-lo. Cobre o mesmo-site.
+4. **Content-Type obrigatório** — escrita só com `application/json` (senão **415**), para navegadores sem Fetch Metadata. Uma página de outra
+   origem só envia `application/json` por um fetch com preflight, que o navegador bloqueia por falta de CORS. O cliente do app sempre envia esse tipo.
+5. **Autenticação 100% via cookie**, sem token/header alternativo.
+
+**Limites conhecidos.** Cliente que não é navegador (curl, scripts) não é "CSRF" e passa pela camada 3 sem `Sec-Fetch-Site`: exige
+`application/json` e, claro, a sessão. Um proxy reverso **não pode remover** `Sec-Fetch-Site` (nginx repassa por padrão). Se o front-end
+for servido em outro subdomínio da API no futuro, essa escrita same-site passaria a ser bloqueada de propósito: seria preciso decidir entre
+ligar CORS com origem explícita e token, ou manter a mesma origem. Isso deixa de valer também se alguém: adicionar CORS com credenciais
+para origem não confiável; rebaixar `SameSite` para `None`; ou criar autenticação por token/query-string. `test/auth.test.ts` trava os atributos do
+cookie e `test/csrfGuard.test.ts` trava as camadas 3 e 4 (inclusive contra um servidor Express real).
+
+## Comprovante (`proofUrl`) e esquemas de URL
+
+`proofUrl` é texto livre digitado pelo operador e vira `<a href>` na linha do tempo da atribuição. O React 18 **não** bloqueia `javascript:` em `href`.
+Medido em Edge e Chrome (`npm run qa:security`): o servidor gravava `javascript:` (200), a interface criava a âncora, mas o clique com
+`target="_blank" rel="noopener noreferrer"` **não executou** nos dois navegadores (achado latente, não explorável ali; outros motores não foram testados).
+Corrigido mesmo assim: [`src/helpers/proofUrl.ts`](../src/helpers/proofUrl.ts) aceita só caminho relativo do app ou `http(s):`; o servidor recusa
+(400), o formulário valida e a linha do tempo não cria link para endereço fora da regra (dados antigos). `test/proofUrl.test.ts`.
 
 ## Armazenamento de arquivos
 

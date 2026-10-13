@@ -5,6 +5,8 @@ reais, tamanho dos campos e contenção horizontal — em **quatro viewports** e
 dependências** (usa o WebSocket global do Node ≥ 22, `fetch`, `child_process`, e `postgres`/`tsx`/`vite` que o projeto já tem). Nasceu das
 medições manuais da Fase 94 (`docs/ROADMAP_ATUAL.md` §10).
 
+> A mesma infraestrutura também executa a **verificação de segurança** (`npm run qa:security`, seção abaixo).
+>
 > **Isto não roda no CI** (precisa de navegador e Postgres locais). O que o CI cobre são os testes unitários da lógica
 > (`test/qaVisual.test.ts`: contraste, limites, guarda do banco, relatório, viewports, cobertura, limpeza, recuperação de órfãos, cenários) e os
 > contratos estáticos de tokens/CSS (`test/tokensContraste.test.ts`). Eles **não** provam que a interface renderizada está correta; quem prova é
@@ -112,6 +114,52 @@ temporário, arquivos sintéticos, API/Vite (árvore de processos) e, por últim
 `%TEMP%/levora-qa-visual/active.json` (PIDs, perfis e nome do banco; **nunca credenciais**) permite que a próxima execução — ou
 `npm run qa:visual -- --cleanup` — encerre só PIDs cuja linha de comando ainda é nossa (evita matar um processo que reaproveitou o PID), apague só
 diretórios `levora-qa-profile-*` e derrube o banco `_qa`. Uma execução simultânea é recusada (`ENV`), pois ambas recriariam o mesmo banco.
+
+## Verificação de segurança em navegador real (`npm run qa:security`)
+
+Mesma infraestrutura (Edge/Chrome headless por CDP, banco `_qa` descartável, pilha API + Vite em portas livres, limpeza e recuperação de órfãos
+compartilhadas — as duas ferramentas recriam o mesmo banco, então uma execução simultânea é recusada), com **dados sintéticos** e servidores
+**só em 127.0.0.1**. Nada sai desta máquina e as cargas só pedem uma imagem de 1 pixel ao coletor local.
+
+```bash
+npm run qa:security                               # calibração + CSRF + XSS, nos navegadores encontrados (~5 min)
+npm run qa:security -- --browser edge --only xss  # só um navegador / só uma parte (calibration, csrf, xss)
+npm run qa:security -- --cleanup                  # recupera órfãos de uma execução morta à força
+```
+
+Saídas: 0 conforme · 1 falha de segurança · 2 não consegui medir · 3 ambiente indisponível · 4 **calibração do detector falhou** (resultados não confiáveis).
+
+**Calibração primeiro (o detector precisa provar que enxerga).** Antes de olhar o app, a ferramenta ataca *fixtures* próprias, isoladas, que **não
+são código de produção**: uma página que usa `innerHTML` (deve ser acusada) e outra `textContent` (não); um `href` `javascript:` ingênuo (deve
+executar ao clicar) e um filtrado; e uma "vítima" com cookie `SameSite=Lax` com um endpoint **vulnerável** (deve ser acusado quando atacado do mesmo
+site) e outro **guardado por `Sec-Fetch-Site`** (não). Se qualquer uma divergir, CSRF/XSS do app nem rodam (saída 4). Também registra, sem critério, se
+`javascript:` em âncora `target=_blank rel=noopener` executa no navegador (nos dois testados: **não**).
+
+**CSRF** (alvo real: `POST /_api/v1/needs`, cria uma necessidade com título-marcador; o efeito é confirmado **no banco**, não só pelo status). Sessão do
+dono aberta por login real; páginas de atacante servidas por outra origem, que faz a requisição forjada. Origens: **`cross-site`**
+(`http://localhost:porta` → app em `127.0.0.1`; `Sec-Fetch-Site: cross-site`) e **`same-site`** (`http://127.0.0.1:outra-porta`; mesmo site, origem
+diferente; `Sec-Fetch-Site: same-site`). Seis tipos: `fetch` `text/plain` no-cors, XHR `text/plain`, `sendBeacon`, formulário `enctype=text/plain` com
+corpo JSON válido (navegação de topo), `fetch` `application/json` (exige preflight) e formulário urlencoded. Controles: **mesma origem legítima TEM de
+criar** (senão a sonda não prova nada → UNMEASURABLE) e **sem sessão** não pode criar. Evidência por tentativa: `Sec-Fetch-Site`, `Origin`, se o cookie
+foi enviado (e o motivo do bloqueio pelo navegador, ex. `SchemefulSameSiteLax`; **nunca o valor do cookie**), status e se o registro existe.
+
+**XSS** (cargas inofensivas em 8 contextos — elemento com `onerror`, `<script>`, fechamento de atributo, string JS, `</textarea>`, `javascript:`,
+`<details ontoggle>`, expressão de template — guardadas em **11 campos** de texto livre: nome/cidade da organização, título/descrição da necessidade e
+da oportunidade, item, fonte, nome de usuário, motivo da movimentação, observação do evento). Cada carga leva o próprio id; **execução = o coletor
+recebe o id**; injeção = elemento `[data-xss]` no DOM. O dev server não tem CSP, então o resultado mede o **escape do app**, não uma rede de segurança.
+Visita as páginas da organização (com edição e históricos abertos) e `/plataforma` (administrador) e confere **quais campos apareceram como texto
+literal** (campo que não aparece em nenhuma tela vira `SKIP`, nunca aprovação); contexto de URL (comprovante legado `javascript:` na linha do tempo,
+clicando na âncora, e a tentativa de gravar um `javascript:` pelo endpoint real, que deve dar 400) e contexto **refletido** (caminho, consulta e hash).
+
+**Resultado desta execução** (Edge 155 + Chrome 155; ambos Blink): 48 verificações por navegador (9 calibração, 14 CSRF, 25 XSS), **96 PASS, 0 outros**.
+Antes das correções a mesma ferramenta deu FAIL em **4 tipos de CSRF same-site** (cookie enviado, registro criado) e no **servidor aceitando
+`javascript:`**; o conserto está em `docs/SECURITY.md` (CSRF e Comprovante) e os testes de regressão em `test/csrfGuard.test.ts` e `test/proofUrl.test.ts`
+(removendo o conserto, ambos falham). A detecção do `href` `javascript:` foi provada removendo temporariamente o filtro do cliente: FAIL.
+
+**Não mede:** WebKit/Firefox (só Blink); produção com CSP (o dev server não tem); armazenamento via upload de arquivo (HTML/SVG enviado); eventos
+postMessage/iframes de terceiros; clickjacking (cabeçalhos cobertos por `test/securityHeaders.test.ts`); autenticação de rede/TLS; o CSRF por `GET`
+(os endpoints GET não escrevem — não há teste dinâmico disso aqui). O cookie `Secure` sobre `http://127.0.0.1` funciona nos navegadores testados; em outro
+ambiente de teste isso pode exigir HTTPS.
 
 ## O que NÃO mede / limitações
 

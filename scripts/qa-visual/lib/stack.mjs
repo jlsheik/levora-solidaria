@@ -77,16 +77,16 @@ async function waitFor(check, what, ms = 60000, child) {
 }
 
 /** Semeia, sobe API e Vite. Retorna { baseUrl, stop }. Lança em caso de falha (o chamador classifica como ENV). */
-export async function startStack({ root, databaseUrl, onSpawn }) {
+export async function startStack({ root, databaseUrl, onSpawn, seedScript = path.join("scripts", "qa-visual", "seed.ts"), extraEnv = {} }) {
   const tsx = path.join(root, "node_modules", "tsx", "dist", "cli.mjs");
   const vite = path.join(root, "node_modules", "vite", "bin", "vite.js");
   for (const p of [tsx, vite]) if (!existsSync(p)) throw new Error(`dependência de desenvolvimento ausente: ${path.relative(root, p)} (rode npm install)`);
   const apiPort = await pickFreePort(); const webPort = await pickFreePort();
-  const env = { ...process.env, DATABASE_URL: databaseUrl, JWT_SECRET: `qa-efemero-${Math.random().toString(36).slice(2)}${Date.now()}-0123456789abcdef`, PORT: String(apiPort), QA_API_PORT: String(apiPort), QA_WEB_PORT: String(webPort), NODE_ENV: "development" };
+  const env = { ...process.env, DATABASE_URL: databaseUrl, JWT_SECRET: `qa-efemero-${Math.random().toString(36).slice(2)}${Date.now()}-0123456789abcdef`, PORT: String(apiPort), QA_API_PORT: String(apiPort), QA_WEB_PORT: String(webPort), NODE_ENV: "development", ...extraEnv };
   const children = [];
   const stop = async () => { for (const c of children.reverse()) killTree(c); await sleep(300); };
   try {
-    const seed = runNode(root, [tsx, path.join("scripts", "qa-visual", "seed.ts")], env, "seed", onSpawn);
+    const seed = runNode(root, [tsx, seedScript], env, "seed", onSpawn);
     children.push(seed);
     await new Promise((res, rej) => { seed.on("exit", (code) => (code === 0 ? res() : rej(new Error(`a semente falhou (código ${code}): ${seed.logs.slice(-6).join(" | ").slice(0, 400)}`)))); });
     const api = runNode(root, [tsx, path.join("scripts", "qa-visual", "api.ts")], env, "api", onSpawn); children.push(api);

@@ -24,6 +24,7 @@ import fs from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { API_SECURITY_HEADERS } from "../src/helpers/securityHeaders.js";
 import { closeDbPool } from "../src/helpers/db.js";
+import { checkWriteRequest } from "../src/helpers/csrfGuard.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENDPOINTS_DIR = path.resolve(__dirname, "../src/endpoints");
@@ -129,6 +130,16 @@ function securityHeadersMiddleware(_req: ExpressRequest, res: ExpressResponse, n
   next();
 }
 
+// Defesa contra CSRF nas rotas de escrita (ver src/helpers/csrfGuard.ts): roda antes de ler o corpo.
+function csrfGuardMiddleware(req: ExpressRequest, res: ExpressResponse, next: NextFunction) {
+  const verdict = checkWriteRequest(req.method, { get: (name) => req.get(name) });
+  if (!verdict.ok) {
+    res.status(verdict.status).json({ message: verdict.message });
+    return;
+  }
+  next();
+}
+
 // Extraído de main() para ser testável sem abrir uma porta de verdade nem
 // iniciar o agendador (test/securityHeaders.test.ts sobe isto numa porta
 // efêmera com app.listen(0)).
@@ -146,6 +157,8 @@ export async function buildApp(): Promise<express.Express> {
   if (process.env.TRUST_PROXY) {
     app.set("trust proxy", isNaN(Number(process.env.TRUST_PROXY)) ? process.env.TRUST_PROXY : Number(process.env.TRUST_PROXY));
   }
+
+  app.use(csrfGuardMiddleware);
 
   // Endpoints portados esperam o corpo bruto (superjson.stringify de volta em JSON
   // já serializado) — capturamos o raw body em vez de deixar o Express fazer parse,
