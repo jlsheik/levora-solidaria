@@ -6,7 +6,8 @@
     align-items: center;
     width: 42px;
     height: 24px;
-    background-color: var(--muted);
+    /* trilho desligado: --muted dava 1,24:1 (claro) / 1,14:1 (escuro) contra a superfície e o polegar sumia no trilho; --input-border (>= 3:1) */
+    background-color: var(--input-border);
     border-radius: var(--radius-full);
     transition: background-color var(--animation-duration-normal) ease;
     cursor: pointer;
@@ -18,8 +19,11 @@
     background-color: var(--muted-foreground);
   }
 
+  /* anel de foco: --shadow-focus (primário a 30–35% de opacidade) dava 1,54:1 / 1,67:1; mesmo padrão sólido dos botões (>= 4,6:1) */
   .root:focus-visible {
-    box-shadow: var(--shadow-focus);
+    box-shadow:
+      0 0 0 2px var(--background),
+      0 0 0 4px var(--primary);
   }
 
   .root[data-state="checked"] {

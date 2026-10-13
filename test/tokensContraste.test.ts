@@ -64,6 +64,39 @@ describe.each(Object.entries(THEMES))("tokens %s: contraste calculado a partir d
     }
   });
 
+  it("botão primary: o fundo de hover/ativo se AFASTA do texto (claro: rumo ao preto; escuro: rumo ao branco) e o texto fica ≥ 4,5:1", () => {
+    const texto = hslToRgb(t["primary-foreground"]);
+    for (const p of [0.9, 0.85]) {
+      expect(ratio(texto, mix(primary, toward, p)), `primary ${p * 100}% + ${toward[0] ? "branco" : "preto"}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("botão destructive no escuro: hover/ativo clareiam o fundo (texto escuro) e ficam ≥ 4,5:1; no claro o fundo base com texto claro já passa", () => {
+    const texto = hslToRgb(t["error-foreground"]);
+    expect(ratio(texto, error), "destructive normal").toBeGreaterThanOrEqual(4.5);
+    if (toward[0] === 255) for (const p of [0.9, 0.85]) expect(ratio(texto, mix(error, toward, p)), `destructive ${p * 100}% + branco`).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("botão ghost: ícone em --foreground ≥ 4,5:1 e, no hover/ativo, ícone de marca (80% rumo ao preto/branco) sobre a tinta de 10%/15% ≥ 4,5:1", () => {
+    const fg = hslToRgb(t["foreground"]);
+    const marca = mix(toward, primary, 0.2);
+    for (const [nome, s] of Object.entries(S)) {
+      expect(ratio(fg, s), `ghost normal sobre ${nome}`).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(marca, mix(primary, s, 0.1)), `ghost hover sobre ${nome}`).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(marca, mix(primary, s, 0.15)), `ghost ativo sobre ${nome}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("Switch: trilho desligado (--input-border) ≥ 3:1 sobre a superfície, polegar (--card) ≥ 3:1 sobre o trilho e anel de foco (--primary) ≥ 3:1", () => {
+    const trilho = hslToRgb(t["input-border"]);
+    const polegar = hslToRgb(t["card"]);
+    for (const [nome, s] of Object.entries(S)) {
+      expect(ratio(trilho, s), `trilho desligado sobre ${nome}`).toBeGreaterThanOrEqual(3);
+      expect(ratio(primary, s), `anel de foco sobre ${nome}`).toBeGreaterThanOrEqual(3);
+    }
+    expect(ratio(polegar, trilho), "polegar sobre trilho desligado").toBeGreaterThanOrEqual(3);
+  });
+
   it("os tokens existentes que não devem mudar continuam iguais (--error, --border, --primary)", () => {
     expect(t["error"]).toBe(_nome === "claro" ? "hsl(4, 62%, 42%)" : "hsl(4, 68%, 58%)");
     expect(t["border"]).toBe(_nome === "claro" ? "hsl(24, 16%, 84%)" : "hsl(20, 14%, 22%)");
@@ -125,6 +158,36 @@ describe("CSS dos componentes compartilhados (contrato estático)", () => {
     expect(active).not.toMatch(/(^|\s)color:/);
     expect(btn).toMatch(/\.disabled \{[^}]*opacity: 0\.5;[^}]*cursor: not-allowed;[^}]*pointer-events: none;/);
     expect(btn).toMatch(/\.button:focus-visible \{[^}]*0 0 0 4px var\(--primary\)/);
+  });
+
+  it("Button primary/destructive/ghost e Switch: direção dos estados, cor do ícone e anel de foco (contrato estático)", () => {
+    const btn = read("src/components/Button.module.css");
+    // primary: claro escurece, escuro clareia (nunca mistura com --primary-foreground)
+    expect(btn).toMatch(/\.primary:hover \{\s*background-color: color-mix\(in srgb, var\(--primary\) 90%, black\);/);
+    expect(btn).toMatch(/\.primary:active \{\s*background-color: color-mix\(in srgb, var\(--primary\) 85%, black\);/);
+    expect(btn).toMatch(/:global\(\.dark\) \.primary:hover \{\s*background-color: color-mix\(in srgb, var\(--primary\) 90%, white\);/);
+    expect(btn).toMatch(/:global\(\.dark\) \.primary:active \{\s*background-color: color-mix\(in srgb, var\(--primary\) 85%, white\);/);
+    const primaryHover = btn.match(/\n  \.primary:hover \{([^}]*)\}/)![1];
+    expect(primaryHover).not.toMatch(/primary-foreground/);
+    // destructive: só o escuro muda; o claro mantém a mistura original
+    expect(btn).toMatch(/:global\(\.dark\) \.destructive:hover \{\s*background-color: color-mix\(in srgb, var\(--error\) 90%, white\);/);
+    expect(btn).toMatch(/:global\(\.dark\) \.destructive:active \{\s*background-color: color-mix\(in srgb, var\(--error\) 85%, white\);/);
+    expect(btn).toMatch(/\n  \.destructive:hover \{\s*background-color: color-mix\(in oklch, var\(--error\) 90%, var\(--error-foreground\)\);/);
+    // ghost: cor própria (antes herdava o preto do navegador), hover/ativo com ícone de marca e tinta transparente
+    expect(btn).toMatch(/\n  \.ghost \{[^}]*color: var\(--foreground\);/);
+    expect(btn).toMatch(/\.ghost:not\(:disabled\):hover,\s*\.ghost:not\(:disabled\):active \{\s*color: color-mix\(in srgb, var\(--primary\) 80%, black\);/);
+    expect(btn).toMatch(/:global\(\.dark\) \.ghost:not\(:disabled\):hover,\s*:global\(\.dark\) \.ghost:not\(:disabled\):active \{\s*color: color-mix\(in srgb, var\(--primary\) 80%, white\);/);
+    expect(btn).toMatch(/\n  \.ghost:hover \{\s*background-color: color-mix\(in srgb, var\(--primary\) 10%, transparent\);/);
+    // secondary e link não foram tocados (secondary já passava; link não tem consumidores)
+    expect(btn).toMatch(/\.secondary:hover \{\s*background-color: color-mix\(in oklch, var\(--secondary\) 90%, var\(--secondary-foreground\)\);/);
+    expect(btn).toMatch(/\.link:hover \{\s*text-decoration: underline;\s*color: color-mix\(in oklch, var\(--primary\) 90%, var\(--primary-foreground\)\);/);
+    // Switch: trilho desligado em --input-border e anel de foco sólido (como os botões); ligado e desabilitado inalterados
+    const sw = read("src/components/Switch.module.css");
+    expect(sw).toMatch(/\.root \{[^}]*background-color: var\(--input-border\);/);
+    expect(sw).toMatch(/\.root:focus-visible \{\s*box-shadow:\s*0 0 0 2px var\(--background\),\s*0 0 0 4px var\(--primary\);/);
+    expect(sw).toMatch(/\.root\[data-state="checked"\] \{\s*background-color: var\(--primary\);/);
+    expect(sw).toMatch(/\.root\[data-disabled\] \{\s*opacity: 0\.5;\s*cursor: not-allowed;/);
+    expect(sw.replace(/\/\*[\s\S]*?\*\//g, "")).not.toMatch(/--shadow-focus/);
   });
 
   it("os 13 usos de <Button variant=\"outline\"> continuam usando a variante (sem trocar por classes locais)", () => {
