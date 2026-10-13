@@ -326,4 +326,28 @@ describe("a tela mostra os valores persistidos (leitura pelo servidor)", () => {
     expect(endpoint).toMatch(/forNoKeyUpdate\(\)/);
     expect(endpoint).not.toMatch(/needFulfillments|stockTransactions|runMatching|opportunityAllocations/);
   });
+
+  it("interação seletor de prioridade × diálogo × Salvar (QA no navegador): sem paliativos sobre as camadas do Radix; Salvar por teclado; escolher a opção só altera o estado local", async () => {
+    // Causa comprovada no navegador: com a lista do Select aberta, o Radix põe `pointer-events: none` no conteúdo do diálogo (camada abaixo) e o
+    // 1º clique fora cai no overlay, que só FECHA a lista (igual a um <select> nativo). É o comportamento do design system, não um defeito do
+    // diálogo; contorná-lo exigiria mexer em camadas/ponteiros e quebraria foco e teclado. Este teste trava o contrato que mantém o caminho correto:
+    const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const dlg = strip(readFileSync("src/components/EditNeedDialog.tsx", "utf8"));
+    const css = strip(readFileSync("src/components/EditNeedDialog.module.css", "utf8"));
+    expect(dlg).toMatch(/from "\.\/Select"/); // Select compartilhado (Radix), sem versão própria
+    expect(dlg).toMatch(/onValueChange=\{\(v\) => setPriority\(v as NeedPriority\)\}/); // escolher só altera o estado local; não salva sozinho
+    expect(dlg).toMatch(/<form[\s\S]*onSubmit=/); // Enter no formulário e Enter no botão salvam (teclado)
+    expect(dlg).toMatch(/<Button type="submit"/);
+    expect(dlg).not.toMatch(/onInteractOutside|onPointerDownOutside|onFocusOutside|modal=|pointerEvents|pointer-events|setTimeout|requestAnimationFrame/);
+    expect(css).not.toMatch(/pointer-events|z-index/);
+  });
+
+  it("alterar SÓ a prioridade (o que o seletor produz) salva e persiste; título e descrição seguem como estavam", async () => {
+    const e = await setup();
+    const before = await db.selectFrom("needs").select(["title", "description"]).where("id", "=", e.needId).executeTakeFirstOrThrow();
+    const res = await edit(e.owner.cookie, { organizationId: e.orgId, needId: e.needId, priority: "baixa" });
+    expect(res.status).toBe(200);
+    const after = await db.selectFrom("needs").select(["title", "description", "priority"]).where("id", "=", e.needId).executeTakeFirstOrThrow();
+    expect(after).toEqual({ ...before, priority: "baixa" });
+  });
 });
