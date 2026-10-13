@@ -25,6 +25,7 @@ import {
   createTestOpportunityRegistry,
   createTestInventoryItem,
   addMembership,
+  createPlatformAdmin,
   buildRequest,
   parseJson,
   type AuthenticatedTestUser,
@@ -643,8 +644,7 @@ describe("Fase 78 — dupla autorização: segurança", () => {
     const other = await setup();
     expect((await decide(s, other.owner, approvalRequestId, "aprovada", other.orgId)).status).toBe(404);
     expect((await decide(s, other.owner, approvalRequestId, "aprovada", s.orgId)).status).toBe(403);
-    const platform = await createAuthenticatedUser();
-    await db.updateTable("users").set({ role: "admin" }).where("id", "=", platform.userId).execute();
+    const platform = await createPlatformAdmin(); // Fase 90: titular de plataforma tem MFA e sessão com MFA concluído
     expect((await decide(s, platform, approvalRequestId, "aprovada", s.orgId)).status).toBe(403);
     expect(await ledger(s)).toHaveLength(1);
     expect(await ledger(other)).toHaveLength(1);

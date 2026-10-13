@@ -767,4 +767,329 @@ CREATE TABLE files (
 );
 CREATE INDEX idx_files_org ON files(organization_id);
 
+-- ============================================================
+-- Fase 89 — Fundação de identidade (espelha db/migrations/0015_identity_foundation.sql, sem os trechos só de migração)
+-- ============================================================
+-- ------------------------------------------------------------
+-- users.anonymized_at
+-- ------------------------------------------------------------
+ALTER TABLE users ADD COLUMN anonymized_at TIMESTAMPTZ;
+
+
+-- ------------------------------------------------------------
+-- platform_access
+-- ------------------------------------------------------------
+CREATE TYPE platform_access_level AS ENUM ('owner', 'admin');
+CREATE TYPE platform_access_status AS ENUM ('active', 'revoked');
+
+CREATE TABLE platform_access (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE RESTRICT,
+  level platform_access_level NOT NULL,
+  status platform_access_status NOT NULL DEFAULT 'active',
+  granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- NULL = não foi um usuário que concedeu (migração, bootstrap offline, seed sintético de staging).
+  granted_by_user_id INTEGER REFERENCES users(id),
+  grant_origin TEXT NOT NULL DEFAULT 'owner_grant',
+  revoked_at TIMESTAMPTZ,
+  revoked_by_user_id INTEGER REFERENCES users(id),
+  revoked_reason TEXT,
+  CONSTRAINT platform_access_status_consistency CHECK ((status = 'active') = (revoked_at IS NULL))
+);
+
+-- INVARIANTE: no máximo UM Platform Owner ativo (mesmo sob concorrência).
+CREATE UNIQUE INDEX platform_access_single_active_owner ON platform_access ((1)) WHERE level = 'owner' AND status = 'active';
+CREATE INDEX idx_platform_access_active ON platform_access (level) WHERE status = 'active';
+
+-- Singleton reservado para o bootstrap offline (Fase 90); preenchido pelo backfill quando já existe owner.
+CREATE TABLE platform_state (
+  id SMALLINT PRIMARY KEY CHECK (id = 1),
+  owner_bootstrapped_at TIMESTAMPTZ
+);
+INSERT INTO platform_state (id) VALUES (1);
+
+CREATE FUNCTION platform_access_guard() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'platform_access: linhas não são apagadas; use status = revoked' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  IF NEW.user_id <> OLD.user_id THEN
+    RAISE EXCEPTION 'platform_access: user_id é imutável' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER platform_access_guard BEFORE UPDATE OR DELETE ON platform_access FOR EACH ROW EXECUTE FUNCTION platform_access_guard();
+
+-- Último owner: uma mudança que remove/rebaixa/revoga um owner ATIVO só é aceita se, no COMMIT, existir um owner ativo.
+-- Deferido de propósito: a transferência (antigo → admin, novo → owner) acontece na MESMA transação.
+CREATE FUNCTION platform_access_keep_owner() RETURNS trigger AS $$
+BEGIN
+  IF OLD.level = 'owner' AND OLD.status = 'active'
+     AND NOT (TG_OP = 'UPDATE' AND NEW.level = 'owner' AND NEW.status = 'active') THEN
+    IF NOT EXISTS (SELECT 1 FROM platform_access WHERE level = 'owner' AND status = 'active') THEN
+      RAISE EXCEPTION 'platform_access: o último Platform Owner ativo não pode ser removido, rebaixado ou revogado' USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+CREATE CONSTRAINT TRIGGER platform_access_keep_owner AFTER UPDATE OR DELETE ON platform_access
+  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform_access_keep_owner();
+
+-- ------------------------------------------------------------
+-- Backfill: users.role = 'admin' → platform_access (determinístico; não adivinha)
+-- ------------------------------------------------------------
+
+-- users.role = 'admin' deixa de ser aceito: a autorização de plataforma é platform_access.
+CREATE FUNCTION users_forbid_admin_role() RETURNS trigger AS $$
+BEGIN
+  IF NEW.role = 'admin' THEN
+    RAISE EXCEPTION 'users.role = admin não é mais permitido; a autorização de plataforma é platform_access' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER users_forbid_admin_role BEFORE INSERT OR UPDATE OF role ON users FOR EACH ROW EXECUTE FUNCTION users_forbid_admin_role();
+
+-- Titular de platform_access ATIVO nunca é anonimizado (evita "admin sem identidade" e conta de plataforma apagada por LGPD).
+CREATE FUNCTION users_protect_platform_holder() RETURNS trigger AS $$
+BEGIN
+  IF NEW.anonymized_at IS NOT NULL AND OLD.anonymized_at IS NULL
+     AND EXISTS (SELECT 1 FROM platform_access WHERE user_id = NEW.id AND status = 'active') THEN
+    RAISE EXCEPTION 'users: titular de platform_access ativo não pode ser anonimizado; revogue/transfira o acesso antes' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER users_protect_platform_holder BEFORE UPDATE OF anonymized_at ON users FOR EACH ROW EXECUTE FUNCTION users_protect_platform_holder();
+
+-- ------------------------------------------------------------
+-- sessions
+-- ------------------------------------------------------------
+ALTER TABLE sessions
+  ADD COLUMN absolute_expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '30 days'),
+  ADD COLUMN primary_method TEXT,
+  ADD COLUMN mfa_verified_at TIMESTAMPTZ,
+  ADD COLUMN last_reauth_at TIMESTAMPTZ;
+
+
+-- ------------------------------------------------------------
+-- user_passwords: 0..1 senha por usuário
+-- ------------------------------------------------------------
+ALTER TABLE user_passwords ADD CONSTRAINT user_passwords_user_id_key UNIQUE (user_id);
+
+-- ============================================================
+-- Fase 90 — MFA, auth_challenges, bootstrap do Platform Owner (espelha db/migrations/0016_mfa_foundation.sql)
+-- ============================================================
+CREATE TYPE mfa_method_type AS ENUM ('totp');
+CREATE TYPE mfa_method_status AS ENUM ('pending', 'active', 'disabled');
+
+CREATE TABLE mfa_methods (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type mfa_method_type NOT NULL DEFAULT 'totp',
+  status mfa_method_status NOT NULL DEFAULT 'pending',
+  -- iv(12) || tag(16) || ciphertext  (AES-256-GCM; AAD = "mfa:<user_id>"); nunca texto puro.
+  secret_ciphertext BYTEA NOT NULL,
+  secret_key_id SMALLINT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  confirmed_at TIMESTAMPTZ,
+  last_used_at TIMESTAMPTZ,
+  last_used_step BIGINT,
+  failed_attempts INTEGER NOT NULL DEFAULT 0,
+  last_failed_at TIMESTAMPTZ,
+  locked_until TIMESTAMPTZ,
+  disabled_at TIMESTAMPTZ,
+  CONSTRAINT mfa_methods_active_confirmed CHECK (status <> 'active' OR confirmed_at IS NOT NULL)
+);
+CREATE UNIQUE INDEX mfa_methods_one_open_per_user ON mfa_methods (user_id) WHERE status IN ('pending', 'active');
+
+CREATE TABLE mfa_recovery_codes (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  batch_id UUID NOT NULL,
+  code_hash BYTEA NOT NULL UNIQUE,
+  pepper_version SMALLINT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  used_at TIMESTAMPTZ,
+  invalidated_at TIMESTAMPTZ
+);
+CREATE INDEX idx_mfa_recovery_codes_user_open ON mfa_recovery_codes (user_id) WHERE used_at IS NULL AND invalidated_at IS NULL;
+
+CREATE TYPE auth_challenge_purpose AS ENUM ('mfa_login', 'mfa_enroll', 'bootstrap_owner', 'owner_recovery');
+CREATE TYPE auth_challenge_status AS ENUM ('pending', 'consumed', 'cancelled', 'failed');
+
+CREATE TABLE auth_challenges (
+  id BIGSERIAL PRIMARY KEY,
+  secret_hash BYTEA NOT NULL UNIQUE,
+  pepper_version SMALLINT NOT NULL,
+  purpose auth_challenge_purpose NOT NULL,
+  status auth_challenge_status NOT NULL DEFAULT 'pending',
+  -- NULL só no bootstrap do owner (o usuário ainda não existe).
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  primary_method TEXT,
+  bootstrap_token_id INTEGER,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts SMALLINT NOT NULL DEFAULT 5,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ,
+  -- Estado do bootstrap/recuperação enquanto o usuário/MFA ainda não existem (nada disto vira conta antes da transação final).
+  pending_display_name TEXT,
+  pending_password_hash TEXT,
+  pending_secret_ciphertext BYTEA,
+  pending_secret_key_id SMALLINT,
+  pending_secret_step BIGINT,
+  CONSTRAINT auth_challenges_user_required CHECK (user_id IS NOT NULL OR purpose = 'bootstrap_owner'),
+  CONSTRAINT auth_challenges_expiry CHECK (expires_at > created_at)
+);
+CREATE INDEX idx_auth_challenges_user_pending ON auth_challenges (user_id) WHERE status = 'pending';
+
+CREATE TYPE platform_bootstrap_purpose AS ENUM ('owner', 'owner_recovery');
+
+CREATE TABLE platform_bootstrap_tokens (
+  id SERIAL PRIMARY KEY,
+  purpose platform_bootstrap_purpose NOT NULL,
+  token_hash BYTEA NOT NULL UNIQUE,
+  pepper_version SMALLINT NOT NULL,
+  expected_email TEXT,
+  target_user_id INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  claimed_at TIMESTAMPTZ,
+  claimed_challenge_id BIGINT,
+  used_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  issued_by TEXT NOT NULL,
+  failed_attempts INTEGER NOT NULL DEFAULT 0,
+  CONSTRAINT platform_bootstrap_expiry CHECK (expires_at > created_at),
+  CONSTRAINT platform_bootstrap_target CHECK ((purpose = 'owner_recovery') = (target_user_id IS NOT NULL))
+);
+-- INVARIANTE: um único token pendente (não usado e não revogado) por vez.
+CREATE UNIQUE INDEX platform_bootstrap_one_pending ON platform_bootstrap_tokens ((1)) WHERE used_at IS NULL AND revoked_at IS NULL;
+
+ALTER TABLE platform_access ADD COLUMN bootstrap_token_id INTEGER REFERENCES platform_bootstrap_tokens(id);
+
+-- Titular de platform_access ATIVO nunca termina uma transação sem um TOTP ativo QUANDO ele já tinha um (remoção/desativação
+-- de MFA do owner/admin é recusada; a recuperação administrativa troca o método na MESMA transação). Contas ainda sem MFA
+-- (migradas na Fase 89) não são afetadas: elas nunca obtêm sessão sem MFA (getServerUserSession) e se inscrevem no 1º login.
+CREATE FUNCTION mfa_methods_keep_holder_protected() RETURNS trigger AS $$
+BEGIN
+  IF OLD.status = 'active' AND (TG_OP = 'DELETE' OR NEW.status <> 'active') THEN
+    IF EXISTS (SELECT 1 FROM platform_access WHERE user_id = OLD.user_id AND status = 'active')
+       AND NOT EXISTS (SELECT 1 FROM mfa_methods WHERE user_id = OLD.user_id AND status = 'active') THEN
+      RAISE EXCEPTION 'mfa_methods: titular de platform_access ativo não pode ficar sem MFA ativo' USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+CREATE CONSTRAINT TRIGGER mfa_methods_keep_holder_protected AFTER UPDATE OR DELETE ON mfa_methods
+  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION mfa_methods_keep_holder_protected();
+
+ALTER TABLE login_attempts ADD COLUMN ip_prefix TEXT;
+CREATE INDEX idx_login_attempts_email_ip_time ON login_attempts (email, ip_prefix, attempted_at DESC);
+
+-- ============================================================
+-- Fase 91 — códigos de acesso de cadastro (espelha db/migrations/0017_registration_access_codes.sql)
+-- ============================================================
+CREATE TABLE registration_access_codes (
+  id SERIAL PRIMARY KEY,
+  code_hash BYTEA NOT NULL UNIQUE,
+  pepper_version SMALLINT NOT NULL,
+  code_last4 TEXT NOT NULL CHECK (char_length(code_last4) = 4),
+  label TEXT CHECK (label IS NULL OR char_length(label) <= 120),
+  created_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ,
+  revoked_by_user_id INTEGER REFERENCES users(id),
+  redeemed_at TIMESTAMPTZ,
+  redeemed_by_user_id INTEGER REFERENCES users(id),
+  -- Reservado para extensão futura (código ligado a uma organização). IGNORADO na v1: código = cadastro geral.
+  organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
+  CONSTRAINT registration_codes_expiry CHECK (expires_at > created_at AND expires_at <= created_at + interval '90 days'),
+  CONSTRAINT registration_codes_redeemed_pair CHECK ((redeemed_at IS NULL) = (redeemed_by_user_id IS NULL)),
+  CONSTRAINT registration_codes_revoked_pair CHECK ((revoked_at IS NULL) = (revoked_by_user_id IS NULL)),
+  CONSTRAINT registration_codes_terminal_exclusive CHECK (NOT (redeemed_at IS NOT NULL AND revoked_at IS NOT NULL))
+);
+CREATE INDEX idx_registration_codes_created ON registration_access_codes (created_at DESC);
+CREATE INDEX idx_registration_codes_open ON registration_access_codes (expires_at) WHERE redeemed_at IS NULL AND revoked_at IS NULL;
+CREATE UNIQUE INDEX registration_codes_one_code_per_user ON registration_access_codes (redeemed_by_user_id) WHERE redeemed_by_user_id IS NOT NULL;
+
+ALTER TABLE users ADD COLUMN registered_via_code_id INTEGER;
+ALTER TABLE users ADD CONSTRAINT users_registered_via_code_id_key UNIQUE (registered_via_code_id);
+ALTER TABLE users ADD CONSTRAINT users_registered_via_code_id_fkey FOREIGN KEY (registered_via_code_id) REFERENCES registration_access_codes(id);
+
+-- Fase 92 — identidades externas (Google OIDC) e tentativas OAuth (state/nonce/PKCE). Ver docs/IDENTIDADE_FASE92_GOOGLE_AUDITORIA.md.
+--
+--   1. user_identities  chave da identidade = (provider, issuer, subject). E-mail é só ATRIBUTO (snapshot). UNIQUE barra a mesma
+--                       identidade externa em dois usuários. Nenhum token do provedor é armazenado.
+--   2. oauth_attempts   estado SERVIDOR de um fluxo de login/cadastro social: só hashes de state/nonce/vínculo, o verifier PKCE
+--                       CIFRADO e o access_code_id (o código de acesso nunca viaja na URL). Uso único (status), TTL curto.
+-- Não toca em dados existentes.
+
+CREATE TABLE user_identities (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider IN ('google', 'microsoft', 'apple')),
+  issuer TEXT NOT NULL CHECK (char_length(issuer) BETWEEN 1 AND 255),
+  subject TEXT NOT NULL CHECK (char_length(subject) BETWEEN 1 AND 255),
+  email_snapshot TEXT,
+  email_verified BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at TIMESTAMPTZ,
+  CONSTRAINT user_identities_provider_issuer_subject_key UNIQUE (provider, issuer, subject)
+);
+CREATE INDEX idx_user_identities_user ON user_identities (user_id);
+
+CREATE TABLE oauth_attempts (
+  id BIGSERIAL PRIMARY KEY,
+  state_hash BYTEA NOT NULL UNIQUE,
+  binding_hash BYTEA NOT NULL,
+  nonce_hash BYTEA NOT NULL,
+  pepper_version SMALLINT NOT NULL,
+  pkce_verifier_ct BYTEA NOT NULL,
+  pkce_key_id SMALLINT NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('google')),
+  intent TEXT NOT NULL CHECK (intent IN ('login', 'signup')),
+  access_code_id INTEGER REFERENCES registration_access_codes(id),
+  status TEXT NOT NULL DEFAULT 'started' CHECK (status IN ('started', 'processing', 'completed', 'failed')),
+  ip_prefix TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  finished_at TIMESTAMPTZ,
+  CONSTRAINT oauth_attempts_expiry CHECK (expires_at > created_at),
+  -- cadastro SEMPRE carrega o código; login NUNCA (login não cria conta e não consome nada)
+  CONSTRAINT oauth_attempts_code_iff_signup CHECK ((intent = 'signup') = (access_code_id IS NOT NULL))
+);
+CREATE INDEX idx_oauth_attempts_expires ON oauth_attempts (expires_at);
+
+-- Fase 92.1 — reautenticação por identidade (ciclo de vida de contas sociais). Ver docs/IDENTIDADE_FASE92_GOOGLE_AUDITORIA.md §16.
+--
+--   1. sessions.primary_reauth_at   carimbo da ÚLTIMA reautenticação do método PRIMÁRIO (hoje: identidade Google do próprio usuário).
+--                                   É DISTINTO de last_reauth_at (step-up do 2º fator): reautenticar com o Google nunca substitui o MFA.
+--   2. oauth_attempts.intent 'reauth' + user_id   a tentativa de reautenticação pertence a UM usuário (CHECK: reauth <=> user_id).
+-- Não toca em dados existentes.
+
+ALTER TABLE sessions ADD COLUMN primary_reauth_at TIMESTAMPTZ;
+
+ALTER TABLE oauth_attempts DROP CONSTRAINT oauth_attempts_intent_check;
+ALTER TABLE oauth_attempts ADD CONSTRAINT oauth_attempts_intent_check CHECK (intent IN ('login', 'signup', 'reauth'));
+ALTER TABLE oauth_attempts ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE oauth_attempts ADD CONSTRAINT oauth_attempts_user_iff_reauth CHECK ((intent = 'reauth') = (user_id IS NOT NULL));
+
+-- Fase 93 — login e cadastro com Microsoft (OIDC). Ver docs/IDENTIDADE_FASE93_MICROSOFT_AUDITORIA.md.
+--
+--   1. oauth_attempts.provider passa a aceitar 'microsoft' (a tentativa continua sendo estado SERVIDOR: hashes + verifier PKCE cifrado).
+--   2. user_identities.provider_metadata   atributos NÃO-chave do provedor (Microsoft: oid, tid, ver, idp). A chave da identidade
+--                                          continua sendo (provider, issuer, subject); o metadata nunca participa de busca de login.
+-- A coluna user_identities.provider já aceitava 'microsoft'. Não toca em dados existentes.
+
+ALTER TABLE oauth_attempts DROP CONSTRAINT oauth_attempts_provider_check;
+ALTER TABLE oauth_attempts ADD CONSTRAINT oauth_attempts_provider_check CHECK (provider IN ('google', 'microsoft'));
+
+ALTER TABLE user_identities ADD COLUMN provider_metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE user_identities ADD CONSTRAINT user_identities_provider_metadata_object CHECK (jsonb_typeof(provider_metadata) = 'object');
+
 COMMIT;

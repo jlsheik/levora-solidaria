@@ -1,5 +1,6 @@
 import { z } from "zod";
 import superjson from "superjson";
+import { newPasswordSchema } from "../../helpers/passwordPolicy.js";
 
 // Fase 51: regra canônica de normalização de e-mail adotada de forma
 // consistente em todo endpoint que aceita e-mail como entrada (aqui,
@@ -11,8 +12,11 @@ import superjson from "superjson";
 // endpoints, mas desnecessariamente hostil a um erro de digitação trivial.
 export const schema = z.object({
   email: z.string().trim().email("Informe um e-mail válido"),
-  password: z.string().min(8, "A senha deve ter pelo menos 8 caracteres"),
+  password: newPasswordSchema,
   displayName: z.string().min(1, "Nome é obrigatório"),
+  // Fase 91: código de acesso emitido pela plataforma (provisionamento). A canonicalização/validação é SÓ no servidor; o cliente
+  // apenas limita o tamanho. Nunca vira credencial de login.
+  accessCode: z.string().trim().min(1, "Informe o código de acesso").max(64, "Código de acesso inválido"),
 });
 
 // Fase 51 (SEC-03): nunca `{ user: User }` — o endpoint não cria sessão

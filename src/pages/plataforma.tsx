@@ -13,6 +13,9 @@ import { getBackgroundTasks } from "../endpoints/background-tasks_GET.schema";
 import { postBackgroundTasksRetry } from "../endpoints/background-tasks-retry_POST.schema";
 import { getPlatformOrganizations } from "../endpoints/platform-organizations_GET.schema";
 import { postPlatformOrganizationsStatus } from "../endpoints/platform-organizations-status_POST.schema";
+import { StepUpDialog } from "../components/StepUpDialog";
+import { AccessCodesPanel } from "../components/AccessCodesPanel";
+import { ApiRequestError } from "../helpers/apiRequestError";
 import { SourceTypeArrayValues, OpportunityUrgencyArrayValues } from "../helpers/schema";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
@@ -115,8 +118,16 @@ export default function PlatformPage() {
       queryClient.invalidateQueries({ queryKey: ["platform-organizations"] });
       toast.success("Status da organização atualizado");
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Falha ao atualizar organização"),
+    onError: (err, vars) => {
+      // Step-up (Fase 90): ação crítica sem MFA recente → pede o código do autenticador e REPETE a ação.
+      if (err instanceof ApiRequestError && err.code === "reauth_required") {
+        setStepUpRetry(vars);
+        return;
+      }
+      toast.error(err instanceof Error ? err.message : "Falha ao atualizar organização");
+    },
   });
+  const [stepUpRetry, setStepUpRetry] = useState<{ organizationId: number; status: "ativa" | "suspensa" | "em_analise" } | null>(null);
 
   const activeSources = (sourcesQuery.data?.sources ?? []).filter((s) => s.status === "ativa");
 
@@ -488,6 +499,7 @@ export default function PlatformPage() {
             </ul>
           )}
         </section>
+        <AccessCodesPanel />
       </main>
 
       <Dialog open={!!allocateTarget} onOpenChange={(open) => !open && setAllocateTarget(null)}>
@@ -557,6 +569,16 @@ export default function PlatformPage() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      <StepUpDialog
+        open={stepUpRetry !== null}
+        onOpenChange={(open) => !open && setStepUpRetry(null)}
+        onConfirmed={() => {
+          const vars = stepUpRetry;
+          setStepUpRetry(null);
+          if (vars) orgStatusMutation.mutate(vars);
+        }}
+      />
     </div>
   );
 }

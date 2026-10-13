@@ -17,9 +17,36 @@ import { PlatformAccessError } from "./platformAccess.js";
  * caso desde a primeira versão.
  */
 export class ConflictError extends Error {
-  constructor(message: string) {
+  /** Código estável opcional de domínio (ex.: `plataforma_acesso_ativo`), devolvido ao cliente junto da mensagem. */
+  readonly code?: string;
+  constructor(message: string, code?: string) {
     super(message);
     this.name = "ConflictError";
+    this.code = code;
+  }
+}
+
+/**
+ * Lançado quando uma ação crítica exige reautenticação recente (step-up, Fase 90). Mensagem segura para o público;
+ * o cliente reage ao `code: "reauth_required"` pedindo o código do segundo fator.
+ */
+export class ReauthRequiredError extends Error {
+  readonly code = "reauth_required";
+  constructor(message = "Confirme sua identidade com o código do autenticador para continuar.") {
+    super(message);
+    this.name = "ReauthRequiredError";
+  }
+}
+
+/**
+ * Fase 92.1: a ação crítica de uma conta SEM senha exige reautenticação recente da identidade (hoje, Google). O cliente reage ao
+ * `code: "reauth_social_required"` oferecendo "Confirmar com o Google". Nunca substitui o step-up do MFA (`reauth_required`).
+ */
+export class SocialReauthRequiredError extends Error {
+  readonly code = "reauth_social_required";
+  constructor(message = "Confirme sua identidade novamente com o provedor de login para continuar.") {
+    super(message);
+    this.name = "SocialReauthRequiredError";
   }
 }
 
@@ -38,6 +65,8 @@ function mapTypedErrorToStatus(error: unknown): number | null {
   if (error instanceof OrganizationAccessError) return 403;
   if (error instanceof PlatformAccessError) return 403;
   if (error instanceof ConflictError) return 409;
+  if (error instanceof ReauthRequiredError) return 403;
+  if (error instanceof SocialReauthRequiredError) return 403;
   if (error instanceof ZodError) return 400;
   // `superjson.parse(await request.text())` lança SyntaxError nativo
   // quando o corpo nem chega a ser JSON válido (ex.: corpo vazio, HTML de
@@ -76,6 +105,8 @@ function getPublicMessage(error: unknown, fallbackMessage: string): string {
     error instanceof OrganizationAccessError ||
     error instanceof PlatformAccessError ||
     error instanceof ConflictError ||
+    error instanceof ReauthRequiredError ||
+    error instanceof SocialReauthRequiredError ||
     error instanceof ZodError
   ) {
     return error.message;
@@ -108,8 +139,10 @@ export function buildErrorResponse(
 ): Response {
   const message = getPublicMessage(error, fallbackMessage);
   const status = mapTypedErrorToStatus(error) ?? extraStatus?.(message) ?? 500;
-  return new Response(superjson.stringify({ message }), {
+  const code = error instanceof ConflictError || error instanceof ReauthRequiredError || error instanceof SocialReauthRequiredError ? error.code : undefined;
+  return new Response(superjson.stringify(code ? { message, code } : { message }), {
     status,
-    headers: { "Content-Type": "application/json" },
+    // Erros nunca são cacheáveis (podem ecoar contexto de rotas que carregam segredos, ex.: códigos de acesso).
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
 }

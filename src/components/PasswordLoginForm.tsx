@@ -18,6 +18,10 @@ import {
   postLogin,
 } from "../endpoints/auth/login_with_password_POST.schema";
 import { useAuth } from "../helpers/useAuth";
+import { MfaCodeForm } from "./MfaCodeForm";
+import { MfaSetupPanel } from "./MfaSetupPanel";
+import { GoogleButton, OrDivider } from "./GoogleButton";
+import { MicrosoftButton } from "./MicrosoftButton";
 
 export type LoginFormData = z.infer<typeof schema>;
 
@@ -33,6 +37,8 @@ export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Fase 90: senha correta ≠ login completo para quem tem 2º fator — o servidor devolve um challenge (cookie próprio, sem sessão).
+  const [mfaStage, setMfaStage] = useState<null | "verify" | "enroll">(null);
   const { onLogin } = useAuth();
   const navigate = useNavigate();
 
@@ -50,6 +56,10 @@ export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
 
     try {
       const result = await postLogin(data);
+      if (result.mfaRequired) {
+        setMfaStage(result.mfaKind);
+        return;
+      }
       onLogin(result.user);
       setTimeout(() => navigate(redirectTo), 200);
     } catch (err) {
@@ -61,6 +71,27 @@ export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
       setIsLoading(false);
     }
   };
+
+  const finish = (user?: Parameters<typeof onLogin>[0]) => {
+    if (user) onLogin(user);
+    setTimeout(() => navigate(redirectTo), 200);
+  };
+  const restart = () => {
+    setMfaStage(null);
+    form.setValues((prev) => ({ ...prev, password: "" }));
+  };
+
+  if (mfaStage === "verify") return <MfaCodeForm onVerified={finish} onRestart={restart} />;
+  if (mfaStage === "enroll") {
+    return (
+      <MfaSetupPanel
+        mode="challenge"
+        intro="Contas com acesso à plataforma precisam de um segundo fator. Configure o autenticador para entrar."
+        onRestart={restart}
+        onDone={finish}
+      />
+    );
+  }
 
   return (
     <Form {...form}>
@@ -122,6 +153,11 @@ export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
           )}
         </Button>
       </form>
+      <div className={styles.alt}>
+        <OrDivider>ou</OrDivider>
+        <GoogleButton intent="login">Entrar com Google</GoogleButton>
+        <MicrosoftButton intent="login">Entrar com Microsoft</MicrosoftButton>
+      </div>
     </Form>
   );
 };

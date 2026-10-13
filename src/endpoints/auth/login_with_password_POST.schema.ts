@@ -10,9 +10,10 @@ export const schema = z.object({
   password: z.string().min(1, "Informe a senha"),
 });
 
-export type OutputType = {
-  user: User;
-};
+/** Resposta do login: sessão completa (`user`) OU segundo fator pendente (`mfaRequired`, cookie de challenge, sem sessão). */
+export type OutputType =
+  | { user: User; mfaRequired?: undefined }
+  | { mfaRequired: true; mfaKind: "verify" | "enroll"; expiresInSeconds: number; user?: undefined };
 
 export const postLogin = async (
   body: z.infer<typeof schema>,

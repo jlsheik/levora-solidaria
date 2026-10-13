@@ -17,7 +17,10 @@
 import { describe, it, expect } from "vitest";
 import { sql } from "kysely";
 import { db } from "../src/helpers/db";
-import { handle as postRegister } from "../src/endpoints/auth/register_with_password_POST";
+import { handle as rawPostRegister } from "../src/endpoints/auth/register_with_password_POST";
+import { withFreshAccessCode } from "./helpers";
+// Fase 91: o cadastro exige código de acesso; estes testes (de outros comportamentos) recebem um código ativo novo automaticamente.
+const postRegister = withFreshAccessCode(rawPostRegister);
 import { handle as postLogin } from "../src/endpoints/auth/login_with_password_POST";
 import { handle as postInvite } from "../src/endpoints/organization-invites_POST";
 import { handle as postInviteAccept } from "../src/endpoints/organization-invites-accept_POST";

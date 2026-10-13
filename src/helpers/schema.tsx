@@ -63,6 +63,20 @@ export type StockTransactionType = "ajuste" | "entrada" | "saida";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export type AuthChallengePurpose = "bootstrap_owner" | "mfa_enroll" | "mfa_login" | "owner_recovery";
+
+export type AuthChallengeStatus = "cancelled" | "consumed" | "failed" | "pending";
+
+export type MfaMethodStatus = "active" | "disabled" | "pending";
+
+export type MfaMethodType = "totp";
+
+export type PlatformBootstrapPurpose = "owner" | "owner_recovery";
+
+export type PlatformAccessLevel = "admin" | "owner";
+
+export type PlatformAccessStatus = "active" | "revoked";
+
 export type UserRole = "admin" | "user";
 
 export interface ApprovalRequests {
@@ -153,6 +167,7 @@ export interface InventoryItems {
 }
 
 export interface LoginAttempts {
+  ipPrefix: string | null;
   attemptedAt: Generated<Timestamp | null>;
   email: string;
   id: Generated<number>;
@@ -337,10 +352,15 @@ export interface Organizations {
 }
 
 export interface Sessions {
+  absoluteExpiresAt: Generated<Timestamp>;
   createdAt: Generated<Timestamp | null>;
   expiresAt: Timestamp;
   id: string;
   lastAccessed: Generated<Timestamp | null>;
+  lastReauthAt: Timestamp | null;
+  mfaVerifiedAt: Timestamp | null;
+  primaryMethod: string | null;
+  primaryReauthAt: Timestamp | null;
   userId: number;
 }
 
@@ -387,6 +407,8 @@ export interface UserPasswords {
 }
 
 export interface Users {
+  registeredViaCodeId: number | null;
+  anonymizedAt: Timestamp | null;
   avatarUrl: string | null;
   createdAt: Generated<Timestamp | null>;
   displayName: string;
@@ -396,7 +418,140 @@ export interface Users {
   updatedAt: Generated<Timestamp | null>;
 }
 
+export interface AuthChallenges {
+  attempts: Generated<number>;
+  bootstrapTokenId: number | null;
+  consumedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  expiresAt: Timestamp;
+  id: Generated<number>;
+  maxAttempts: Generated<number>;
+  pendingDisplayName: string | null;
+  pendingPasswordHash: string | null;
+  pendingSecretCiphertext: Buffer | null;
+  pendingSecretKeyId: number | null;
+  pendingSecretStep: number | null;
+  pepperVersion: number;
+  primaryMethod: string | null;
+  purpose: AuthChallengePurpose;
+  secretHash: Buffer;
+  status: Generated<AuthChallengeStatus>;
+  userId: number | null;
+}
+
+export interface MfaMethods {
+  confirmedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  disabledAt: Timestamp | null;
+  failedAttempts: Generated<number>;
+  id: Generated<number>;
+  lastFailedAt: Timestamp | null;
+  lastUsedAt: Timestamp | null;
+  lastUsedStep: number | null;
+  lockedUntil: Timestamp | null;
+  secretCiphertext: Buffer;
+  secretKeyId: number;
+  status: Generated<MfaMethodStatus>;
+  type: Generated<MfaMethodType>;
+  userId: number;
+}
+
+export interface MfaRecoveryCodes {
+  batchId: string;
+  codeHash: Buffer;
+  createdAt: Generated<Timestamp>;
+  id: Generated<number>;
+  invalidatedAt: Timestamp | null;
+  pepperVersion: number;
+  usedAt: Timestamp | null;
+  userId: number;
+}
+
+export interface PlatformBootstrapTokens {
+  claimedAt: Timestamp | null;
+  claimedChallengeId: number | null;
+  createdAt: Generated<Timestamp>;
+  expectedEmail: string | null;
+  expiresAt: Timestamp;
+  failedAttempts: Generated<number>;
+  id: Generated<number>;
+  issuedBy: string;
+  pepperVersion: number;
+  purpose: PlatformBootstrapPurpose;
+  revokedAt: Timestamp | null;
+  targetUserId: number | null;
+  tokenHash: Buffer;
+  usedAt: Timestamp | null;
+}
+
+export interface PlatformAccess {
+  bootstrapTokenId: number | null;
+  grantedAt: Generated<Timestamp>;
+  grantedByUserId: number | null;
+  grantOrigin: Generated<string>;
+  level: PlatformAccessLevel;
+  revokedAt: Timestamp | null;
+  revokedByUserId: number | null;
+  revokedReason: string | null;
+  status: Generated<PlatformAccessStatus>;
+  userId: number;
+}
+
+export interface PlatformState {
+  id: number;
+  ownerBootstrappedAt: Timestamp | null;
+}
+
+export interface RegistrationAccessCodes {
+  codeHash: Buffer;
+  codeLast4: string;
+  createdAt: Generated<Timestamp>;
+  createdByUserId: number;
+  expiresAt: Timestamp;
+  id: Generated<number>;
+  label: string | null;
+  organizationId: number | null;
+  pepperVersion: number;
+  redeemedAt: Timestamp | null;
+  redeemedByUserId: number | null;
+  revokedAt: Timestamp | null;
+  revokedByUserId: number | null;
+}
+
+export interface UserIdentities {
+  createdAt: Generated<Timestamp>;
+  emailSnapshot: string | null;
+  emailVerified: Generated<boolean>;
+  id: Generated<number>;
+  issuer: string;
+  lastUsedAt: Timestamp | null;
+  provider: string;
+  providerMetadata: Generated<Json>;
+  subject: string;
+  userId: number;
+}
+
+export interface OauthAttempts {
+  accessCodeId: number | null;
+  bindingHash: Buffer;
+  createdAt: Generated<Timestamp>;
+  expiresAt: Timestamp;
+  finishedAt: Timestamp | null;
+  id: Generated<number>;
+  intent: string;
+  ipPrefix: string | null;
+  nonceHash: Buffer;
+  pepperVersion: number;
+  pkceKeyId: number;
+  pkceVerifierCt: Buffer;
+  provider: string;
+  stateHash: Buffer;
+  status: Generated<string>;
+  userId: number | null;
+}
+
 export interface DB {
+  authChallenges: AuthChallenges;
   approvalRequests: ApprovalRequests;
   auditLog: AuditLog;
   backgroundTaskRuns: BackgroundTaskRuns;
@@ -407,6 +562,8 @@ export interface DB {
   logisticsEvents: LogisticsEvents;
   matchEvaluations: MatchEvaluations;
   memberships: Memberships;
+  mfaMethods: MfaMethods;
+  mfaRecoveryCodes: MfaRecoveryCodes;
   needFulfillments: NeedFulfillments;
   needResolutions: NeedResolutions;
   needs: Needs;
@@ -417,6 +574,12 @@ export interface DB {
   organizationMatchingSettings: OrganizationMatchingSettings;
   organizationServiceAreas: OrganizationServiceAreas;
   organizations: Organizations;
+  platformAccess: PlatformAccess;
+  platformBootstrapTokens: PlatformBootstrapTokens;
+  platformState: PlatformState;
+  registrationAccessCodes: RegistrationAccessCodes;
+  userIdentities: UserIdentities;
+  oauthAttempts: OauthAttempts;
   sessions: Sessions;
   sources: Sources;
   stockTransactions: StockTransactions;
@@ -426,6 +589,7 @@ export interface DB {
 
 
 // Use these for zod schema enums or other purposes, since the kysely enums are just types
+export const PlatformAccessLevelArrayValues: [PlatformAccessLevel, ...PlatformAccessLevel[]] = ["admin","owner"];
 export const UserRoleArrayValues: [UserRole, ...UserRole[]] = ["admin","user"];
 export const OrganizationTypeArrayValues: [OrganizationType, ...OrganizationType[]] = ["igreja","organizacao_social","ponto_distribuicao"];
 export const OrganizationStatusArrayValues: [OrganizationStatus, ...OrganizationStatus[]] = ["ativa","em_analise","suspensa"];

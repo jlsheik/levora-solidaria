@@ -19,6 +19,7 @@ export async function handle(request: Request) {
           displayName: user.displayName,
           avatarUrl: user.avatarUrl,
           role: user.role,
+          platformLevel: user.platformLevel,
         } satisfies User,
       }),
       {
@@ -29,11 +30,16 @@ export async function handle(request: Request) {
     );
 
     // Update the session cookie with the new lastAccessed time
-    await setServerSession(response, {
-      id: session.id,
-      createdAt: session.createdAt,
-      lastAccessed: session.lastAccessed.getTime(),
-    });
+    await setServerSession(
+      response,
+      {
+        id: session.id,
+        createdAt: session.createdAt,
+        lastAccessed: session.lastAccessed.getTime(),
+      },
+      // Renova só o cookie/ocioso; o teto absoluto da sessão NUNCA é estendido (sessionPolicy.tsx).
+      { absoluteExpiresAt: session.absoluteExpiresAt }
+    );
 
     return response;
   } catch (error) {

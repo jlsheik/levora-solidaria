@@ -67,8 +67,17 @@ export async function getServerSessionOrThrow(
 
 export async function setServerSession(
   response: Response,
-  session: Session
+  session: Session,
+  options: { absoluteExpiresAt?: Date } = {}
 ): Promise<void> {
+  // Fase 89: o cookie/JWT nunca vive além do teto absoluto da sessão (a linha em `sessions` é a autoridade; ver
+  // sessionPolicy.tsx). Sem `absoluteExpiresAt` mantém-se o comportamento anterior (7 dias).
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  let lifetimeSeconds = SessionExpirationSeconds;
+  if (options.absoluteExpiresAt) {
+    const remaining = Math.floor(options.absoluteExpiresAt.getTime() / 1000) - nowSeconds;
+    lifetimeSeconds = Math.max(1, Math.min(SessionExpirationSeconds, remaining));
+  }
   // Precisa bater com o Max-Age do cookie abaixo (SessionExpirationSeconds,
   // 7 dias) — antes disso o JWT interno expirava em "1d" fixo enquanto o
   // cookie dizia durar 7 dias, então a sessão real caía em 1 dia sem
@@ -82,7 +91,7 @@ export async function setServerSession(
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(Math.floor(Date.now() / 1000) + SessionExpirationSeconds)
+    .setExpirationTime(nowSeconds + lifetimeSeconds)
     .sign(encoder.encode(secret));
 
   const cookieValue = [
@@ -91,7 +100,7 @@ export async function setServerSession(
     "Secure",
     "SameSite=Lax",
     "Path=/",
-    `Max-Age=${SessionExpirationSeconds}`,
+    `Max-Age=${lifetimeSeconds}`,
   ].join("; ");
 
   response.headers.set("Set-Cookie", cookieValue);

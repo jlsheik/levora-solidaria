@@ -138,8 +138,8 @@ FK é relaxada.
 Únicas escritas SQL diretas, sem endpoint equivalente (todas restritas aos
 e-mails sintéticos deste seed):
 
-1. promover `admin@staging.levora.local` a `users.role = 'admin'` (não existe
-   endpoint de promoção; é o bootstrap do papel de plataforma);
+1. conceder a `admin@staging.levora.local` um `platform_access` ativo de nível `owner` (Fase 89: `users.role = 'admin'`
+   foi aposentado e o banco recusa esse valor; não existe endpoint de promoção; é o bootstrap do papel de plataforma);
 2. redefinir senhas (`-ResetPasswords`);
 3. criar e apagar as linhas de `sessions` usadas nas chamadas internas (o
    seed não deixa nenhuma sessão para trás).

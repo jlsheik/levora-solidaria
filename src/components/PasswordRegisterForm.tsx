@@ -12,11 +12,15 @@ import {
 import { Input } from "./Input";
 import { Button } from "./Button";
 import { Spinner } from "./Spinner";
+import { GoogleButton, OrDivider } from "./GoogleButton";
+import { MicrosoftButton } from "./MicrosoftButton";
 import styles from "./PasswordRegisterForm.module.css";
 import {
   schema,
   postRegister,
 } from "../endpoints/auth/register_with_password_POST.schema";
+import { postAccessCodeCheck } from "../endpoints/auth/access-code-check_POST.schema";
+import { ApiRequestError } from "../helpers/apiRequestError";
 
 export type RegisterFormData = z.infer<typeof schema>;
 
@@ -30,6 +34,11 @@ interface PasswordRegisterFormProps {
   onSubmitted?: () => void;
 }
 
+/**
+ * Cadastro em DOIS passos (Fase 92): (1) código de acesso, validado sem consumir; (2) só então aparecem as formas de criar a conta —
+ * "Continuar com Google", "Continuar com Microsoft" ou e-mail e senha. O código nunca vai para a URL nem para o storage: vive só neste estado de componente
+ * e segue no CORPO das requisições; o servidor revalida em qualquer caminho (a validação aqui é só experiência de uso).
+ */
 export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
   className,
   defaultValues,
@@ -43,6 +52,8 @@ export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
   // e docs/SECURITY.md). Esta tela só confirma o envio e direciona para a
   // aba "Entrar"; logar de verdade acontece ali, como qualquer login.
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [codeStatus, setCodeStatus] = useState<"editing" | "checking" | "valid">("editing");
+  const [codeError, setCodeError] = useState<string | null>(null);
 
   const form = useForm({
     schema,
@@ -50,8 +61,35 @@ export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
       email: "",
       password: "",
       displayName: "",
+      accessCode: "",
     },
   });
+
+  const accessCode = (form.values.accessCode || "").trim();
+
+  const checkCode = async () => {
+    if (!accessCode || codeStatus === "checking") return;
+    setCodeError(null);
+    setCodeStatus("checking");
+    try {
+      await postAccessCodeCheck({ accessCode });
+      setCodeStatus("valid");
+    } catch (err) {
+      setCodeStatus("editing");
+      setCodeError(
+        err instanceof ApiRequestError && err.status === 429
+          ? "Muitas tentativas. Aguarde um pouco antes de tentar de novo."
+          : err instanceof ApiRequestError && err.code === "codigo_indisponivel"
+            ? err.message
+            : "Não foi possível validar o código agora. Tente novamente."
+      );
+    }
+  };
+
+  const changeCode = () => {
+    setCodeStatus("editing");
+    setCodeError(null);
+  };
 
   const handleSubmit = async (data: z.infer<typeof schema>) => {
     setError(null);
@@ -61,12 +99,17 @@ export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
     try {
       const result = await postRegister(data);
       setSuccessMessage(result.message);
-      form.setValues({ email: "", password: "", displayName: "" });
+      form.setValues({ email: "", password: "", displayName: "", accessCode: "" });
+      setCodeStatus("editing");
       onSubmitted?.();
     } catch (err) {
       console.error("Registration error:", err);
 
-      if (err instanceof Error) {
+      if (err instanceof ApiRequestError && err.code === "codigo_indisponivel") {
+        // o código deixou de servir (usado/expirado/revogado) entre a validação e o envio: volta ao passo 1
+        setCodeStatus("editing");
+        setError(err.message);
+      } else if (err instanceof Error) {
         const errorMessage = err.message;
         if (errorMessage.toLowerCase().includes("nome")) {
           setError("Informe um nome válido.");
@@ -81,6 +124,8 @@ export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
     }
   };
 
+  const codeValid = codeStatus === "valid";
+
   return (
     <Form {...form}>
       {successMessage && <div className={styles.successMessage}>{successMessage}</div>}
@@ -91,77 +136,143 @@ export const PasswordRegisterForm: React.FC<PasswordRegisterFormProps> = ({
         )}
         className={`${styles.form} ${className || ""}`}
       >
-        <FormItem name="email">
-          <FormLabel>E-mail</FormLabel>
+        <FormItem name="accessCode">
+          <FormLabel>Código de acesso</FormLabel>
           <FormControl>
             <Input
-              placeholder="voce@email.com"
-              value={form.values.email || ""}
-              onChange={(e) =>
+              id="register-access-code"
+              placeholder="LEV-XXXX-XXXX-XXXX-XXXX-XXXX"
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              readOnly={codeValid}
+              disabled={codeStatus === "checking"}
+              value={form.values.accessCode || ""}
+              onChange={(e) => {
+                setCodeError(null);
                 form.setValues((prev: any) => ({
                   ...prev,
-                  email: e.target.value,
-                }))
-              }
-            />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-
-        <FormItem name="displayName">
-          <FormLabel>Nome</FormLabel>
-          <FormControl>
-            <Input
-              id="register-display-name"
-              placeholder="Seu nome"
-              value={form.values.displayName || ""}
-              onChange={(e) =>
-                form.setValues((prev: any) => ({
-                  ...prev,
-                  displayName: e.target.value,
-                }))
-              }
-            />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-
-        <FormItem name="password">
-          <FormLabel>Senha</FormLabel>
-          <FormControl>
-            <Input
-              type="password"
-              placeholder="••••••••"
-              value={form.values.password || ""}
-              onChange={(e) =>
-                form.setValues((prev: any) => ({
-                  ...prev,
-                  password: e.target.value,
-                }))
-              }
+                  accessCode: e.target.value.toUpperCase(),
+                }));
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !codeValid) {
+                  e.preventDefault();
+                  void checkCode();
+                }
+              }}
             />
           </FormControl>
           <FormDescription>
-            No mínimo 8 caracteres
+            {codeValid
+              ? "Código válido. Escolha como criar sua conta."
+              : "O código é fornecido pela Levora e vale para uma única conta. Não é a sua senha."}
           </FormDescription>
+          {codeError && <div className={styles.errorMessage} role="alert">{codeError}</div>}
           <FormMessage />
         </FormItem>
 
-        <Button
-          type="submit"
-          disabled={isLoading}
-          className={styles.submitButton}
-        >
-          {isLoading ? (
-            <>
-              <Spinner size="sm" /> Criando conta...
-            </>
-          ) : (
-            "Criar conta"
-          )}
-        </Button>
+        {!codeValid ? (
+          <Button
+            type="button"
+            className={styles.submitButton}
+            disabled={!accessCode || codeStatus === "checking"}
+            onClick={checkCode}
+          >
+            {codeStatus === "checking" ? (
+              <>
+                <Spinner size="sm" /> Validando...
+              </>
+            ) : (
+              "Validar código"
+            )}
+          </Button>
+        ) : (
+          <>
+            <button type="button" className={styles.linkButton} onClick={changeCode}>
+              Usar outro código
+            </button>
+
+            <GoogleButton intent="signup" accessCode={accessCode}>
+              Continuar com Google
+            </GoogleButton>
+            <MicrosoftButton intent="signup" accessCode={accessCode}>
+              Continuar com Microsoft
+            </MicrosoftButton>
+            <OrDivider>ou crie com e-mail e senha</OrDivider>
+
+            <FormItem name="email">
+              <FormLabel>E-mail</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="voce@email.com"
+                  value={form.values.email || ""}
+                  onChange={(e) =>
+                    form.setValues((prev: any) => ({
+                      ...prev,
+                      email: e.target.value,
+                    }))
+                  }
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+
+            <FormItem name="displayName">
+              <FormLabel>Nome</FormLabel>
+              <FormControl>
+                <Input
+                  id="register-display-name"
+                  placeholder="Seu nome"
+                  value={form.values.displayName || ""}
+                  onChange={(e) =>
+                    form.setValues((prev: any) => ({
+                      ...prev,
+                      displayName: e.target.value,
+                    }))
+                  }
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+
+            <FormItem name="password">
+              <FormLabel>Senha</FormLabel>
+              <FormControl>
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={form.values.password || ""}
+                  onChange={(e) =>
+                    form.setValues((prev: any) => ({
+                      ...prev,
+                      password: e.target.value,
+                    }))
+                  }
+                />
+              </FormControl>
+              <FormDescription>
+                No mínimo 8 caracteres
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className={styles.submitButton}
+            >
+              {isLoading ? (
+                <>
+                  <Spinner size="sm" /> Criando conta...
+                </>
+              ) : (
+                "Criar conta"
+              )}
+            </Button>
+          </>
+        )}
       </form>
     </Form>
   );
 };
-
