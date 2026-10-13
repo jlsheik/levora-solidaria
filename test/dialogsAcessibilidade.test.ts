@@ -59,6 +59,18 @@ describe("CSS: contraste do diálogo no tema escuro e indicadores das necessidad
     expect(css).toMatch(/@media \(max-width: 40rem\) \{\s*\.needCard \{\s*display: grid;\s*grid-template-columns: auto minmax\(0, 1fr\);\s*\}\s*\.needActions \{\s*grid-column: 1 \/ -1;/);
   });
 
+  it("corpo estreito (< 20rem): indicadores em linhas rótulo/valor, sem truncar, sem esconder e sem reduzir fonte (caso 12345.5 unidades em 375px)", () => {
+    const css = read("src/pages/organizacoes.$organizationId.necessidades.module.css");
+    const block = css.match(/@container \(max-width: 20rem\) \{([\s\S]*?)\n\}\n/);
+    expect(block).not.toBeNull();
+    const body = block![1];
+    expect(body).toMatch(/\.progressGrid \{[^}]*grid-template-columns: minmax\(0, 1fr\);/);
+    expect(body).toMatch(/\.progressStat \{[^}]*flex-direction: row;[^}]*flex-wrap: wrap;[^}]*justify-content: space-between;/);
+    expect(body).toMatch(/\.progressValue \{[^}]*margin-left: auto;[^}]*text-align: right;/);
+    // nada de mascarar o problema
+    expect(body).not.toMatch(/white-space|text-overflow|overflow:|display: none|visibility|font-size|line-clamp|max-height/);
+  });
+
   it("a ordem do DOM (ícone, corpo, ações) e os textos/valores dos indicadores não mudaram", () => {
     const page = read("src/pages/organizacoes.$organizationId.necessidades.tsx");
     const iconAt = page.indexOf("styles.needIcon");

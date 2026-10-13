@@ -189,6 +189,29 @@
   }
 }
 
+/* Corpo muito estreito (< 20rem, i.e. celulares até ~460px; 231px em 375px): duas colunas IGUAIS de ~110px não comportam "12345.5 unidades"
+   (~118px) e o valor quebrava entre número e unidade. Aqui cada indicador vira uma linha rótulo à esquerda / valor à direita (mesma altura total
+   do 2x2); se rótulo + valor não couberem juntos, o valor desce para a linha de baixo, sem cortar nem truncar. */
+@container (max-width: 20rem) {
+  .progressGrid {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--spacing-2);
+  }
+
+  .progressStat {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    column-gap: var(--spacing-2);
+  }
+
+  .progressValue {
+    margin-left: auto;
+    text-align: right;
+  }
+}
+
 /* telas estreitas: ícone + corpo na 1ª linha e as ações na 2ª (a ordem do DOM e da leitura não muda) */
 @media (max-width: 40rem) {
   .needCard {
