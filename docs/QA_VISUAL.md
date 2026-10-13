@@ -222,7 +222,7 @@ detector de upload foi provado contra o código anterior (9 FAIL com os três ar
 falha com o `nginx.conf` de `HEAD`).
 
 **Não mede:** WebKit/Firefox (só Blink); o **staging** (`nginx.staging.conf`: só sintaxe e regras estáticas), TLS/domínio/certificado reais, redirecionamento da porta 80, CDN/WAF
-na frente; o adaptador **S3** (só disco local); varredura de malware; PDF dentro do visualizador do navegador (o PDF é conferido por bytes e cabeçalhos, não aberto); armazenamento
+na frente; o adaptador **S3** pelo `qa:security` (ele roda no navegador sobre disco local; o S3 tem teste próprio em `test/storageS3.test.ts`, contra um servidor local); varredura de malware; PDF dentro do visualizador do navegador (o PDF é conferido por bytes e cabeçalhos, não aberto); armazenamento
 de HTML/SVG por outro caminho que não o upload; postMessage/iframes de terceiros; clickjacking além do iframe testado; GETs com efeito colateral. O cookie `Secure` sobre
 `http://127.0.0.1` funciona nos navegadores testados; em outro ambiente de teste isso pode exigir HTTPS.
 

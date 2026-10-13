@@ -82,6 +82,27 @@ PDF `%PDF-`) e recusa (400, antes de gravar) o que não bate — um SVG/HTML com
 estritamente. O download devolve `Content-Disposition` só em ASCII (`filename*` carrega o nome Unicode) e **nunca** serve como renderizável um tipo fora da lista
 (linhas antigas viram `application/octet-stream` + `attachment`). Ver `docs/SECURITY.md` ("Upload e download") e `test/uploadSecurity.test.ts`.
 
+## Adaptador S3: o que foi exercitado e o que não foi (Fase 94)
+
+`test/storageS3.test.ts` roda o `S3StorageAdapter` **real**, com o SDK **real** (`@aws-sdk/client-s3`), por HTTP contra um servidor S3 local controlado pelo teste (`test/fakeS3.ts`,
+127.0.0.1, porta do SO, em memória, encerrado no fim; credenciais sintéticas). Nenhum mock do SDK. Cobre: ida e volta com os 256 valores de byte e 5 MB sem truncar; chave
+`<organizationId>/<uuid>` em path-style no bucket configurado; toda requisição assinada (SigV4) e o segredo nunca trafegando; `DELETE`; as rotas reais `files-upload`/`files-download`
+(banco de teste, sessão, Express real) com bytes idênticos, `Content-Type` exato, `Content-Length`, `nosniff`, `no-store` e disposição só ASCII; nomes hostis/Unicode/longos nunca na
+chave; autorização por sessão e organização (401/403/404/400, membro inativo, e **o S3 nem é consultado** antes da autorização); linhas antigas `text/html`/`image/svg+xml` no S3 saem como
+`octet-stream` + `attachment`; falhas (objeto ausente, acesso negado, 500 com retentativas do SDK, sem resposta, corpo truncado, corpo travado) viram erro e, na rota, **500 JSON genérico** sem
+bucket, endpoint, chaves, assinatura nem stack — nem no log.
+
+**Defeitos reais encontrados e corrigidos (só no adaptador):** (1) uma chave adulterada no banco (`1/../2/<uuid>`, `//`, esquema) ia à rede e o SDK normaliza `..`, apontando para OUTRO
+objeto do bucket — o adaptador de disco tinha a guarda, o S3 não; agora `download`/`delete` exigem o formato `<org>/<uuid>` antes de qualquer chamada; (2) **sem timeout**: um S3 que não responde
+(ou um corpo que trava no meio) deixava o download pendurado para sempre — o cliente agora usa `socketTimeout` (inatividade) de 30 s, configurável por `S3_REQUEST_TIMEOUT_MS` (o `requestTimeout`
+do SDK só emite aviso, por isso não é usado).
+
+**Limites, sem apresentar como coberto:** o servidor local **não valida a assinatura SigV4** nem implementa versionamento, ACL ou URLs pré-assinadas (o app não as usa: o download sempre passa pelo
+servidor); **não prova compatibilidade com um bucket real** (AWS, R2, MinIO) — isso exige credenciais e infraestrutura fora do repositório; o download é carregado inteiro em memória (limite de 8 MB
+no upload) e **não** é transmitido em streaming ao cliente; a rota ignora a coluna `files.storageProvider` (se o armazenamento configurado mudar, arquivos antigos do outro provedor viram erro 500
+genérico, sem migração); a limpeza do blob quando o INSERT no banco falha (`delete` no `catch` do upload) não tem teste dedicado para S3; objeto ausente no S3 responde 500 (inconsistência do
+servidor), não 404.
+
 ## Configuração (opcional)
 
 Sem nenhuma variável de storage configurada, tudo funciona via disco local

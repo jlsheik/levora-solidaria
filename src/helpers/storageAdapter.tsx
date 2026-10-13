@@ -60,12 +60,22 @@ class LocalDiskStorageAdapter implements StorageAdapter {
   }
 }
 
+/**
+ * Toda chave que o adaptador S3 cria tem o formato `<organizationId>/<uuid>`. O valor lido do banco é confirmado contra esse formato antes de ir à rede:
+ * o SDK normaliza segmentos `..` no caminho, então uma chave adulterada (`1/../outra-org/x`) poderia apontar para OUTRO objeto do bucket. (O adaptador de
+ * disco tem a guarda equivalente em `resolveSafePath`.)
+ */
+const S3_KEY_SHAPE = /^\d+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+function assertS3KeyShape(key: string): void {
+  if (!S3_KEY_SHAPE.test(key)) throw new Error("Chave de armazenamento inválida");
+}
+
 class S3StorageAdapter implements StorageAdapter {
   readonly provider = "s3" as const;
   private bucket: string;
   private clientPromise: Promise<import("@aws-sdk/client-s3").S3Client>;
 
-  constructor(config: { bucket: string; region: string; accessKeyId: string; secretAccessKey: string; endpoint?: string }) {
+  constructor(config: { bucket: string; region: string; accessKeyId: string; secretAccessKey: string; endpoint?: string; requestTimeoutMs?: number }) {
     this.bucket = config.bucket;
     // Import dinâmico: só instancia o cliente e carrega o SDK de fato
     // quando S3 está configurado — em ambientes que só usam disco local (a
@@ -76,6 +86,9 @@ class S3StorageAdapter implements StorageAdapter {
           region: config.region,
           endpoint: config.endpoint,
           forcePathStyle: Boolean(config.endpoint), // necessário para R2/MinIO
+          // Sem isto o SDK espera para sempre um S3 que não responde (ou um corpo que trava no meio) e a requisição de download ficava pendurada.
+          // `socketTimeout` = inatividade do socket (mata resposta que nunca chega E corpo que trava no meio); `requestTimeout` do SDK só emite aviso, não interrompe.
+          requestHandler: { connectionTimeout: Math.min(config.requestTimeoutMs ?? 30_000, 10_000), socketTimeout: config.requestTimeoutMs ?? 30_000 },
           credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
         })
     );
@@ -90,6 +103,7 @@ class S3StorageAdapter implements StorageAdapter {
   }
 
   async download(storageKey: string): Promise<Buffer> {
+    assertS3KeyShape(storageKey);
     const { GetObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await this.clientPromise;
     const result = await client.send(new GetObjectCommand({ Bucket: this.bucket, Key: storageKey }));
@@ -99,20 +113,22 @@ class S3StorageAdapter implements StorageAdapter {
   }
 
   async delete(storageKey: string): Promise<void> {
+    if (!S3_KEY_SHAPE.test(storageKey)) return; // best-effort, mas nunca fora do formato
     const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await this.clientPromise;
     await client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: storageKey })).catch(() => undefined);
   }
 }
 
-function buildStorageAdapter(): StorageAdapter {
-  const bucket = process.env.S3_BUCKET;
-  const region = process.env.S3_REGION;
-  const accessKeyId = process.env.S3_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
+/** Exportada para os testes construírem o adaptador S3 REAL contra um endpoint local (test/storageS3.test.ts); o app usa só `storageAdapter` abaixo. */
+export function buildStorageAdapter(env: NodeJS.ProcessEnv = process.env): StorageAdapter {
+  const bucket = env.S3_BUCKET;
+  const region = env.S3_REGION;
+  const accessKeyId = env.S3_ACCESS_KEY_ID;
+  const secretAccessKey = env.S3_SECRET_ACCESS_KEY;
 
   if (bucket && region && accessKeyId && secretAccessKey) {
-    return new S3StorageAdapter({ bucket, region, accessKeyId, secretAccessKey, endpoint: process.env.S3_ENDPOINT });
+    return new S3StorageAdapter({ bucket, region, accessKeyId, secretAccessKey, endpoint: env.S3_ENDPOINT, requestTimeoutMs: Number(env.S3_REQUEST_TIMEOUT_MS) > 0 ? Number(env.S3_REQUEST_TIMEOUT_MS) : undefined });
   }
   return new LocalDiskStorageAdapter();
 }
