@@ -337,9 +337,27 @@ describe("a tela mostra os valores persistidos (leitura pelo servidor)", () => {
     expect(dlg).toMatch(/from "\.\/Select"/); // Select compartilhado (Radix), sem versão própria
     expect(dlg).toMatch(/onValueChange=\{\(v\) => setPriority\(v as NeedPriority\)\}/); // escolher só altera o estado local; não salva sozinho
     expect(dlg).toMatch(/<form[\s\S]*onSubmit=/); // Enter no formulário e Enter no botão salvam (teclado)
-    expect(dlg).toMatch(/<Button type="submit"/);
+    expect(dlg).toMatch(/<Button (ref=\{saveRef\} )?type="submit"/);
     expect(dlg).not.toMatch(/onInteractOutside|onPointerDownOutside|onFocusOutside|modal=|pointerEvents|pointer-events|setTimeout|requestAnimationFrame/);
     expect(css).not.toMatch(/pointer-events|z-index/);
+  });
+
+  it("acessibilidade/teclado (QA em Edge real via CDP): seletor com nome acessível, avisos ligados aos campos, foco devolvido ao abridor e ao Salvar após erro", () => {
+    // Defeitos reais achados no navegador: (1) o combobox da prioridade tinha nome acessível VAZIO (o rótulo era um <span> solto); (2) ao fechar
+    // (Escape/Cancelar/salvar) o foco ia para o <body>, pois o diálogo é controlado de fora e o Radix não tem DialogTrigger para devolver o foco;
+    // (3) após um erro o foco ficava no <body> (Salvar desabilitado durante o envio); (4) avisos de validação não estavam ligados ao campo.
+    const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const dlg = strip(readFileSync("src/components/EditNeedDialog.tsx", "utf8"));
+    expect(dlg).toMatch(/<span id=\{priorityLabelId\}>Prioridade<\/span>/);
+    expect(dlg).toMatch(/<SelectTrigger aria-labelledby=\{priorityLabelId\}>/);
+    expect(dlg).toMatch(/aria-describedby=\{titleInvalid \? titleHintId : undefined\}/);
+    expect(dlg).toMatch(/aria-describedby=\{descriptionInvalid \? descriptionHintId : undefined\}/);
+    expect(dlg).toMatch(/<p id=\{titleHintId\}/);
+    expect(dlg).toMatch(/<p id=\{descriptionHintId\}/);
+    expect(dlg).toMatch(/onOpenAutoFocus=\{\(\) => \{\s*openerRef\.current = document\.activeElement instanceof HTMLElement/);
+    expect(dlg).toMatch(/onCloseAutoFocus=\{\(e\) => \{\s*if \(openerRef\.current\?\.isConnected\) \{\s*e\.preventDefault\(\);\s*openerRef\.current\.focus\(\);/);
+    expect(dlg).toMatch(/useEffect\(\(\) => \{\s*if \(mutation\.isError\) saveRef\.current\?\.focus\(\);\s*\}, \[mutation\.isError\]\);/);
+    expect(dlg).toMatch(/<Button ref=\{saveRef\} type="submit"/);
   });
 
   it("alterar SÓ a prioridade (o que o seletor produz) salva e persiste; título e descrição seguem como estavam", async () => {

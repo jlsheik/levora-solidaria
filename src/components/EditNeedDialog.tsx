@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./Dialog";
@@ -37,6 +37,14 @@ export const EditNeedDialog: React.FC<EditNeedDialogProps> = ({ organizationId, 
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<NeedPriority>("media");
   const [error, setError] = useState<string | null>(null);
+  const ids = useId();
+  const priorityLabelId = `${ids}-prioridade`;
+  const titleHintId = `${ids}-titulo-aviso`;
+  const descriptionHintId = `${ids}-descricao-aviso`;
+  // O diálogo é controlado de fora (sem DialogTrigger): o Radix não sabe para onde devolver o foco ao fechar. Guardamos o elemento que o abriu
+  // (ainda focado em `onOpenAutoFocus`, antes de o foco ir para o campo) e o refocamos ao fechar (Escape, Cancelar ou salvar).
+  const openerRef = useRef<HTMLElement | null>(null);
+  const saveRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (need) {
@@ -80,9 +88,24 @@ export const EditNeedDialog: React.FC<EditNeedDialogProps> = ({ organizationId, 
     },
   });
 
+  // Os campos e o Salvar ficam desabilitados durante o envio e o foco cai no <body>; depois de um erro (já reabilitados) devolve o foco ao Salvar.
+  useEffect(() => {
+    if (mutation.isError) saveRef.current?.focus();
+  }, [mutation.isError]);
+
   return (
     <Dialog open={need !== null} onOpenChange={(next) => !mutation.isPending && onOpenChange(next)}>
-      <DialogContent>
+      <DialogContent
+        onOpenAutoFocus={() => {
+          openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        }}
+        onCloseAutoFocus={(e) => {
+          if (openerRef.current?.isConnected) {
+            e.preventDefault();
+            openerRef.current.focus();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Editar necessidade</DialogTitle>
           <DialogDescription>
@@ -102,20 +125,20 @@ export const EditNeedDialog: React.FC<EditNeedDialogProps> = ({ organizationId, 
         >
           <label className={styles.field}>
             <span>Título</span>
-            <Input value={title} autoComplete="off" onChange={(e) => setTitle(e.target.value)} aria-invalid={titleInvalid} disabled={mutation.isPending} />
+            <Input value={title} autoComplete="off" onChange={(e) => setTitle(e.target.value)} aria-invalid={titleInvalid} aria-describedby={titleInvalid ? titleHintId : undefined} disabled={mutation.isPending} />
             <span className={styles.counter}>{trimmedTitle.length}/{NEED_TITLE_MAX}</span>
           </label>
-          {titleInvalid && <p className={styles.hint}>O título precisa ter de {NEED_TITLE_MIN} a {NEED_TITLE_MAX} caracteres.</p>}
+          {titleInvalid && <p id={titleHintId} className={styles.hint}>O título precisa ter de {NEED_TITLE_MIN} a {NEED_TITLE_MAX} caracteres.</p>}
           <label className={styles.field}>
             <span>Descrição</span>
-            <Textarea value={description} rows={4} onChange={(e) => setDescription(e.target.value)} aria-invalid={descriptionInvalid} disabled={mutation.isPending} />
+            <Textarea value={description} rows={4} onChange={(e) => setDescription(e.target.value)} aria-invalid={descriptionInvalid} aria-describedby={descriptionInvalid ? descriptionHintId : undefined} disabled={mutation.isPending} />
             <span className={styles.counter}>{trimmedDescription.length}/{NEED_DESCRIPTION_MAX}</span>
           </label>
-          {descriptionInvalid && <p className={styles.hint}>A descrição pode ter no máximo {NEED_DESCRIPTION_MAX} caracteres.</p>}
+          {descriptionInvalid && <p id={descriptionHintId} className={styles.hint}>A descrição pode ter no máximo {NEED_DESCRIPTION_MAX} caracteres.</p>}
           <div className={styles.field}>
-            <span>Prioridade</span>
+            <span id={priorityLabelId}>Prioridade</span>
             <Select value={priority} onValueChange={(v) => setPriority(v as NeedPriority)} disabled={mutation.isPending}>
-              <SelectTrigger>
+              <SelectTrigger aria-labelledby={priorityLabelId}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -136,7 +159,7 @@ export const EditNeedDialog: React.FC<EditNeedDialogProps> = ({ organizationId, 
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={mutation.isPending}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={!anyChange || invalid || mutation.isPending}>
+            <Button ref={saveRef} type="submit" disabled={!anyChange || invalid || mutation.isPending}>
               {mutation.isPending ? "Salvando..." : "Salvar alterações"}
             </Button>
           </DialogFooter>
