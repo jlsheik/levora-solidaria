@@ -18,29 +18,33 @@ import { parseArgs } from "node:util";
 import { assertDisposableDatabase } from "./lib/guard.mjs";
 import { findBrowser, killTree, launchBrowser } from "./lib/browser.mjs";
 import { startStack, prepareDatabase, dropDatabase, resolveDatabaseUrl } from "./lib/stack.mjs";
-import { Report, EXIT, expectedCombos, coverageGaps } from "./lib/report.mjs";
+import { Report, EXIT, expectedCombos, coverageGaps, selectionSummary } from "./lib/report.mjs";
 import { STATUS } from "./lib/contrast.mjs";
 import { installProbe, runScenarios } from "./lib/runner.mjs";
 import { Cleanups } from "./lib/cleanup.mjs";
 import { RunState, recoverOrphans } from "./lib/orphans.mjs";
 import { VIEWPORTS, parseViewportsOption, viewportKey } from "./lib/viewport.mjs";
-import { SCENARIOS, THEMES, QA_PASSWORD } from "./scenarios.mjs";
+import { SCENARIOS, THEMES, QA_PASSWORD, CI_PROFILE_IDS } from "./scenarios.mjs";
 import { MUTATIONS, SENTINELS } from "./selftest.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const { values: opt } = parseArgs({
   options: {
-    browser: { type: "string", default: "auto" }, "db-url": { type: "string" }, only: { type: "string" }, out: { type: "string" }, viewports: { type: "string" },
+    browser: { type: "string", default: "auto" }, "db-url": { type: "string" }, only: { type: "string" }, out: { type: "string" }, viewports: { type: "string" }, profile: { type: "string", default: "full" },
     verbose: { type: "boolean", default: false }, "keep-db": { type: "boolean", default: false }, "self-test": { type: "boolean", default: false },
     list: { type: "boolean", default: false }, cleanup: { type: "boolean", default: false }, "inject-css": { type: "string" }, screenshots: { type: "string" },
   },
 });
 
-const only = opt.only ? new Set(opt.only.split(",").map((s) => s.trim())) : null;
+if (!["full", "ci"].includes(opt.profile)) { console.error("--profile aceita full ou ci"); process.exit(EXIT.ENV); }
+if (opt.profile === "ci" && opt.only) { console.error("--profile ci e --only são excludentes (o perfil já define os cenários)"); process.exit(EXIT.ENV); }
+const only = opt.profile === "ci" ? new Set(CI_PROFILE_IDS) : opt.only ? new Set(opt.only.split(",").map((s) => s.trim())) : null;
 const chosen = SCENARIOS.filter((s) => !only || only.has(s.id));
 let viewports;
 try { viewports = parseViewportsOption(opt.viewports); } catch (e) { console.error(e.message); process.exit(EXIT.ENV); }
 if (opt.list) { for (const s of SCENARIOS) console.log(`${s.id.padEnd(34)} ${s.user.padEnd(9)} ${s.measure.padEnd(13)} ${s.variant}`); console.log(`viewports: ${VIEWPORTS.map(viewportKey).join(", ")} · temas: ${THEMES.join(", ")}`); process.exit(EXIT.OK); }
+const selection = selectionSummary(SCENARIOS.map((s) => s.id), chosen.map((s) => s.id), opt.profile === "ci" ? "ci" : only ? "only" : "full");
+if (opt.profile === "ci" && chosen.length !== CI_PROFILE_IDS.length) { console.error(`o perfil ci cita cenários inexistentes: ${CI_PROFILE_IDS.filter((id) => !SCENARIOS.some((s) => s.id === id)).join(", ")}`); process.exit(EXIT.ENV); }
 if (only && chosen.length === 0) { console.error("nenhum cenário corresponde a --only"); process.exit(EXIT.ENV); }
 
 const report = new Report();
@@ -161,8 +165,9 @@ try {
 if (opt.cleanup) process.exit(code);
 const file = opt.out ? path.resolve(opt.out) : path.join(tmpdir(), "levora-qa-visual", `relatorio-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
 mkdirSync(path.dirname(file), { recursive: true });
-writeFileSync(file, JSON.stringify({ geradoEm: new Date().toISOString(), node: process.version, so: process.platform, viewports: viewports.map(viewportKey), temas: THEMES, navegadores: outcome?.ran ?? [], contagem: report.counts(), env: report.env, linhas: report.rows }, null, 1));
+writeFileSync(file, JSON.stringify({ geradoEm: new Date().toISOString(), node: process.version, so: process.platform, viewports: viewports.map(viewportKey), temas: THEMES, selecao: selection, navegadores: outcome?.ran ?? [], contagem: report.counts(), env: report.env, linhas: report.rows }, null, 1));
 for (const line of report.format({ verbose: opt.verbose })) console.log(line);
+console.log(selection.completo ? `Cobertura: matriz completa (${selection.total} cenários).` : `Cobertura: SUBCONJUNTO — ${selection.executados} de ${selection.total} cenários (perfil ${selection.perfil}); NÃO executados (não contam como aprovados): ${selection.omitidos.join(", ")}`);
 console.log(`Relatório JSON: ${file}`);
 if (opt["self-test"]) console.log(`Código de saída final (autoteste): ${code}`);
 process.exit(code);

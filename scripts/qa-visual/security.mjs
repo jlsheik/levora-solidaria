@@ -304,7 +304,7 @@ async function main() {
       // armazenamento de arquivos DESCARTÁVEL (a API e a semente gravam aqui; nunca em storage/uploads do projeto)
       storageDir = mkdtempSync(path.join(tmpdir(), "levora-qa-profile-storage-")); state.addProfile(storageDir);
       cleanups.add("armazenamento de arquivos", async () => { rmSync(storageDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 }); state.dropProfile(storageDir); });
-      stack = await startStack({ root, databaseUrl: dbUrl, onSpawn: (pid, kind) => state.addChild(pid, kind), seedScript: path.join("scripts", "qa-visual", "security", "seed.ts"), extraEnv: { QA_SEC_COLLECTOR: collector.url(), QA_PASSWORD, STORAGE_LOCAL_DIR: storageDir } });
+      stack = await startStack({ root, databaseUrl: dbUrl, onSpawn: (pid, kind) => state.addChild(pid, kind), seedScript: path.join("scripts", "qa-visual", "security", "seed.ts"), extraEnv: { QA_SEC_COLLECTOR: collector.url(), QA_PASSWORD, STORAGE_LOCAL_DIR: storageDir, ...(process.platform === "linux" && parts.has("headers") ? { QA_API_HOST: "0.0.0.0" } : {}) } });
     } catch (e) { report.addEnv(`pilha de verificação não subiu: ${e.message}`); return; }
     cleanups.add("API e Vite", () => stack.stop());
     const { default: postgres } = await import("postgres");
@@ -354,7 +354,7 @@ async function main() {
       ran.push(b);
     } finally { await session.close(); }
   }
-  return { ran };
+  return { ran, headersExecuted: Boolean(nx) };
 }
 let calibrationFailed = false;
 
@@ -364,7 +364,9 @@ catch (e) { report.addEnv(`erro inesperado: ${e.stack ?? e.message}`); code = EX
 finally { const errs = await cleanups.runAll(); for (const er of errs) console.log(`aviso de limpeza (${er.name}): ${er.message}`); }
 const file = opt.out ? path.resolve(opt.out) : path.join(tmpdir(), "levora-qa-visual", `seguranca-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
 mkdirSync(path.dirname(file), { recursive: true });
-writeFileSync(file, JSON.stringify({ geradoEm: new Date().toISOString(), node: process.version, so: process.platform, partes: [...parts], navegadores: outcome?.ran ?? [], contagem: report.counts(), env: report.env, linhas: report.rows }, null, 1));
+writeFileSync(file, JSON.stringify({ geradoEm: new Date().toISOString(), node: process.version, so: process.platform, partes: [...parts], partesOmitidas: ALL_PARTS.filter((p) => !parts.has(p)), headersExecutados: outcome?.headersExecuted ?? false, navegadores: outcome?.ran ?? [], contagem: report.counts(), env: report.env, linhas: report.rows }, null, 1));
 for (const line of report.format({ verbose: opt.verbose })) console.log(line);
+const skipped = ALL_PARTS.filter((p) => !parts.has(p));
+console.log(`Partes executadas: ${[...parts].join(", ")}${skipped.length ? ` · NÃO selecionadas (não contam como aprovadas): ${skipped.join(", ")}` : ""} · cabeçalhos nginx: ${outcome?.headersExecuted ? "EXECUTADOS" : parts.has("headers") ? "NÃO executados (ver ENV)" : "não selecionados"}`);
 console.log(`Relatório JSON: ${file}`);
 process.exit(code);

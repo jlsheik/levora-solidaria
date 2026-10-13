@@ -22,6 +22,7 @@ Pré-requisitos: Node 22.x (versão declarada em `package.json`), Edge e/ou Chro
 npm run qa:visual                                    # tudo: cenários × 4 viewports × 2 temas, nos navegadores encontrados (Edge e Chrome)
 npm run qa:visual -- --browser edge --verbose        # só o Edge; mostra também as linhas PASS
 npm run qa:visual -- --viewports 375,1280            # subconjunto de viewports (largura ou WxH)
+npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (18 de 27 cenários; o relatório lista os omitidos)
 npm run qa:visual -- --only needs-primary-new,matching-switch
 npm run qa:visual -- --list                          # lista cenários, viewports e temas
 npm run qa:visual -- --self-test                     # prova que o detector acusa regressões e ausências (ver abaixo)
@@ -116,6 +117,45 @@ temporário, arquivos sintéticos, API/Vite (árvore de processos) e, por últim
 diretórios `levora-qa-profile-*` e derrube o banco `_qa`. Uma execução simultânea é recusada (`ENV`), pois ambas recriariam o mesmo banco.
 
 `qa:security` registra também o **contêiner Docker do nginx** (nome `levora-qa-nginx-*`, só estes nomes são removidos), o armazenamento de arquivos descartável e a build temporária do cliente; provado com morte forçada do orquestrador no meio da parte `headers`: `npm run qa:security -- --cleanup` removeu o contêiner, os diretórios temporários e o banco `_qa` (0 sobras).
+
+## Execução reduzida no CI (GitHub Actions)
+
+> **Não é a matriz completa.** O CI roda um **subconjunto** explícito; a matriz completa (2 navegadores, 27 cenários, `qa:security` com Edge e Chrome) continua sendo **local**.
+> O que o CI não executa **não é dado como aprovado**: aparece como "não executado" no relatório e no resumo do job.
+
+**Onde:** job `qa-browser` em `.github/workflows/ci.yml`, **independente** do job `test` (sem `needs`, sem `continue-on-error`: os dois precisam passar). Mesmos gatilhos
+(`push`/`pull_request` em `master`) e permissão `contents: read`; sem secrets. Node **22** (`actions/setup-node`), com um passo que **falha se `process.versions.node`
+não for 22** e registra `node -v`, `google-chrome --version` e `docker --version` no log. Postgres: o serviço efêmero do próprio job; `QA_DATABASE_URL` aponta para
+`levora_solidaria_qa` (a guarda de `lib/guard.mjs` continua exigindo nome `_qa` e host local — o job **não** define `DATABASE_URL`, e o banco `_test` é recusado pela guarda).
+
+| | Local (completo) | CI (reduzido) |
+|---|---|---|
+| Navegador | Edge e Chrome | **só o Chrome do runner** (`--browser chrome`; nunca Edge); `QA_BROWSER_NO_SANDBOX=1` por opt-in explícito (AppArmor do runner) |
+| `qa:visual` | 27 cenários × 4 viewports × 2 temas | `--profile ci`: **18 cenários** × os mesmos 4 viewports × 2 temas |
+| `qa:security` | 5 partes, 2 navegadores | **as 5 partes** (calibração, CSRF, XSS, uploads, cabeçalhos nginx/Docker), 1 navegador |
+| Duração | ~12 min + ~7 min | alvo ~10 min (limite do job: 40 min) |
+
+**Critério do perfil `ci`** (`CI_PROFILE_IDS` em `scenarios.mjs`): uma ou mais variantes de cada família em que já houve regressão real — botões (primary, outline, ghost, destructive,
+secondary, desabilitado), Switch (ligado/desligado/foco/desabilitado), Input/Textarea/Select, texto e borda de erro, FileDropzone (borda, foco, erro) e variação negativa do
+inventário. **Omitidos (9):** `login-password-field`, `needs-edit-dialog-title`, `org-outline-rename`, `matching-ghost-delete-icon`, `inventory-delta-positive`, `inventory-delta-icon-out`,
+`dropzone-title`, `dropzone-subtitle`, `dropzone-error-clear` (variantes redundantes da mesma família). `test/qaCi.test.ts` trava que o perfil só cita cenários existentes e cobre essas famílias.
+
+**Docker (cabeçalhos de produção):** o runner `ubuntu-latest` tem Docker. O job faz `docker pull` explícito de `nginx:1.27-alpine` e `alpine/openssl` (a ferramenta não baixa imagens
+sozinha) e a parte `headers` roda o `deploy/nginx.conf` real. No Linux, o contêiner alcança a API do host por `--add-host host.docker.internal:host-gateway` e a API de QA escuta em
+`0.0.0.0` (`QA_API_HOST`, só nessa parte e só no runner efêmero; localmente continua 127.0.0.1). **Sem Docker a parte `headers` vira `ENV` (saída 3) e o job reprova** — não é omitida em silêncio.
+
+**Códigos de saída:** os mesmos de cada ferramenta (0 conforme · 1 violação · 2 não medido · 3 ambiente · 4 autoteste/calibração). Além disso, o passo **"Audit reports"**
+(`scripts/qa-visual/ci-summary.mjs`, lógica pura em `lib/ci-report.mjs`) relê os dois relatórios JSON e reprova (1) se: o Node não for o esperado; o navegador não for o Chrome (ou
+Edge aparecer); houver FAIL/MISSING/UNMEASURABLE/ENV; nenhuma verificação PASS; `qa:visual` não registrar a seleção (`selecao`), tiver ≠ 4 viewports ou ≠ 2 temas; `qa:security` não tiver
+executado qualquer das 5 partes, a calibração, ou os cabeçalhos do nginx (`headersExecutados`). Sai com **2** se o relatório parecer conter segredo (URL de banco com credenciais, JWT, valor do cookie
+de sessão, Authorization, o literal da senha de QA) — e então o artefato **não é publicado**. O resumo Markdown (commit, Node, navegador e versão, seleção, omitidos, contagens, cabeçalhos executados
+ou não) vai para `$GITHUB_STEP_SUMMARY`; os JSON e o resumo viram o artefato `qa-browser-reports` (14 dias). Os relatórios já nasciam sem credenciais (a URL do banco nunca é gravada).
+
+**Limpeza:** a própria ferramenta limpa em sucesso, falha e Ctrl+C (processos, perfis, contêiner nginx `levora-qa-nginx-*`, banco `_qa`); o passo `Cleanup leftovers` (`if: always()`) só complementa:
+`npm run qa:security -- --cleanup`, remoção dos contêineres `levora-qa-nginx-*` e dos `levora-qa-profile-*`. Nada mata processos genéricos.
+
+**Estado da validação:** configuração conferida localmente (`test/qaCi.test.ts`: estrutura do YAML, auditoria, CLI) e os comandos do CI rodados localmente (Chrome, Node 24). **Não houve execução no GitHub Actions**:
+Node 22 real, o Chrome do runner (sandbox, fontes do Linux — métricas de layout podem diferir das do Windows), `host.docker.internal` no Linux e a duração real dependem da primeira execução remota.
 
 ## Verificação de segurança em navegador real (`npm run qa:security`)
 

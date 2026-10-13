@@ -20,6 +20,16 @@ export function coverageGaps(rows, expected) {
   return expected.filter((k) => !seen.has(k));
 }
 
+/**
+ * Seleção executada x catálogo completo. Cenários omitidos NÃO geram linhas (portanto nunca contam como PASS): aparecem aqui, no relatório JSON e no console.
+ * `completo` só é true quando nada foi omitido.
+ */
+export function selectionSummary(allIds, chosenIds, profile = "full") {
+  const chosen = new Set(chosenIds);
+  const omitted = allIds.filter((id) => !chosen.has(id));
+  return { perfil: profile, total: allIds.length, executados: chosen.size, omitidos: omitted, completo: omitted.length === 0 };
+}
+
 export class Report {
   constructor() {
     this.rows = [];

@@ -102,3 +102,105 @@ jobs:
       # introduzida depois deste gate existir. Ver docs/SECURITY.md.
       - name: Dependency audit (fails on moderate+ severity)
         run: npm audit --audit-level=moderate
+
+  # Fase 94 — QA de NAVEGADOR em modo reduzido (camada ADICIONAL: não substitui nem enfraquece o job `test`; os dois são independentes e ambos
+  # precisam passar para o workflow ficar verde). Ver docs/QA_VISUAL.md ("Execução reduzida no CI"). Comparado com a matriz completa local:
+  # um navegador só (o Chrome do runner, nunca o Edge), `qa:visual` com o perfil `ci` (18 de 27 cenários × 4 viewports × 2 temas) e `qa:security` com
+  # as 5 partes (calibração, CSRF, XSS, uploads e cabeçalhos do nginx REAL em Docker).
+  qa-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: levora
+          POSTGRES_PASSWORD: levora
+          POSTGRES_DB: levora_solidaria_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U levora"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # Sem DATABASE_URL de propósito: o QA só escreve no banco `_qa` descartável abaixo (a guarda de lib/guard.mjs recusa qualquer outro nome ou host
+    # não local). Sem secrets: tudo aqui é valor de teste do serviço efêmero deste job.
+    env:
+      QA_DATABASE_URL: postgres://levora:levora@localhost:5432/levora_solidaria_qa
+      JWT_SECRET: ci-only-secret-not-for-production-use-please
+      # Runner efêmero + só páginas locais com dados sintéticos: o sandbox do Chrome pode ser barrado pelo AppArmor do Ubuntu; opt-in explícito.
+      QA_BROWSER_NO_SANDBOX: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Falha se o Node NÃO for 22.x (a compatibilidade com Node 22 é provada pela execução, não presumida) e registra as versões no log.
+      - name: Record and assert environment
+        run: |
+          echo "commit: $GITHUB_SHA"
+          echo "node: $(node -v)"
+          test "$(node -p 'process.versions.node.split(".")[0]')" = "22"
+          google-chrome --version
+          docker --version
+          mkdir -p reports
+
+      # A rotina não baixa imagens por conta própria: o pull é explícito e fixado por tag (nginx real + openssl para o certificado descartável).
+      - name: Pull Docker images for the nginx header checks
+        run: |
+          docker pull nginx:1.27-alpine
+          docker pull alpine/openssl:latest
+
+      - name: qa:visual (reduced profile, Chrome only)
+        run: npm run qa:visual -- --browser chrome --profile ci --out reports/qa-visual.json
+
+      # `!cancelled()`: uma falha do qa:visual não esconde o resultado do qa:security (o job falha de qualquer forma).
+      - name: qa:security (all parts, Chrome only)
+        if: ${{ !cancelled() }}
+        run: npm run qa:security -- --browser chrome --out reports/qa-security.json
+
+      # Relê os relatórios: falha se algo obrigatório não rodou, se o Node/navegador não for o esperado ou se o relatório parecer conter segredo.
+      - name: Audit reports and write summary
+        id: audit
+        if: always()
+        run: |
+          status=0
+          node scripts/qa-visual/ci-summary.mjs --visual reports/qa-visual.json --security reports/qa-security.json --expect-node 22 --expect-browser chrome > reports/summary.md || status=$?
+          cat reports/summary.md >> "$GITHUB_STEP_SUMMARY"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      # Limpeza com semântica always(): complementa (não substitui) a limpeza da própria ferramenta. Só remove o que a rotina cria
+      # (contêineres levora-qa-nginx-*, diretórios levora-qa-profile-*, banco *_qa) — nunca processos genéricos.
+      - name: Cleanup leftovers
+        if: always()
+        run: |
+          npm run qa:security -- --cleanup || true
+          docker ps -aq --filter "name=levora-qa-nginx-" | xargs -r docker rm -f
+          rm -rf "${TMPDIR:-/tmp}"/levora-qa-profile-*
+
+      # A auditoria sai com 2 quando o relatório parece conter segredo: nesse caso o artefato NÃO é publicado. Qualquer outra reprovação (FAIL, etapa que não
+      # rodou) ainda publica os relatórios, que são o diagnóstico.
+      - name: Upload reports
+        if: always() && steps.audit.outputs.status != '2' && hashFiles('reports/summary.md') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-browser-reports
+          path: |
+            reports/qa-visual.json
+            reports/qa-security.json
+            reports/summary.md
+          retention-days: 14
+          if-no-files-found: warn

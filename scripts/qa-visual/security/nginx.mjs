@@ -60,7 +60,7 @@ export async function startNginx({ confPath, distDir, apiPort, onContainer, onWo
     const conf = adaptProductionConf(readFileSync(confPath, "utf8"), { apiPort });
     writeFileSync(path.join(work, "site.conf"), conf);
     onContainer?.(name);
-    const run = docker(["run", "-d", "--name", name, "-p", "127.0.0.1:0:443", "-v", `${toDockerPath(path.join(work, "site.conf"))}:/etc/nginx/conf.d/default.conf:ro`, "-v", `${toDockerPath(certs)}:/certs:ro`, "-v", `${toDockerPath(distDir)}:/opt/levora-solidaria/dist:ro`, NGINX_IMAGE]);
+    const run = docker(["run", "-d", "--name", name, ...(process.platform === "linux" ? ["--add-host", "host.docker.internal:host-gateway"] : []), "-p", "127.0.0.1:0:443", "-v", `${toDockerPath(path.join(work, "site.conf"))}:/etc/nginx/conf.d/default.conf:ro`, "-v", `${toDockerPath(certs)}:/certs:ro`, "-v", `${toDockerPath(distDir)}:/opt/levora-solidaria/dist:ro`, NGINX_IMAGE]);
     if (run.status !== 0) throw new Error(`o nginx não subiu: ${(run.stderr || "").slice(0, 300)}`);
     const portOut = docker(["port", name, "443/tcp"]).stdout.trim().split("\n")[0] ?? "";
     const port = Number(portOut.split(":").pop());

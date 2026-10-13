@@ -42,6 +42,21 @@ const openReceive = { click: { css: "button", text: "^Registrar recebimento dire
 const badFile = { setFile: { css: 'input[type="file"]', within: '[role="dialog"]', fileName: "arquivo-invalido-qa.txt", content: "conteúdo sintético que não é imagem" } };
 const dropzone = { css: 'label[class*="_dropzone_"]', within: '[role="dialog"]' };
 
+/**
+ * Perfil reduzido do CI (`--profile ci`): 18 dos 27 cenários, escolhidos por RISCO — uma ou mais variantes de cada família de componente em que já houve
+ * regressão real (botões primary/outline/ghost/destructive/secondary e o desabilitado, Switch ligado/desligado/desabilitado, Input/Textarea/Select, texto e
+ * borda de erro, FileDropzone borda/foco/erro, variação negativa do inventário). Omitidos (9): variantes redundantes da mesma família (campo de senha, "Nova
+ * necessidade", título do diálogo, renomear, ícone de excluir, variação positiva, ícone de saída, título/subtítulo do dropzone, limpar erro). Cada cenário
+ * escolhido roda nos 4 viewports e nos 2 temas. O que não está aqui NÃO é aprovado: aparece como omitido no relatório.
+ */
+export const CI_PROFILE_IDS = [
+  "login-field-border-sizing", "login-primary-submit", "login-error-text", "login-error-label",
+  "needs-ghost-edit-icon", "needs-edit-dialog-cancel", "needs-edit-dialog-description", "needs-edit-dialog-priority",
+  "org-outline-leave-disabled", "matching-destructive-confirm", "matching-switch", "matching-switch-disabled",
+  "inventory-secondary-movement", "inventory-delta-negative",
+  "dropzone-border", "dropzone-keyboard-focus", "dropzone-error-text", "needs-primary-new",
+];
+
 export const SCENARIOS = [
   // ---- sem login: tokens de campo e de erro renderizados de verdade
   { id: "login-field-border-sizing", user: "guest", path: "/login", steps: [], target: { css: 'input[type="email"]' }, measure: "field", variant: "Input", expect: { height: 40 } },

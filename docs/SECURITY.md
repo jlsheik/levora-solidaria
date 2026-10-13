@@ -172,6 +172,12 @@ não foi exercitado; o download sempre passa pelo servidor).
 
 ## Security headers HTTP (Fase 50)
 
+### Verificação contínua (CI)
+
+O job `qa-browser` do GitHub Actions roda `npm run qa:security` (as 5 partes, **Chrome do runner**, Node 22, nginx real em Docker) a cada push/PR; o resumo e os JSON saem como
+artefato e o job reprova se calibração, cabeçalhos do nginx ou qualquer parte obrigatória não rodar. É um subconjunto da execução local (1 navegador em vez de 2) e **ainda não foi
+executado no GitHub** — ver `docs/QA_VISUAL.md`, "Execução reduzida no CI".
+
 ### Cabeçalhos de produção: quem controla o quê, e o que foi medido (Fase 94)
 
 **Camadas.** O HTML e os assets do cliente são servidos pelo **nginx** (`deploy/nginx.conf`, arquitetura same-origin decidida na Fase 56); a API Express só

@@ -81,7 +81,9 @@ class Cdp {
 export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone, extraArgs = [] } = {}) {
   const profile = mkdtempSync(path.join(tmpdir(), "levora-qa-profile-"));
   onProfile?.(profile);
-  const args = ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-extensions", "--disable-background-networking", "--window-size=1280,900", ...extraArgs, "about:blank"];
+  // `QA_BROWSER_NO_SANDBOX=1`: SÓ para runners descartáveis cujo kernel proíbe o sandbox de usuário (ex.: AppArmor no Ubuntu). Nunca é o padrão.
+  const noSandbox = process.env.QA_BROWSER_NO_SANDBOX === "1" ? ["--no-sandbox"] : [];
+  const args = [...noSandbox, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-extensions", "--disable-background-networking", "--window-size=1280,900", ...extraArgs, "about:blank"];
   const child = spawn(exe, args, { stdio: "ignore", windowsHide: true, detached: process.platform !== "win32" });
   onSpawn?.(child.pid, "browser");
   const cleanup = async () => {
