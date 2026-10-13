@@ -169,6 +169,8 @@ renderizar conteúdo do usuário na origem autenticada é tratado por lista fech
 pelo `Content-Disposition`. **Consistência (Fase 94):** o upload compensa a falha do banco removendo só o objeto que ele mesmo criou (testado em disco e S3 com falhas reais do Postgres); se a remoção também falha, a inconsistência vira um log `ARQUIVO_ORFAO` com provedor e chave (sem credenciais), não um silêncio — não há limpeza automática com o armazenamento fora do ar. O download escolhe o adaptador pelo
 `files.storageProvider` gravado no registro, depois da autorização, e valor desconhecido ou provedor não configurado é erro controlado sem fallback (ver `docs/UPLOAD_DE_ARQUIVOS.md`).
 
+**Diagnóstico de integridade (`npm run storage:audit`, somente leitura):** lista órfãos, registros sem objeto e metadados inconsistentes, e declara a auditoria **incompleta** (saída 2) quando banco, disco ou listagem S3 não puderam ser lidos por completo — sem exclusão nem correção automática (ver `docs/UPLOAD_DE_ARQUIVOS.md`).
+
 **Armazenamento S3:** o adaptador foi exercitado com o SDK real contra um servidor S3 **local** (`test/storageS3.test.ts`; ver `docs/UPLOAD_DE_ARQUIVOS.md`): chave só no formato `<org>/<uuid>` (uma chave adulterada
 no banco era enviada ao S3 com segmentos `..`; corrigido), timeout de inatividade de 30 s (antes um S3 mudo pendurava o download), autorização antes de qualquer leitura no armazenamento e erros sem vazar bucket,
 endpoint, chaves ou assinatura. **Não feito (decisão/infraestrutura):** varredura de malware, reencodar imagens, isolar uploads em outra origem (não há necessidade demonstrada: nenhum tipo renderizável como

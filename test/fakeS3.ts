@@ -20,6 +20,13 @@ export class FakeS3 {
   faultOnPut = false;
   /** DeleteObject responde 500 (armazenamento indisponível na hora da compensação). */
   faultOnDelete = false;
+  /** ListObjectsV2: itens por página (padrão 1000) e falhas deliberadas na listagem. */
+  listPageSize = 1000;
+  /** Número (1-based) da página que responde 500; 0 = nenhuma. */
+  listFailAtPage = 0;
+  listHang = false;
+  /** Marca a página como truncada mas NÃO envia token de continuação (resposta incompleta). */
+  listBrokenPagination = false;
   private server: http.Server;
   private sockets = new Set<import("node:net").Socket>();
   endpoint = "";
@@ -39,6 +46,21 @@ export class FakeS3 {
   async stop(): Promise<void> {
     for (const s of this.sockets) s.destroy();
     await new Promise<void>((r) => this.server.close(() => r()));
+  }
+
+  /** ListObjectsV2 (só leitura): ordena por chave, pagina por `continuation-token` = índice. */
+  private list(res: http.ServerResponse, url: URL, bucket: string) {
+    if (this.listHang) return;
+    const token = url.searchParams.get("continuation-token");
+    const start = token ? Number(Buffer.from(token, "base64").toString()) : 0;
+    const page = Math.floor(start / this.listPageSize) + 1;
+    if (this.listFailAtPage === page) return this.xml(res, 500, "InternalError", "We encountered an internal error");
+    const all = [...this.objects.keys()].filter((k) => k.startsWith(bucket + "/")).map((k) => k.slice(bucket.length + 1)).sort();
+    const slice = all.slice(start, start + this.listPageSize); const truncated = start + this.listPageSize < all.length;
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const next = truncated && !this.listBrokenPagination ? `<NextContinuationToken>${Buffer.from(String(start + this.listPageSize)).toString("base64")}</NextContinuationToken>` : "";
+    res.writeHead(200, { "Content-Type": "application/xml" });
+    res.end(`<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><Name>${bucket}</Name><KeyCount>${slice.length}</KeyCount><MaxKeys>${this.listPageSize}</MaxKeys><IsTruncated>${truncated}</IsTruncated>${next}${slice.map((k) => `<Contents><Key>${esc(k)}</Key><Size>${this.objects.get(bucket + "/" + k)!.body.length}</Size></Contents>`).join("")}</ListBucketResult>`);
   }
 
   private xml(res: http.ServerResponse, status: number, code: string, message: string) {
@@ -66,6 +88,8 @@ export class FakeS3 {
     this.requests.push({ method: req.method ?? "", path, authorization: (req.headers.authorization as string) ?? null, headers: req.headers, bodyBytes: body.length });
     // modelo S3: sempre assinado (SigV4); sem Authorization é AccessDenied
     if (!String(req.headers.authorization ?? "").startsWith("AWS4-HMAC-SHA256 ")) return this.xml(res, 403, "AccessDenied", "Request is not signed");
+    const url = new URL(req.url ?? "/", "http://x");
+    if (req.method === "GET" && url.searchParams.get("list-type") === "2" && path.split("/").filter(Boolean).length === 1) return this.list(res, url, path.replace(/^\/|\/$/g, ""));
     const key = path.replace(/^\//, ""); // bucket/chave
     if (req.method === "PUT") {
       if (this.faultOnPut && this.fault === "internal-error") return this.xml(res, 500, "InternalError", "We encountered an internal error");

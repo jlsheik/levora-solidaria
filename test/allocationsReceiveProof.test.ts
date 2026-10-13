@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { storageAdapter } from "../src/helpers/storageAdapter";
 import { db } from "../src/helpers/db";
 import { handle as postFilesUpload } from "../src/endpoints/files-upload_POST";
 import { handle as postAllocationsReceive } from "../src/endpoints/allocations-receive_POST";
@@ -25,6 +26,15 @@ async function createAcceptedAllocation(organizationId: number, userId: number) 
 describe("recebimento de atribuição com comprovante enviado por upload real", () => {
   let owner: AuthenticatedTestUser;
   let orgId: number;
+
+  // Este teste envia arquivos de verdade e antes NÃO os removia (deixava 2 arquivos por execução em storage/uploads-test). Agora remove exatamente os objetos que criou
+  // (as chaves estão nas linhas de `files` deste teste) — e a falha da limpeza aparece, em vez de ser engolida. O diretório já é exclusivo da execução (test/storageDir.ts).
+  afterEach(async () => {
+    const rows = await db.selectFrom("files").select(["storageKey"]).execute();
+    const results = await Promise.allSettled(rows.map((r) => storageAdapter.delete(r.storageKey)));
+    const failed = results.filter((r) => r.status === "rejected");
+    if (failed.length) throw new Error(`não consegui remover ${failed.length} arquivo(s) criado(s) pelo teste`);
+  });
 
   beforeEach(async () => {
     owner = await createAuthenticatedUser();

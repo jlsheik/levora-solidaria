@@ -12,11 +12,29 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
+import { createRunStorageDir, removeRunStorageDir } from "./storageDir";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../.env.test") });
 
 export default async function globalSetup() {
+  // Armazenamento de arquivos EXCLUSIVO desta execução (ver test/storageDir.ts): os workers herdam STORAGE_LOCAL_DIR, e o diretório some no fim, com a suíte passando ou falhando.
+  const storageDir = createRunStorageDir();
+  process.env.STORAGE_LOCAL_DIR = storageDir;
+  try {
+    await prepareDatabase();
+  } catch (error) {
+    removeRunStorageDir(storageDir);
+    throw error;
+  }
+  return () => {
+    const result = removeRunStorageDir(storageDir);
+    if (!result.removed) console.warn(`[globalSetup] não removi o armazenamento temporário da suíte: ${result.reason ?? "falha ao apagar"}`);
+    else if (result.leftoverFiles > 0) console.warn(`[globalSetup] ${result.leftoverFiles} arquivo(s) de teste ficaram no armazenamento temporário (removidos); algum teste não limpa o que cria.`);
+  };
+}
+
+async function prepareDatabase() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error(

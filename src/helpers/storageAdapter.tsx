@@ -25,9 +25,16 @@ export interface StorageAdapter {
   download(storageKey: string): Promise<Buffer>;
   /** Remove o objeto. Chave já inexistente = sucesso; qualquer outra falha do armazenamento LANÇA (o chamador decide como registrar — nada é engolido aqui). */
   delete(storageKey: string): Promise<void>;
+  /** Só o adaptador S3 implementa: lista todas as chaves (somente leitura), para o diagnóstico de integridade (storageIntegrity.ts). */
+  listKeys?(): Promise<string[]>;
 }
 
 const LOCAL_STORAGE_DIR = path.resolve(process.cwd(), process.env.STORAGE_LOCAL_DIR || "storage/uploads");
+
+/** Raiz administrada do armazenamento em disco (a mesma do adaptador local), para o diagnóstico de integridade. */
+export function localStorageRoot(env: NodeJS.ProcessEnv = process.env): string {
+  return path.resolve(process.cwd(), env.STORAGE_LOCAL_DIR || "storage/uploads");
+}
 
 class LocalDiskStorageAdapter implements StorageAdapter {
   readonly provider = "local" as const;
@@ -70,7 +77,8 @@ class LocalDiskStorageAdapter implements StorageAdapter {
  * o SDK normaliza segmentos `..` no caminho, então uma chave adulterada (`1/../outra-org/x`) poderia apontar para OUTRO objeto do bucket. (O adaptador de
  * disco tem a guarda equivalente em `resolveSafePath`.)
  */
-const S3_KEY_SHAPE = /^\d+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const MANAGED_KEY_SHAPE = /^\d+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/; // mesmo formato nos dois provedores (disco: caminho relativo; S3: chave)
+const S3_KEY_SHAPE = MANAGED_KEY_SHAPE;
 function assertS3KeyShape(key: string): void {
   if (!S3_KEY_SHAPE.test(key)) throw new Error("Chave de armazenamento inválida");
 }
@@ -115,6 +123,25 @@ class S3StorageAdapter implements StorageAdapter {
     const chunks: Buffer[] = [];
     for await (const chunk of result.Body as AsyncIterable<Buffer>) chunks.push(Buffer.from(chunk));
     return Buffer.concat(chunks);
+  }
+
+  /**
+   * Lista TODAS as chaves do bucket (só `ListObjectsV2`, todas as páginas) para o diagnóstico de integridade. Qualquer falha, página sem token de continuação, token repetido
+   * ou resposta inválida LANÇA: uma listagem parcial nunca é devolvida como completa.
+   */
+  async listKeys(): Promise<string[]> {
+    const { ListObjectsV2Command } = await import("@aws-sdk/client-s3");
+    const client = await this.clientPromise;
+    const keys: string[] = []; const seenTokens = new Set<string>(); let token: string | undefined;
+    for (let page = 0; page < 100_000; page++) {
+      const res = await client.send(new ListObjectsV2Command({ Bucket: this.bucket, ContinuationToken: token }));
+      for (const o of res.Contents ?? []) { if (typeof o.Key !== "string") throw new Error("Resposta de listagem inválida"); keys.push(o.Key); }
+      if (!res.IsTruncated) return keys;
+      const next = res.NextContinuationToken;
+      if (!next || seenTokens.has(next)) throw new Error("Paginação da listagem inconsistente");
+      seenTokens.add(next); token = next;
+    }
+    throw new Error("Listagem excedeu o limite de páginas");
   }
 
   async delete(storageKey: string): Promise<void> {

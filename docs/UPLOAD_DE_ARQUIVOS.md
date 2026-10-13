@@ -114,13 +114,47 @@ continuam intactos e acessíveis pelo download.
 **Se a própria remoção falhar** (armazenamento indisponível): o `delete` dos adaptadores agora **lança** em falha real (antes engolia tudo; chave já inexistente continua sendo sucesso). O upload não esconde: grava no log do servidor uma linha
 `ARQUIVO_ORFAO provider=<local|s3> key=<org>/<uuid> organizationId=<id>: …` (sem credenciais) e mesmo assim devolve o erro original do banco. **Garantia que NÃO existe:** limpeza automática com o armazenamento fora do ar — o objeto fica órfão (nenhuma
 linha em `files` o referencia, então nenhuma tela o mostra) até alguém removê-lo. **Diagnóstico/recuperação:** procurar `ARQUIVO_ORFAO` nos logs; a chave registrada identifica o objeto; remover pelo console do provedor (S3: o objeto `<bucket>/<key>`; disco:
-`STORAGE_LOCAL_DIR/<key>`) depois de conferir que nenhuma linha de `files` usa essa `storage_key`. Não há varredura periódica de órfãos (decisão pendente se for desejada).
+`STORAGE_LOCAL_DIR/<key>`) depois de conferir que nenhuma linha de `files` usa essa `storage_key`. Para encontrar os órfãos use o diagnóstico somente-leitura da seção seguinte. Continua **não havendo** varredura periódica nem exclusão/limpeza automática de órfãos (decisão pendente se for desejada).
 
 **`files.storageProvider`.** Evidência: coluna `TEXT NOT NULL` sem default nem CHECK, criada na migração `0002_files.sql` junto com o adaptador, **gravada em cada upload com o provedor que de fato guardou o arquivo** (`stored.storageProvider`): é o provedor POR ARQUIVO, não uma
 configuração global. Antes, a rota de download ignorava a coluna e lia sempre pelo provedor configurado agora (arquivos do outro provedor viravam erro 500 ao trocar a configuração). Agora `files-download` usa `adapterForProvider(file.storageProvider)`, **depois** da autorização:
 `local` → disco; `s3` → S3 (exige as quatro variáveis `S3_*`); qualquer outro valor, ou `s3` sem configuração, lança `StorageProviderError` → 500 genérico, **sem fallback** e sem tocar em armazenamento. A chave de um provedor nunca é lida no outro (os formatos de chave continuam validados
 por adaptador). Não houve migração (o modelo já suportava); não existe rota de exclusão de arquivo. Testado: arquivo local servido do disco com o S3 configurado (e o inverso), sem consultar o provedor errado, valores inválidos (`gcs`, `LOCAL`, vazio, ` s3`, `s3;local`, `../local`), autorização antes da escolha do provedor.
 **Limites:** mudar o provedor padrão só afeta NOVOS uploads; migrar arquivos entre provedores continua manual; um CHECK no banco para a coluna não foi criado (a validação é no código).
+
+## Diagnóstico de integridade do armazenamento (`npm run storage:audit`)
+
+Compara o que existe de fato nos provedores com as linhas de `files` e produz um relatório para **investigação e recuperação manual**. **Somente leitura**: não existe opção de reparo, exclusão ou correção, e o comando nunca remove, grava ou altera arquivos, objetos ou registros.
+
+```bash
+npm run storage:audit                          # disco + S3 (se configurado); resumo no terminal
+npm run storage:audit -- --provider local      # local | s3 | all (padrão: all)
+npm run storage:audit -- --out relatorio.json  # relatório completo (chaves exatas dos órfãos)
+node dist-server/db/storage-audit.js ...       # em produção, depois de npm run build:server
+```
+
+**Categorias (que não se misturam):** **órfão** = objeto no provedor sem NENHUM registro em `files` (provedor + chave exata); **registro sem objeto** = registro válido cujo objeto não está no provedor gravado em `files.storageProvider` (o provedor vale POR REGISTRO,
+não a configuração atual); **metadado inconsistente** = registro que não dá para comparar com segurança (`provedor-desconhecido`, `chave-fora-do-formato`, `prefixo-diferente-da-organizacao`, `chave-duplicada`); **não verificado** = banco, diretório, listagem ou provedor sem configuração que
+não puderam ser lidos por completo — vira auditoria **incompleta** e nada daquele provedor é classificado (falha de conexão NÃO significa "objeto ausente"). Há ainda a lista informativa de **objetos não reconhecidos** (formato que o app nunca cria, p.ex. `.keep`, subpastas, links simbólicos): não
+entram na comparação de órfãos nem alteram o resultado.
+
+**Resultado e códigos de saída:** `0` completo sem inconsistências · `1` completo com inconsistências · `2` **incompleto** (qualquer parte não verificada: banco, raiz do disco inexistente com registros locais, listagem S3 que falhou, deu timeout ou veio truncada, S3 não configurado quando solicitado) · `3` uso ou
+configuração inválida (opção desconhecida, `--provider` inválido, sem `DATABASE_URL`). O relatório JSON traz data/hora, registros consultados, objetos enumerados por provedor, totais por categoria, as listas (chaves exatas dos órfãos; `fileId` e `organizationId` dos registros) e as partes não verificadas.
+Nunca inclui conteúdo de arquivo, nome original, bucket, endpoint, região, credenciais nem URLs.
+
+**Garantias de leitura (verificadas por `test/storageIntegrity.test.ts`):** o banco é lido numa transação `READ ONLY` (o Postgres recusaria qualquer escrita), só as colunas `id`, `organization_id`, `storage_provider` e `storage_key`; o disco usa só `readdir`/`lstat` na raiz administrada (`STORAGE_LOCAL_DIR`), **sem seguir links
+simbólicos** e sem abrir nada fora dela; o S3 usa só `ListObjectsV2` (todas as páginas; token ausente ou repetido = erro). Instantâneos antes/depois do disco (inclusive fora da raiz), da tabela `files` e dos objetos do S3 local ficam idênticos; só há requisições GET no S3; o código-fonte não contém nenhuma operação de escrita ou remoção.
+
+**Procedimento manual sugerido para um órfão:** (1) confirme o provedor e a chave exata no relatório; (2) procure a chave em `files.storage_key` (e nos logs `ARQUIVO_ORFAO`) e verifique a data do objeto — um upload em andamento pode aparecer por instantes antes do INSERT; (3) repita o diagnóstico e só então decida; (4) a remoção é manual, pelo console do provedor ou do sistema de arquivos,
+**sempre depois** de conferir que nenhuma linha usa a chave. Para um **registro sem objeto**: investigue backup/restauração e o provedor correto antes de qualquer ação sobre o registro; o app não tem rota de exclusão de arquivos.
+
+**Limites:** sem varredura periódica, sem correção automática, sem comparação de conteúdo ou tamanho; o S3 testado é o servidor local (não valida assinaturas e não é um bucket real); em bucket compartilhado com outros sistemas os objetos de formato diferente aparecem só como "não reconhecidos"; a auditoria é um retrato de um instante (uploads concorrentes podem gerar falsos positivos transitórios).
+
+## Resíduos nos testes (`storage/uploads-test`)
+
+Origem: `test/allocationsReceiveProof.test.ts` enviava arquivos reais pelo `files-upload` e **não removia** o que criava (2 arquivos por execução), numa raiz fixa do repositório que também podia ser compartilhada por duas execuções simultâneas. Correção: cada execução da suíte usa um diretório **exclusivo** em `os.tmpdir()`
+(`levora-test-storage-*`, criado no `globalSetup` e exportado em `STORAGE_LOCAL_DIR` antes dos workers), removido no fim mesmo se a suíte falhar, e o teste que vazava agora remove exatamente os objetos que criou (a falha de limpeza aparece, não é engolida). O `globalSetup` avisa se algum arquivo sobrar no diretório temporário. `test/storageIsolation.test.ts`
+prova: raiz fora do repositório, upload real sem tocar `storage/uploads-test`, diretórios distintos por execução e recusa de apagar qualquer diretório que não tenha sido criado pelo helper. Limite: um processo morto à força pode deixar um `levora-test-storage-*` no diretório temporário do sistema (fora do repositório).
 
 ## Configuração (opcional)
 
