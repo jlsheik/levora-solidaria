@@ -48,6 +48,14 @@ npm run build:server   # tsc -p tsconfig.server.json → dist-server/
 NODE_ENV=production node dist-server/server/index.js
 ```
 
+## Verificação no nginx real (Fase 94)
+
+`npm run qa:security` sobe o **`deploy/nginx.conf` do repositório** num contêiner `nginx:1.27-alpine` (certificado autoassinado descartável, só 127.0.0.1) e mede os
+cabeçalhos e o envio de arquivos de verdade. Três regras do nginx que isso revelou, e que valem para qualquer ajuste da configuração: (1) `add_header` num
+`location` **substitui** os do `server` — repita o HSTS/nosniff em toda location que defina o seu; (2) cache imutável só para sucesso (`map $status`), nunca
+`always` fixo; (3) `client_max_body_size` (padrão 1 MB) precisa ficar acima do envio válido (8 MB em base64 ≈ 10,7 MB) e do limite do Express (16 MB): usamos 17m
+em `/_api/`. `test/nginxHeaders.test.ts` trava (1)–(3) e a igualdade da CSP com `src/helpers/securityHeaders.ts`. Detalhes e limites: `docs/SECURITY.md`.
+
 ## Security headers na camada estática (Fase 50)
 
 A API (`server/index.ts`) já aplica seus próprios security headers por

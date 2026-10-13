@@ -78,10 +78,10 @@ class Cdp {
 }
 
 /** Abre o navegador e devolve { cdp, version, close }. Lança se não conseguir (o chamador classifica como ENV). */
-export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone } = {}) {
+export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone, extraArgs = [] } = {}) {
   const profile = mkdtempSync(path.join(tmpdir(), "levora-qa-profile-"));
   onProfile?.(profile);
-  const args = ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-extensions", "--disable-background-networking", "--window-size=1280,900", "about:blank"];
+  const args = ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-extensions", "--disable-background-networking", "--window-size=1280,900", ...extraArgs, "about:blank"];
   const child = spawn(exe, args, { stdio: "ignore", windowsHide: true, detached: process.platform !== "win32" });
   onSpawn?.(child.pid, "browser");
   const cleanup = async () => {

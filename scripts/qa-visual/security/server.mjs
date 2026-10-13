@@ -23,6 +23,24 @@ export async function startCollector() {
     if (u.pathname === "/fx/href-vuln") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(fixtureHtml(`const a=document.createElement('a');a.textContent='comprovante';a.href=new URLSearchParams(location.search).get('p');document.getElementById('out').append(a)`)); }
     if (u.pathname === "/fx/href-blank-vuln") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(fixtureHtml(`const a=document.createElement('a');a.textContent='comprovante';a.target='_blank';a.rel='noopener noreferrer';a.href=new URLSearchParams(location.search).get('p');document.getElementById('out').append(a)`)); }
     if (u.pathname === "/fx/href-safe") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(fixtureHtml(`const a=document.createElement('a');a.textContent='comprovante';const p=new URLSearchParams(location.search).get('p');if(/^(https?:|\\/(?!\\/))/i.test(p))a.href=p;document.getElementById('out').append(a)`)); }
+    // ---- fixtures de ARQUIVO servido (calibração do detector de upload/download): mesmo conteúdo ativo, cabeçalhos diferentes
+    if (u.pathname.startsWith("/fx/file-")) {
+      const hit = (id) => `void((new Image).src='http://127.0.0.1:${server.address().port}/h?id=${id}')`;
+      const html = Buffer.from(`<!doctype html><title>f</title><script>${hit("FX@" + u.pathname.slice(4))}</script>`);
+      const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" onload="${hit("FX@" + u.pathname.slice(4))}"></svg>`);
+      const variants = {
+        "/fx/file-html-inline": [html, { "Content-Type": "text/html" }], // vulnerável: HTML inline
+        "/fx/file-svg-inline": [svg, { "Content-Type": "image/svg+xml" }], // vulnerável: SVG inline
+        "/fx/file-html-as-png-nosniff": [html, { "Content-Type": "image/png", "X-Content-Type-Options": "nosniff" }], // seguro: o que o app faz com um tipo declarado errado
+        "/fx/file-html-attachment": [html, { "Content-Type": "application/octet-stream", "Content-Disposition": "attachment; filename=\"a.html\"", "X-Content-Type-Options": "nosniff" }], // seguro
+      };
+      const v = variants[u.pathname]; if (!v) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, v[1]); return res.end(v[0]);
+    }
+    // ---- fixtures de CSP e de incorporação
+    if (u.pathname === "/fx/csp-control") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end("<!doctype html><title>controle sem CSP</title><body><div id=root>controle</div>"); }
+    if (u.pathname === "/fx/ext.js") { res.writeHead(200, { "Content-Type": "application/javascript" }); return res.end("window.__ran_fn && window.__ran_fn('external-script')"); }
+    if (u.pathname === "/fx/frame") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(`<!doctype html><title>frame</title><iframe width=600 height=300 src="${(u.searchParams.get("u") ?? "").replace(/"/g, "")}"></iframe>`); }
     res.writeHead(404); res.end();
   });
   const port = await listen(server);

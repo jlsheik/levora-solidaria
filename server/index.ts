@@ -203,6 +203,16 @@ export async function buildApp(): Promise<express.Express> {
     res.status(404).json({ message: "Rota não encontrada" });
   });
 
+  // Erros do próprio Express (corpo acima de 16mb → 413, JSON malformado etc.) caíam no handler padrão, que responde uma PÁGINA HTML
+  // (com stack trace fora de produção) e troca o Content-Security-Policy da API. Aqui viram JSON curto; os cabeçalhos de segurança já foram
+  // definidos pelo primeiro middleware.
+  app.use((err: unknown, _req: ExpressRequest, res: ExpressResponse, next: NextFunction) => {
+    if (res.headersSent) return next(err);
+    const status = typeof (err as { status?: unknown })?.status === "number" ? (err as { status: number }).status : 500;
+    const safe = status >= 400 && status < 500 ? status : 500;
+    res.status(safe).json({ message: safe === 413 ? "Corpo da requisição maior que o limite permitido" : safe === 500 ? "Erro interno do servidor" : "Requisição inválida" });
+  });
+
   return app;
 }
 

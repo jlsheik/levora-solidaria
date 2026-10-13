@@ -145,7 +145,68 @@ Ver [`docs/UPLOAD_DE_ARQUIVOS.md`](UPLOAD_DE_ARQUIVOS.md). Privado por
 padrão (disco fora de diretório estático, ou S3 com download sempre
 mediado pelo servidor autenticado) — nunca URL pública direta.
 
+### Upload e download: o que foi verificado e corrigido (Fase 94)
+
+Fluxo real mapeado: `files-upload` exige sessão + permissão `arquivos.envie`, limita a 30 envios/hora por usuário, aceita só `image/jpeg`,
+`image/png`, `image/webp` e `application/pdf` (enum no schema), até 8 MB decodificados (corpo bruto até 16 MB), grava com chave
+`<organizacao>/<uuid>` (o nome do cliente nunca vira caminho) e o download `files-download` exige sessão + membro ATIVO da organização do arquivo,
+a cada acesso (nenhuma URL pública). Medido em navegador real (`npm run qa:security`, parte "uploads"), com o rótulo de cada resultado
+(aceito e servido com segurança · rejeitado corretamente, sem rastro · violação · não medido):
+
+| Defeito encontrado (antes) | Evidência | Correção |
+|---|---|---|
+| O `contentType` era o do CLIENTE: SVG/HTML com script declarado como `image/png`/`application/pdf` era **aceito e guardado** | 4 FAIL (200, linha e arquivo novos) | `src/helpers/fileSignature.ts`: os primeiros bytes (JPEG/PNG/WebP/PDF) têm de bater com o tipo declarado, **antes** de gravar |
+| Base64 inválido era aceito (`Buffer.from` ignora caracteres inválidos: o arquivo gravado era outro) | teste de unidade | base64 estrito antes de decodificar |
+| Nome com Unicode (`日本語.png`) → download **500** (o cabeçalho tinha caractere fora de Latin-1); nome `../../x.png` ia ao cabeçalho com barras | FAIL no navegador | `src/helpers/contentDisposition.ts`: só ASCII, sem aspas/barras/`;`, nome completo em `filename*` |
+| Linha **antiga** com tipo ativo (`text/html`, `image/svg+xml`) era servida inline com o tipo original | 2 FAIL | tipos fora da lista viram `application/octet-stream` + `attachment` |
+| Corpo > 16 MB → o Express respondia uma **página HTML** (e trocava a CSP da API) | FAIL | handler de erro em JSON; cabeçalhos da API preservados |
+
+Defesas que já valiam e foram confirmadas: `X-Content-Type-Options: nosniff` em toda resposta, `Cache-Control: private, no-store` no download, a CSP
+da API (`default-src 'none'`; mesmo um HTML antigo servido inline **não executou** — por isso o achado do tipo ativo é endurecimento, não exploração
+demonstrada), 401 sem sessão, 403 para outra organização (no download **e** no envio), 404 inexistente, 400 id inválido, nome nunca vira caminho.
+`Content-Disposition: inline` foi **mantido** para as quatro imagens/PDF: o botão "ver comprovante" abre o arquivo no navegador; o risco de
+renderizar conteúdo do usuário na origem autenticada é tratado por lista fechada de tipos + conferência dos bytes + nosniff + CSP da API, não só
+pelo `Content-Disposition`. **Não feito (decisão/infraestrutura):** varredura de malware, reencodar imagens, isolar uploads em outra origem (não há
+necessidade demonstrada: nenhum tipo renderizável como documento ativo é aceito) e conferir o comportamento de um bucket S3 real (o adaptador S3
+não foi exercitado; o download sempre passa pelo servidor).
+
 ## Security headers HTTP (Fase 50)
+
+### Cabeçalhos de produção: quem controla o quê, e o que foi medido (Fase 94)
+
+**Camadas.** O HTML e os assets do cliente são servidos pelo **nginx** (`deploy/nginx.conf`, arquitetura same-origin decidida na Fase 56); a API Express só
+devolve JSON e define os próprios cabeçalhos (`API_SECURITY_HEADERS`); `vite dev`/`vite preview` NÃO são produção. Os valores do documento vivem em
+`src/helpers/securityHeaders.ts` e o nginx tem uma **cópia manual** — `test/nginxHeaders.test.ts` exige igualdade textual e `npm run qa:security` (parte
+"headers") confere a resposta de um **nginx real** (imagem Docker `nginx:1.27-alpine`, certificado autoassinado descartável, só 127.0.0.1) rodando o
+`deploy/nginx.conf` do repositório com apenas domínio/certificado/porta da API trocados (cada troca é conferida).
+
+**Política (CSP do documento).** `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self'
+https://fonts.gstatic.com; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'` — **impõe
+bloqueio** (não é Report-Only), sem `unsafe-eval`, sem `unsafe-inline` em script, sem curingas. A única exceção é `style-src 'unsafe-inline'` (o Radix UI
+posiciona elementos por `style` inline); os valores são calculados em tempo de execução, então hash/nonce não são viáveis para esses atributos. Nenhuma política nova foi inventada: a existente foi **provada
+em navegador real** — (a) seis ações de injeção (script inline, handler inline, script externo, `new Function`, conexão externa, troca de `<base>`)
+funcionam numa página de controle sem CSP e **todas são bloqueadas** no app atrás do nginx (violações `script-src-elem`, `script-src-attr`, `connect-src`,
+`img-src`, `base-uri`), (b) o app **funciona** sob ela: login, cinco páginas e envio de comprovante pela interface sem **nenhuma** violação, (c) o app não
+é incorporável em iframe de outra origem (o controle sem proteção é).
+
+**Defeitos de configuração achados no nginx real e corrigidos:**
+
+| Defeito | Medido | Correção |
+|---|---|---|
+| `add_header` dentro de um `location` **substitui** os do `server`: o HSTS (declarado no `server`) só saía em `/_api/`, **nunca** no HTML nem nos assets | HSTS ausente em `/`, `/login`, `/index.html`, `/assets/*` | HSTS (e nosniff) repetidos em cada location que define `add_header`; teste estático trava a regra |
+| Assets sem `X-Content-Type-Options: nosniff` | ausente em `/assets/*` | idem |
+| `Cache-Control: public, immutable` (1 ano) com `always` também no **404** de `/assets/` | 404 com `immutable` | `map $status`: o cache imutável só vale para 200/304 |
+| `client_max_body_size` no padrão do nginx (1 MB): foto acima de ~750 KB (JSON em base64) voltava **413 em HTML** — o envio de comprovante não funcionaria em produção | 3 MB e 8 MB (limite válido) → 413 | `client_max_body_size 17m` em `/_api/` (logo acima dos 16 MB do Express: o 413 seguinte vem em JSON da API) |
+
+**Também verificado (sem defeito):** uma ocorrência de cada cabeçalho (o proxy não duplica a CSP da API), a API atravessando o proxy mantém `default-src
+'none'; frame-ancestors 'none'`, tipo MIME correto de JS/CSS (módulo ES), `<meta>` CSP da build igual a `DOCUMENT_CSP`, HSTS só no bloco 443.
+
+**Depende de infraestrutura externa (NÃO comprovado aqui):** o domínio, o certificado e a terminação TLS reais; o redirecionamento HTTP→HTTPS do bloco :80 (a
+porta 80 não foi exercitada); a política HSTS (`max-age` moderado, sem `preload`; subir só com HTTPS estável); o **staging** (`nginx.staging.conf`, HTTP atrás do túnel
+da Cloudflare, onde o HSTS e o TLS são da borda) só teve a sintaxe e as regras estáticas conferidas, não um navegador; CDN/WAF na frente podem acrescentar,
+remover ou duplicar cabeçalhos — repetir a conferência de cabeçalhos (`curl -I` em `/`, em um asset e em `/_api/__health`) contra a URL pública no deploy real; `Sec-Fetch-Site` precisa ser
+repassado pelo proxy. Não há `Report-Only` em uso; nenhuma etapa de observação foi necessária.
+
 
 Fecha o achado SEC-05 da auditoria de segurança. Valores centralizados em
 [`src/helpers/securityHeaders.ts`](../src/helpers/securityHeaders.ts) — um

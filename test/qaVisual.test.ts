@@ -268,7 +268,7 @@ describe("limpeza de recursos (sucesso, falha e execução morta à força)", ()
     expect(busy).toMatchObject({ busy: true, pid: 10 });
     const dead = planRecovery(state, { alive: (p: number) => p !== 10, cmdline: (p: number) => cmd[p] });
     expect(dead).toMatchObject({ busy: false, kill: [11, 12], database: "levora_qa", profiles: ["/tmp/levora-qa-profile-x"] }); // 13 (PID reaproveitado por outro programa) NÃO é encerrado
-    expect(planRecovery(null, { alive: () => true, cmdline: () => "" })).toEqual({ busy: false, kill: [], profiles: [], database: null });
+    expect(planRecovery(null, { alive: () => true, cmdline: () => "" })).toEqual({ busy: false, kill: [], profiles: [], database: null, containers: [] });
     expect(OURS.test("qa-visual")).toBe(true);
     expect(OURS.test("notepad.exe")).toBe(false);
   });

@@ -3,7 +3,8 @@
 // qualquer validação), para provar que a interface não executa nada disso. As credenciais existem só neste banco descartável.
 import { db } from "../../../src/helpers/db";
 import { generatePasswordHash } from "../../../src/helpers/generatePasswordHash";
-import { combined, javascriptUrl } from "./payloads.mjs";
+import { storageAdapter } from "../../../src/helpers/storageAdapter";
+import { combined, javascriptUrl, hitCode } from "./payloads.mjs";
 
 const QA_PASSWORD = process.env.QA_PASSWORD ?? "";
 const COLLECTOR = process.env.QA_SEC_COLLECTOR ?? "";
@@ -21,6 +22,21 @@ await mk("voluntario@qa.example", "Voluntária QA");
 await mk("admin@qa.example", "Admin QA", "admin");
 const org = await db.insertInto("organizations").values({ name: P("org-name"), slug: "associacao-sec", type: "organizacao_social", city: P("org-city"), state: "MG", status: "ativa", createdByUserId: owner }).returning("id").executeTakeFirstOrThrow();
 await db.insertInto("memberships").values({ organizationId: org.id, userId: owner, role: "proprietario", status: "ativo" }).execute();
+// segundo usuário da MESMA organização (administrador; o limite de envio de arquivos é por usuário, e cada navegador usa um) e um usuário de OUTRA organização
+const adm = await mk("adm@qa.example", "Adm QA");
+await db.insertInto("memberships").values({ organizationId: org.id, userId: adm, role: "administrador", status: "ativo" }).execute();
+const outsider = await mk("fora@qa.example", "Fora QA");
+const org2 = await db.insertInto("organizations").values({ name: "Outra Organização QA", slug: "outra-organizacao", type: "organizacao_social", city: "Betim", state: "MG", status: "ativa", createdByUserId: outsider }).returning("id").executeTakeFirstOrThrow();
+await db.insertInto("memberships").values({ organizationId: org2.id, userId: outsider, role: "proprietario", status: "ativo" }).execute();
+// linhas ANTIGAS de arquivo com tipo ativo, gravadas direto (nenhum fluxo atual as produz; o upload só aceita imagens e PDF). O conteúdo só pede
+// uma imagem ao coletor local, se algum navegador chegar a renderizá-lo.
+const legacy = async (name: string, type: string, content: string) => {
+  const buffer = Buffer.from(content);
+  const stored = await storageAdapter.upload({ organizationId: org.id, buffer, contentType: type });
+  await db.insertInto("files").values({ organizationId: org.id, uploadedByUserId: owner, storageProvider: stored.storageProvider, storageKey: stored.storageKey, originalFilename: name, contentType: type, sizeBytes: buffer.length, purpose: "comprovante_entrega" }).execute();
+};
+await legacy("legado.html", "text/html", `<!doctype html><title>legado</title><script>${hitCode(COLLECTOR, "FILE@legacy-html")}</script>`);
+await legacy("legado.svg", "image/svg+xml", `<svg xmlns="http://www.w3.org/2000/svg" onload="${hitCode(COLLECTOR, "FILE@legacy-svg")}"><script>${hitCode(COLLECTOR, "FILE@legacy-svg-script")}</script></svg>`);
 const item = await db.insertInto("inventoryItems").values({ organizationId: org.id, name: P("item-name"), unit: "kg", createdByUserId: owner }).returning("id").executeTakeFirstOrThrow();
 await db.insertInto("stockTransactions").values({ organizationId: org.id, itemId: item.id, type: "entrada", delta: "5", reason: P("tx-reason"), createdByUserId: owner }).execute();
 await db.insertInto("needs").values({ organizationId: org.id, title: P("need-title"), description: P("need-description"), quantityNeeded: "300", unit: "kg", priority: "media", status: "aberta", createdByUserId: owner }).execute();

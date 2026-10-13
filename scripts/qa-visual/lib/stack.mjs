@@ -93,7 +93,7 @@ export async function startStack({ root, databaseUrl, onSpawn, seedScript = path
     await waitFor(async () => (await fetch(`http://127.0.0.1:${apiPort}/_api/__health`)).ok, "API", 60000, api);
     const web = runNode(root, [vite, "--config", path.join("scripts", "qa-visual", "vite.config.ts"), "--port", String(webPort), "--strictPort", "--host", "127.0.0.1"], env, "vite", onSpawn); children.push(web);
     await waitFor(async () => (await fetch(`http://127.0.0.1:${webPort}/login`)).ok, "Vite", 60000, web);
-    return { baseUrl: `http://127.0.0.1:${webPort}`, stop };
+    return { baseUrl: `http://127.0.0.1:${webPort}`, apiPort, webPort, stop };
   } catch (e) {
     await stop();
     throw e;

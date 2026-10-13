@@ -75,6 +75,13 @@ montar o header, para que uma linha gravada antes desta validação existir
 (ou por qualquer caminho futuro) nunca vire injeção. Testado em
 `test/filesUpload.test.ts`.
 
+## Conteúdo real, nomes e tipos antigos (Fase 94)
+
+O `contentType` enviado pelo navegador é só uma declaração: o servidor confere os **primeiros bytes** (`src/helpers/fileSignature.ts`: JPEG `FF D8 FF`, PNG, WebP `RIFF…WEBP`,
+PDF `%PDF-`) e recusa (400, antes de gravar) o que não bate — um SVG/HTML com script declarado como imagem não chega ao storage. O base64 é validado
+estritamente. O download devolve `Content-Disposition` só em ASCII (`filename*` carrega o nome Unicode) e **nunca** serve como renderizável um tipo fora da lista
+(linhas antigas viram `application/octet-stream` + `attachment`). Ver `docs/SECURITY.md` ("Upload e download") e `test/uploadSecurity.test.ts`.
+
 ## Configuração (opcional)
 
 Sem nenhuma variável de storage configurada, tudo funciona via disco local

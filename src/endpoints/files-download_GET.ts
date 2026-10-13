@@ -4,6 +4,8 @@ import { requireOrganizationMembership } from "../helpers/organizationAccess.js"
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
 import { storageAdapter } from "../helpers/storageAdapter.js";
 import { schema } from "./files-download_GET.schema.js";
+import { ALLOWED_CONTENT_TYPES } from "./files-upload_POST.schema.js";
+import { buildContentDisposition } from "../helpers/contentDisposition.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
 
@@ -49,12 +51,17 @@ export async function handle(request: Request) {
     // arquivo gravado antes dessa validação existir (ou por qualquer outro
     // caminho futuro que escreva `files.original_filename`) não pode virar
     // injeção de cabeçalho HTTP aqui.
-    const safeFilename = file.originalFilename.replace(/["\r\n]/g, "");
+    // (buildContentDisposition cuida disso: só ASCII, sem aspas/barras/;, nome Unicode em filename*.)
+    //
+    // Só os tipos que o upload aceita (imagens e PDF) são exibidos no navegador ("ver comprovante"). Uma linha ANTIGA com qualquer outro
+    // tipo (text/html, image/svg+xml...) nunca é servida como conteúdo renderizável na origem autenticada: vira download genérico.
+    const renderable = (ALLOWED_CONTENT_TYPES as readonly string[]).includes(file.contentType);
 
     return new Response(new Uint8Array(buffer), {
       headers: {
-        "Content-Type": file.contentType,
-        "Content-Disposition": `inline; filename="${safeFilename}"`,
+        "Content-Type": renderable ? file.contentType : "application/octet-stream",
+        "Content-Disposition": buildContentDisposition(renderable ? "inline" : "attachment", file.originalFilename),
+        "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-store",
       },
     });

@@ -9,7 +9,8 @@
 // SÓ ambiente local/descartável: o banco precisa terminar em `_qa` (lib/guard.mjs), os servidores escutam em 127.0.0.1, as cargas só pedem uma
 // imagem de 1 pixel ao coletor local. Nada é enviado para fora desta máquina. Compartilha o registro de órfãos com `qa:visual` (ambas recriam o `_qa`).
 // Códigos de saída: 0 tudo conforme · 1 falha de segurança (FAIL) · 2 não consegui medir · 3 ambiente indisponível · 4 calibração do detector falhou.
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,13 +26,17 @@ import { QA_PASSWORD, USERS } from "./scenarios.mjs";
 import { ATTACKER_ORIGINS, ATTACK_KINDS, attackPage, classifyAttempt, summarizeNetwork, describeNetwork } from "./security/attacks.mjs";
 import { allIds, payloadSet, FIELDS } from "./security/payloads.mjs";
 import { startCollector, startFixtureVictim } from "./security/server.mjs";
+import { dockerStatus, startNginx, removeContainer } from "./security/nginx.mjs";
+import { nginxHeaderChecks, nginxUploadThroughProxy, cspInBrowser, writePng } from "./security/headers.mjs";
+import { uploadChecks } from "./security/uploads.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const { values: opt } = parseArgs({
   options: { browser: { type: "string", default: "auto" }, "db-url": { type: "string" }, only: { type: "string" }, out: { type: "string" }, verbose: { type: "boolean", default: false }, "keep-db": { type: "boolean", default: false }, cleanup: { type: "boolean", default: false } },
 });
-const parts = new Set((opt.only ?? "calibration,csrf,xss").split(",").map((s) => s.trim()));
-if (![...parts].every((p) => ["calibration", "csrf", "xss"].includes(p))) { console.error("--only aceita calibration, csrf, xss"); process.exit(EXIT.ENV); }
+const ALL_PARTS = ["calibration", "csrf", "xss", "uploads", "headers"];
+const parts = new Set((opt.only ?? ALL_PARTS.join(",")).split(",").map((s) => s.trim()));
+if (![...parts].every((p) => ALL_PARTS.includes(p))) { console.error(`--only aceita ${ALL_PARTS.join(", ")}`); process.exit(EXIT.ENV); }
 
 const report = new Report(); const cleanups = new Cleanups(); const state = new RunState();
 for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, async () => { await cleanups.runAll(); state.end(); process.exit(EXIT.ENV); });
@@ -40,6 +45,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const actionsFor = (dbUrl) => ({
   killTree: (pid) => killTree(pid),
   removeDir: (dir) => rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 }),
+  removeContainer: (name) => removeContainer(name),
   dropDb: async (name) => { if (!dbUrl) throw new Error("URL do banco indisponível para derrubar o banco órfão"); if (assertDisposableDatabase(dbUrl).database !== name) throw new Error(`o banco órfão (${name}) não é o banco de QA atual; não derrubado`); await dropDatabase(dbUrl); },
 });
 
@@ -56,7 +62,8 @@ async function navigate(cdp, url, ready = "document.readyState === 'complete'") 
 }
 async function waitUntil(fn, ms = 15000) { const end = Date.now() + ms; while (Date.now() < end) { try { const v = await fn(); if (v) return v; } catch { /* tenta de novo */ } await sleep(150); } return false; }
 async function clearCookies(cdp) { await cdp.send("Network.clearBrowserCookies"); }
-const EMAILS = { owner: USERS.owner.email, admin: "admin@qa.example" }; // o administrador da plataforma existe só na semente de segurança
+// usuários que existem só na semente de segurança: administrador da plataforma, administrador da organização e usuário de outra organização
+const EMAILS = { owner: USERS.owner.email, admin: "admin@qa.example", adm: "adm@qa.example", outsider: "fora@qa.example" };
 async function login(cdp, baseUrl, user) {
   await clearCookies(cdp);
   if (!(await navigate(cdp, `${baseUrl}/login`, "!!document.querySelector('input[type=\"email\"]')"))) return false;
@@ -97,6 +104,14 @@ async function calibrate(b, ctx) {
     await clickSelector(cdp, "a"); await sleep(1500);
     const fired = collector.hits.slice(before).some((h) => h.id === id);
     add(b.name, b.version, "calibração:href-blank", "href-blank", "calibração", STATUS.PASS, `INFORMATIVO (sem critério): javascript: em âncora com target=_blank rel=noopener ${fired ? "EXECUTOU" : "NÃO executou"} ao clicar neste navegador`, { state: "informativo" });
+  }
+  // --- arquivos servidos: o MESMO conteúdo ativo executa quando servido como HTML/SVG inline (vulnerável) e NÃO executa como imagem+nosniff ou attachment (seguro)
+  await cdp.send("Browser.setDownloadBehavior", { behavior: "deny" }).catch(() => {});
+  for (const [route, vulnerable] of [["file-html-inline", true], ["file-svg-inline", true], ["file-html-as-png-nosniff", false], ["file-html-attachment", false]]) {
+    const before = collector.hits.length;
+    await navigate(cdp, `${collector.url()}/fx/${route}`).catch(() => {}); await sleep(1300);
+    const fired = collector.hits.slice(before).some((h) => h.id === `FX@${route}`);
+    good = ok(`arquivo:${route}`, vulnerable ? fired : !fired, vulnerable ? `arquivo ativo servido inline: EXECUTOU e o detector acusa (aviso=${fired})` : `mesmo conteúdo servido de forma segura (${route.includes("png") ? "image/png + nosniff" : "attachment + octet-stream + nosniff"}): NÃO executou (aviso=${fired})`) && good;
   }
   // --- CSRF: contra a vítima de fixture, a origem do MESMO SITE deve criar registro no endpoint vulnerável e ser barrada no guardado
   await navigate(cdp, `${victim.url}/login`);
@@ -276,8 +291,8 @@ async function main() {
   const victim = await startFixtureVictim(); cleanups.add("vítima de fixture", () => victim.stop());
   console.log(`coletor/atacante em 127.0.0.1:${collector.port} · vítima de fixture em 127.0.0.1:${victim.port}`);
 
-  let stack; let sql; let ids = {};
-  const needsApp = parts.has("csrf") || parts.has("xss");
+  let stack; let sql; let ids = {}; let storageDir; let nx; let distDir; let pngFile;
+  const needsApp = ["csrf", "xss", "uploads", "headers"].some((p) => parts.has(p));
   if (needsApp) {
     let target; try { target = assertDisposableDatabase(dbUrl); } catch (e) { report.addEnv(`banco: ${e.message}`); return; }
     console.log(`banco de QA: ${target.database} em ${target.host}:${target.port} (schema recriado a partir de db/schema.sql)`);
@@ -286,19 +301,44 @@ async function main() {
       state.setDatabase(target.database);
       await prepareDatabase(dbUrl, root);
       process.env.QA_PASSWORD = QA_PASSWORD;
-      stack = await startStack({ root, databaseUrl: dbUrl, onSpawn: (pid, kind) => state.addChild(pid, kind), seedScript: path.join("scripts", "qa-visual", "security", "seed.ts"), extraEnv: { QA_SEC_COLLECTOR: collector.url(), QA_PASSWORD } });
+      // armazenamento de arquivos DESCARTÁVEL (a API e a semente gravam aqui; nunca em storage/uploads do projeto)
+      storageDir = mkdtempSync(path.join(tmpdir(), "levora-qa-profile-storage-")); state.addProfile(storageDir);
+      cleanups.add("armazenamento de arquivos", async () => { rmSync(storageDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 }); state.dropProfile(storageDir); });
+      stack = await startStack({ root, databaseUrl: dbUrl, onSpawn: (pid, kind) => state.addChild(pid, kind), seedScript: path.join("scripts", "qa-visual", "security", "seed.ts"), extraEnv: { QA_SEC_COLLECTOR: collector.url(), QA_PASSWORD, STORAGE_LOCAL_DIR: storageDir } });
     } catch (e) { report.addEnv(`pilha de verificação não subiu: ${e.message}`); return; }
     cleanups.add("API e Vite", () => stack.stop());
     const { default: postgres } = await import("postgres");
     sql = postgres(dbUrl, { max: 2, prepare: false, onnotice: () => {} }); cleanups.add("conexão com o banco", () => sql.end());
     ids = { openAllocationId: (await sql`SELECT id FROM opportunity_allocations WHERE status = 'aceita' ORDER BY id LIMIT 1`)[0].id, itemId: (await sql`SELECT id FROM inventory_items ORDER BY id LIMIT 1`)[0].id };
+    ids.orgId = (await sql`SELECT id FROM organizations WHERE slug = 'associacao-sec'`)[0].id;
     console.log(`aplicação em ${stack.baseUrl}`);
+  }
+
+  // nginx REAL (Docker) com a configuração de produção do repositório + build temporária do cliente
+  if (parts.has("headers")) {
+    const docker = dockerStatus();
+    if (!docker.ok) report.addEnv(`parte "headers" não executada: ${docker.reason} (código 3: sem o nginx real não há como medir os cabeçalhos de produção)`);
+    else {
+      try {
+        distDir = mkdtempSync(path.join(tmpdir(), "levora-qa-profile-dist-")); state.addProfile(distDir);
+        cleanups.add("build temporária do cliente", async () => { rmSync(distDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 }); state.dropProfile(distDir); });
+        const build = spawnSync(process.execPath, [path.join(root, "node_modules", "vite", "bin", "vite.js"), "build", "--outDir", distDir, "--emptyOutDir", "--logLevel", "warn"], { cwd: root, encoding: "utf8", windowsHide: true, timeout: 240000 });
+        if (build.status !== 0 || !existsSync(path.join(distDir, "index.html"))) throw new Error(`a build do cliente falhou: ${(build.stderr || build.stdout || "").slice(0, 300)}`);
+        nx = await startNginx({ confPath: path.join(root, "deploy", "nginx.conf"), distDir, apiPort: stack.apiPort, onContainer: (name) => state.addContainer(name), onWorkDir: (d) => state.addProfile(d) });
+        cleanups.add("nginx (Docker)", async () => { await nx.stop(); state.dropContainer(nx.name); state.dropProfile(nx.workDir); });
+        console.log(`nginx real (deploy/nginx.conf, TLS autoassinado descartável) em https://localhost:${nx.port}`);
+        pngFile = writePng(path.join(storageDir, "..", `levora-qa-profile-png-${process.pid}.png`));
+        state.addProfile(pngFile); cleanups.add("PNG sintético", async () => { rmSync(pngFile, { force: true }); state.dropProfile(pngFile); });
+        await nginxHeaderChecks({ add, STATUS }, { nx, distDir, root });
+        await nginxUploadThroughProxy({ add, STATUS }, { nx, orgId: ids.orgId, email: EMAILS.adm, password: QA_PASSWORD });
+      } catch (e) { report.addEnv(`parte "headers" não executada: ${e.message}`); nx = undefined; }
+    }
   }
 
   const ran = [];
   for (const br of browsers) {
     let session;
-    try { session = await launchBrowser(br.exe, { onSpawn: (pid, kind) => state.addChild(pid, kind), onProfile: (d) => state.addProfile(d), onProfileGone: (d) => state.dropProfile(d) }); } catch (e) { report.addEnv(`${br.name}: não abriu (${e.message})`); continue; }
+    try { session = await launchBrowser(br.exe, { extraArgs: nx ? ["--ignore-certificate-errors"] : [], onSpawn: (pid, kind) => state.addChild(pid, kind), onProfile: (d) => state.addProfile(d), onProfileGone: (d) => state.dropProfile(d) }); } catch (e) { report.addEnv(`${br.name}: não abriu (${e.message})`); continue; }
     cleanups.add(`navegador ${br.name}`, async () => session.close());
     try {
       const b = { name: br.name, version: session.version };
@@ -307,6 +347,10 @@ async function main() {
       if (parts.has("calibration")) { const good = await calibrate(b, ctx); if (!good) { report.addEnv("calibração do detector falhou: os resultados de CSRF/XSS deste navegador NÃO são confiáveis"); calibrationFailed = true; } }
       if (!calibrationFailed && parts.has("csrf")) await csrf(b, ctx);
       if (!calibrationFailed && parts.has("xss")) await xss(b, ctx);
+      const kit = { add, STATUS, cdp: session.cdp, navigate, login, clickSelector, sleep, sendKey };
+      const user = browsers.indexOf(br) === 0 ? "owner" : "adm"; // o limite de envio de arquivos é por usuário
+      if (!calibrationFailed && parts.has("uploads")) await uploadChecks(kit, b, { cdp: session.cdp, collector, sql, storageDir, user, outsiderLogin: () => login(session.cdp, stack.baseUrl, "outsider"), baseUrl: stack.baseUrl, orgId: ids.orgId });
+      if (!calibrationFailed && parts.has("headers") && nx) await cspInBrowser(kit, b, { nx, collector, user, pngFile, assertNoHit: (hitIds, from = 0) => collector.hits.slice(from).filter((h) => hitIds.includes(h.id)) });
       ran.push(b);
     } finally { await session.close(); }
   }

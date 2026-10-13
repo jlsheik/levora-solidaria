@@ -115,6 +115,8 @@ temporário, arquivos sintéticos, API/Vite (árvore de processos) e, por últim
 `npm run qa:visual -- --cleanup` — encerre só PIDs cuja linha de comando ainda é nossa (evita matar um processo que reaproveitou o PID), apague só
 diretórios `levora-qa-profile-*` e derrube o banco `_qa`. Uma execução simultânea é recusada (`ENV`), pois ambas recriariam o mesmo banco.
 
+`qa:security` registra também o **contêiner Docker do nginx** (nome `levora-qa-nginx-*`, só estes nomes são removidos), o armazenamento de arquivos descartável e a build temporária do cliente; provado com morte forçada do orquestrador no meio da parte `headers`: `npm run qa:security -- --cleanup` removeu o contêiner, os diretórios temporários e o banco `_qa` (0 sobras).
+
 ## Verificação de segurança em navegador real (`npm run qa:security`)
 
 Mesma infraestrutura (Edge/Chrome headless por CDP, banco `_qa` descartável, pilha API + Vite em portas livres, limpeza e recuperação de órfãos
@@ -122,8 +124,8 @@ compartilhadas — as duas ferramentas recriam o mesmo banco, então uma execuç
 **só em 127.0.0.1**. Nada sai desta máquina e as cargas só pedem uma imagem de 1 pixel ao coletor local.
 
 ```bash
-npm run qa:security                               # calibração + CSRF + XSS, nos navegadores encontrados (~5 min)
-npm run qa:security -- --browser edge --only xss  # só um navegador / só uma parte (calibration, csrf, xss)
+npm run qa:security                               # calibração + CSRF + XSS + uploads + cabeçalhos de produção (nginx real), nos navegadores encontrados (~7 min)
+npm run qa:security -- --browser edge --only xss  # só um navegador / só partes (calibration, csrf, xss, uploads, headers)
 npm run qa:security -- --cleanup                  # recupera órfãos de uma execução morta à força
 ```
 
@@ -151,15 +153,38 @@ Visita as páginas da organização (com edição e históricos abertos) e `/pla
 literal** (campo que não aparece em nenhuma tela vira `SKIP`, nunca aprovação); contexto de URL (comprovante legado `javascript:` na linha do tempo,
 clicando na âncora, e a tentativa de gravar um `javascript:` pelo endpoint real, que deve dar 400) e contexto **refletido** (caminho, consulta e hash).
 
-**Resultado desta execução** (Edge 155 + Chrome 155; ambos Blink): 48 verificações por navegador (9 calibração, 14 CSRF, 25 XSS), **96 PASS, 0 outros**.
-Antes das correções a mesma ferramenta deu FAIL em **4 tipos de CSRF same-site** (cookie enviado, registro criado) e no **servidor aceitando
-`javascript:`**; o conserto está em `docs/SECURITY.md` (CSRF e Comprovante) e os testes de regressão em `test/csrfGuard.test.ts` e `test/proofUrl.test.ts`
-(removendo o conserto, ambos falham). A detecção do `href` `javascript:` foi provada removendo temporariamente o filtro do cliente: FAIL.
+**Uploads** (parte `uploads`; arquivos sintéticos e inofensivos pelo `files-upload`/`files-download` reais, sessão real; armazenamento em diretório temporário
+descartável, nunca `storage/uploads`). Cada cenário é julgado por **três fontes**: a resposta HTTP, o que ficou persistido (linhas em `files` + arquivos no disco) e
+o que o navegador faz ao abrir o conteúdo (o coletor não pode receber nenhum aviso). As linhas dizem qual das categorias ocorreu: **aceito e servido com segurança**
+(200, Content-Type exato, nosniff, no-store, disposição só ASCII, bytes idênticos, navegador exibe como imagem) · **rejeitado corretamente** (400/413 em JSON e
+**nenhuma** linha nem arquivo novo) · **violação** (FAIL) · não medido (UNMEASURABLE) · ausente (MISSING) · falha de ambiente (ENV). Cenários: PNG/JPEG/WebP/PDF válidos;
+SVG e HTML ATIVOS declarados como PNG/PDF/JPEG; PNG declarado JPEG; tipos proibidos (`image/svg+xml`, `text/html`); base64 inválido; nomes `../../etc/passwd.png`,
+Unicode e `<img onerror>.png`; 8 MB+1 e corpo > 16 MB; linhas ANTIGAS `text/html` e `image/svg+xml` (semeadas direto no banco) abertas no navegador; sem sessão,
+id inexistente/inválido, e usuário de OUTRA organização (download e envio). Calibração: o mesmo conteúdo ativo servido inline como HTML/SVG **executa** (detector acusa) e
+servido como `image/png`+nosniff ou `attachment` **não** executa.
 
-**Não mede:** WebKit/Firefox (só Blink); produção com CSP (o dev server não tem); armazenamento via upload de arquivo (HTML/SVG enviado); eventos
-postMessage/iframes de terceiros; clickjacking (cabeçalhos cobertos por `test/securityHeaders.test.ts`); autenticação de rede/TLS; o CSRF por `GET`
-(os endpoints GET não escrevem — não há teste dinâmico disso aqui). O cookie `Secure` sobre `http://127.0.0.1` funciona nos navegadores testados; em outro
-ambiente de teste isso pode exigir HTTPS.
+**Cabeçalhos de produção** (parte `headers`; **exige Docker** com as imagens `nginx:1.27-alpine` e `alpine/openssl` já presentes — a rotina não baixa nada; sem elas a parte
+vira ENV, saída 3, e as demais continuam). Faz uma build temporária do cliente (`vite build --outDir` temporário, sem tocar em `dist/`), gera um certificado autoassinado,
+sobe o **`deploy/nginx.conf` real** (só domínio, certificado e porta da API trocados; cada troca é conferida e, se a configuração mudar, a rotina falha em vez de testar outra
+coisa) e mede: (1) por location (`/`, `/login`, `/index.html`, rota da SPA, JS, CSS, asset inexistente, API pelo proxy, 404 e recusa 415 da API) a CSP (impõe bloqueio, sem
+`unsafe-eval`, sem `unsafe-inline` em script, sem curingas, `frame-ancestors`), `X-Frame-Options`, nosniff, Referrer-Policy, Permissions-Policy, HSTS, cache e **uma única
+ocorrência de cada cabeçalho**; igualdade da CSP do nginx e do `<meta>` da build com `src/helpers/securityHeaders.ts`; (2) envio de 3 MB, 8 MB (limite), 9 MB e > 16 MB **pelo
+proxy**; (3) no navegador, sobre HTTPS (`--ignore-certificate-errors` só neste navegador descartável): login, cinco páginas e envio de comprovante pela interface **sem nenhuma
+violação de CSP**, e a prova de bloqueio — seis ações de injeção que **funcionam numa página de controle sem CSP** e são **todas bloqueadas** no app (violações citadas por
+diretiva), conexão externa recusada e o app **não incorporável** em iframe de outra origem (controle sem proteção incorporável). A avaliação do `eval` desliga a isenção de CSP
+que o CDP concede por padrão (`allowUnsafeEvalBlockedByCSP: false`).
+
+**Resultado desta execução** (Edge 155 + Chrome 155, ambos Blink; nginx 1.27 em Docker; ~7 min): **180 PASS, 0 outros** — por navegador 82 (13 de calibração, 14 CSRF, 25 XSS, 20 de upload e
+10 de CSP no nginx real), mais 16 do próprio nginx (12 de cabeçalhos e 4 de envio pelo proxy); são verificações, não componentes independentes. Antes das correções a mesma ferramenta deu FAIL em: **4 tipos de CSRF same-site**
+(Fase 94 anterior), conteúdo ativo declarado como imagem **aceito** (4), download com nome Unicode → **500**, nome com barras no cabeçalho, linha antiga HTML/SVG servida inline
+(2), 413 em **HTML**, HSTS ausente no HTML e nos assets, nosniff ausente nos assets, 404 de asset "imutável" e **413 do nginx para qualquer envio acima de ~750 KB**. O
+detector de upload foi provado contra o código anterior (9 FAIL com os três arquivos restaurados a `HEAD`) e o de cabeçalhos contra a configuração anterior (teste estático
+falha com o `nginx.conf` de `HEAD`).
+
+**Não mede:** WebKit/Firefox (só Blink); o **staging** (`nginx.staging.conf`: só sintaxe e regras estáticas), TLS/domínio/certificado reais, redirecionamento da porta 80, CDN/WAF
+na frente; o adaptador **S3** (só disco local); varredura de malware; PDF dentro do visualizador do navegador (o PDF é conferido por bytes e cabeçalhos, não aberto); armazenamento
+de HTML/SVG por outro caminho que não o upload; postMessage/iframes de terceiros; clickjacking além do iframe testado; GETs com efeito colateral. O cookie `Secure` sobre
+`http://127.0.0.1` funciona nos navegadores testados; em outro ambiente de teste isso pode exigir HTTPS.
 
 ## O que NÃO mede / limitações
 

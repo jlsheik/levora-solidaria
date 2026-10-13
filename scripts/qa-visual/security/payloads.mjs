@@ -38,3 +38,6 @@ export function parseHitId(id) {
 
 /** Os 8 ids de cada campo; `expectedHitIds` é o universo que NUNCA deve aparecer no coletor numa aplicação correta. */
 export const allIds = (collector) => FIELDS.flatMap((f) => payloadSet(collector, f).map((p) => p.id));
+
+/** Avisos de arquivo ativo servido pelo download (qualquer um deles no coletor = conteúdo executado na origem autenticada). */
+export const FILE_HIT_IDS = ["FILE@legacy-html", "FILE@legacy-svg", "FILE@legacy-svg-script"];

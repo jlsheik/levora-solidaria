@@ -4,6 +4,7 @@ import { requirePermission } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
 import { storageAdapter } from "../helpers/storageAdapter.js";
 import { schema, FILE_MAX_SIZE_BYTES } from "./files-upload_POST.schema.js";
+import { detectFileType, isStrictBase64 } from "../helpers/fileSignature.js";
 import { checkRateLimit, rateLimitResponse } from "../helpers/rateLimit.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
@@ -27,15 +28,14 @@ export async function handle(request: Request) {
 
     await requirePermission(user.id, input.organizationId, "arquivos.envie");
 
-    let buffer: Buffer;
-    try {
-      buffer = Buffer.from(input.fileBase64, "base64");
-    } catch {
+    // Base64 estrito: Buffer.from ignora caracteres inválidos em silêncio (o arquivo gravado seria outro).
+    if (!isStrictBase64(input.fileBase64)) {
       return new Response(superjson.stringify({ message: "Arquivo em base64 inválido" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
+    const buffer = Buffer.from(input.fileBase64, "base64");
 
     if (buffer.length === 0) {
       return new Response(superjson.stringify({ message: "Arquivo vazio" }), {
@@ -48,6 +48,15 @@ export async function handle(request: Request) {
         superjson.stringify({ message: `Arquivo maior que o limite permitido de ${Math.round(FILE_MAX_SIZE_BYTES / 1024 / 1024)}MB` }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
+    }
+
+    // O `contentType` vem do cliente: um SVG/HTML com script declarado como image/png seria aceito e guardado. Os primeiros bytes têm de
+    // corresponder ao tipo declarado ANTES de qualquer gravação (rejeitado = nada no storage nem no banco).
+    if (detectFileType(buffer) !== input.contentType) {
+      return new Response(superjson.stringify({ message: "O conteúdo do arquivo não corresponde ao tipo informado" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const stored = await storageAdapter.upload({ organizationId: input.organizationId, buffer, contentType: input.contentType });
