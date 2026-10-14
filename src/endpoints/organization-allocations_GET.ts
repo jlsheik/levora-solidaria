@@ -38,6 +38,8 @@ export async function handle(request: Request) {
         "opportunityRegistry.locationCity as opportunityLocationCity",
         "opportunityRegistry.locationState as opportunityLocationState",
         "sources.name as sourceName",
+        // Fase 99C: recebimento físico pendente de regularização de unidade (caso ativo desta atribuição), sem consulta extra por linha.
+        sql<number | null>`(SELECT c.id FROM unit_regularization_cases c WHERE c.allocation_id = opportunity_allocations.id AND c.status IN ('aberto', 'conferido') LIMIT 1)`.as("pendingRegularizationCaseId"),
       ])
       .where("opportunityAllocations.organizationId", "=", input.organizationId)
       .orderBy("opportunityAllocations.createdAt", "desc")
@@ -53,7 +55,7 @@ export async function handle(request: Request) {
       createdAt: r.createdAt.toString(),
       responseDueAt: responseDueAt ? responseDueAt.toISOString() : null,
       closedAt: closedAt ? closedAt.toISOString() : null,
-      pendingAction: r.status === "aceita" && autoMatched && decidedByUserId === null && responseDueAt !== null,
+      pendingAction: r.status === "aceita" && autoMatched && decidedByUserId === null && responseDueAt !== null && r.pendingRegularizationCaseId == null,
     }));
     return new Response(
       superjson.stringify({

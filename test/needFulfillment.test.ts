@@ -172,7 +172,9 @@ describe("need_fulfillments — ledger de atendimento", () => {
     const evaluation = await db.selectFrom("matchEvaluations").select(["needId"]).where("allocationId", "=", allocation.id).executeTakeFirstOrThrow();
     expect(evaluation.needId).toBe(need.id); // a relação existe...
 
-    // ...mas o item escolhido no recebimento tem unidade diferente da need.
+    // ...mas o item escolhido no recebimento tem unidade diferente da need. (Fase 99C: este teste é do LEDGER; a oferta fica sem unidade para o recebimento seguir o fluxo normal — a
+    // divergência entre a unidade da oferta e a do item é coberta por test/unitRegularization*.test.ts.)
+    await db.updateTable("opportunityRegistry").set({ unit: null }).where("id", "=", opportunity.id).execute();
     const receiveRes = await receiveHandle(buildRequest("allocations-receive", { method: "POST", cookie: owner.cookie, body: { organizationId: org.id, allocationId: allocation.id, itemId: item.id, quantityReceived: 20 } }));
     expect(receiveRes.status).toBe(200);
 

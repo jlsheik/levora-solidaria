@@ -18,8 +18,10 @@ export const schema = z.object({
 
 export type OutputType = {
   allocation: { id: number; status: string };
-  stockTransactionId: string;
-  newStock: number;
+  stockTransactionId?: string;
+  newStock?: number;
+  /** Fase 99C: HTTP 202 — nada foi lançado; há um caso de regularização de unidade pendente (o mesmo retorno vale para o retry). */
+  pendingRegularization?: { caseId: number; status: string; created: boolean; message: string };
 };
 
 export const postAllocationsReceive = async (

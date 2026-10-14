@@ -40,6 +40,8 @@ async function expireOne(allocationId: number): Promise<{ expired: boolean; oppo
       .where("decidedByUserId", "is", null)
       .where("responseDueAt", "is not", null)
       .where(sql<boolean>`response_due_at <= now()`)
+      // Fase 99C: recebimento físico pendente de regularização de unidade NÃO é "sem movimentação": a atribuição não expira enquanto houver caso ativo.
+      .where(sql<boolean>`NOT EXISTS (SELECT 1 FROM unit_regularization_cases c WHERE c.allocation_id = opportunity_allocations.id AND c.status IN ('aberto', 'conferido'))`)
       .forUpdate()
       .executeTakeFirst();
     // Reavaliado sob a trava: se a organização iniciou a logística ou recebeu enquanto esperávamos, a linha já não é 'aceita' e sai daqui.
@@ -96,6 +98,7 @@ async function runExpireAssignmentDeadlines() {
       .where("decidedByUserId", "is", null)
       .where("responseDueAt", "is not", null)
       .where(sql<boolean>`response_due_at <= now()`)
+      .where(sql<boolean>`NOT EXISTS (SELECT 1 FROM unit_regularization_cases c WHERE c.allocation_id = opportunity_allocations.id AND c.status IN ('aberto', 'conferido'))`)
       .orderBy("id")
       .limit(500)
       .execute();

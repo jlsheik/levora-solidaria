@@ -1,8 +1,9 @@
 import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
-import { recordAuditLogEntry } from "../helpers/auditLog.js";
-import { getItemStockBalance } from "../helpers/stockBalance.js";
+import { postLocalDonationReceipt } from "../helpers/receiptPosting.js";
+import { checkOfferUnitAgainstItem } from "../helpers/unitVocabulary.js";
+import { closeAsCorrectedIfNowCompatible, findActiveCase, openCase } from "../helpers/unitRegularization.js";
 import { schema } from "./opportunities-receive_POST.schema.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
@@ -18,10 +19,10 @@ export async function handle(request: Request) {
     const result = await db.transaction().execute(async (trx) => {
       // Fase 96: a linha da oferta é TRAVADA antes de ler o status. Antes, duas requisições simultâneas liam "registrada", cada uma lançava a entrada (a única trava
       // era a do item, e itens diferentes nem se serializavam) e a oferta de 10 unidades virava 20. Agora o status é lido e decidido sob a trava: a segunda
-      // requisição espera a primeira confirmar e então vê "recebida" (409). Ordem de travas: oferta → item → auditoria (a mesma de opportunities-status_POST).
+      // requisição espera a primeira confirmar e então vê "recebida" (409). Ordem de travas: oferta → item → caso → auditoria (a mesma de opportunities-status_POST).
       const opportunity = await trx
         .selectFrom("donationOpportunities")
-        .select(["id", "status", "title", "donorName"])
+        .select(["id", "status", "title", "donorName", "unit", "quantityOffered"])
         .where("id", "=", input.opportunityId)
         .where("organizationId", "=", input.organizationId)
         .forUpdate()
@@ -35,7 +36,7 @@ export async function handle(request: Request) {
 
       const item = await trx
         .selectFrom("inventoryItems")
-        .select(["id", "name"])
+        .select(["id", "name", "unit"])
         .where("id", "=", input.itemId)
         .where("organizationId", "=", input.organizationId)
         .forUpdate()
@@ -43,57 +44,43 @@ export async function handle(request: Request) {
 
       if (!item) return { type: "item_not_found" as const };
 
-      // "Reivindica" a oferta ANTES de lançar o estoque: atualização condicional (defesa em profundidade além da trava). Se, por qualquer motivo, a linha não estiver
-      // mais num estado recebível, nada foi escrito ainda e a resposta é a mesma do contrato (409).
-      const [updatedOpportunity] = await trx
-        .updateTable("donationOpportunities")
-        .set({ status: "recebida", updatedAt: new Date() })
-        .where("id", "=", input.opportunityId)
-        .where("organizationId", "=", input.organizationId)
-        .where("status", "not in", ["recebida", "cancelada"])
-        .returning(["id", "status"])
-        .execute();
-      if (!updatedOpportunity) return { type: "invalid_status" as const, status: "recebida" as const };
-
-      const [tx] = await trx
-        .insertInto("stockTransactions")
-        .values({
+      // Fase 99C: unidade da doação × unidade canônica do item. Sem equivalência comprovada NADA é lançado: o recebimento vira (ou reaproveita) um caso de regularização.
+      let activeCase = await findActiveCase(trx, { donationOpportunityId: opportunity.id });
+      if (activeCase && (await closeAsCorrectedIfNowCompatible(trx, activeCase, opportunity.unit, user.id))) activeCase = undefined;
+      if (activeCase) return { type: "pending_regularization" as const, caseId: activeCase.id, status: activeCase.status, created: false };
+      const unitCheck = checkOfferUnitAgainstItem(opportunity.unit, item.unit);
+      if (!unitCheck.compatible) {
+        const created = await openCase(trx, {
           organizationId: input.organizationId,
-          itemId: input.itemId,
-          type: "entrada",
-          delta: input.quantityReceived,
-          reason: `Recebimento da oportunidade "${opportunity.title}" — doador: ${opportunity.donorName}${input.notes ? ` — ${input.notes}` : ""}`,
-          createdByUserId: user.id,
-        })
-        .returning(["id"])
-        .execute();
+          donationOpportunityId: opportunity.id,
+          itemId: item.id,
+          offeredQuantity: opportunity.quantityOffered === null ? null : Number(opportunity.quantityOffered),
+          offeredUnit: opportunity.unit,
+          informedQuantity: input.quantityReceived,
+          itemUnit: item.unit,
+          receiptNotes: input.notes ?? null,
+          divergenceKind: unitCheck.reason,
+          userId: user.id,
+        });
+        return { type: "pending_regularization" as const, caseId: created.id, status: created.status, created: true };
+      }
 
-      await recordAuditLogEntry(
-        {
-          organizationId: input.organizationId,
-          actorUserId: user.id,
-          action: "oportunidade.recebida",
-          entityType: "donation_opportunity",
-          entityId: String(input.opportunityId),
-          metadata: {
-            title: opportunity.title,
-            donorName: opportunity.donorName,
-            itemId: input.itemId,
-            itemName: item.name,
-            quantityReceived: input.quantityReceived,
-            stockTransactionId: String(tx.id),
-          },
-        },
-        trx
-      );
-
-      const newStock = await getItemStockBalance(trx, input.itemId);
+      const posted = await postLocalDonationReceipt(trx, {
+        organizationId: input.organizationId,
+        opportunity,
+        item,
+        quantityReceived: input.quantityReceived,
+        userId: user.id,
+        notes: input.notes ?? null,
+      });
+      // Defesa em profundidade além da trava: se a oferta não estava mais num estado recebível, nada foi escrito e a resposta é a do contrato (409).
+      if (!posted.claimed) return { type: "invalid_status" as const, status: "recebida" as const };
 
       return {
         type: "success" as const,
-        opportunity: updatedOpportunity,
-        stockTransactionId: String(tx.id),
-        newStock,
+        opportunity: posted.opportunity,
+        stockTransactionId: posted.stockTransactionId,
+        newStock: posted.newStock,
       };
     });
 
@@ -101,6 +88,20 @@ export async function handle(request: Request) {
       return new Response(
         superjson.stringify({ message: "Oportunidade não encontrada nesta organização" }),
         { status: 404, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (result.type === "pending_regularization") {
+      return new Response(
+        superjson.stringify({
+          pendingRegularization: {
+            caseId: result.caseId,
+            status: result.status,
+            created: result.created,
+            message:
+              "O recebimento não foi lançado no estoque: a unidade da doação não tem equivalência comprovada com a unidade do item. Regularize o caso na fila de pendências de unidade.",
+          },
+        }),
+        { status: 202, headers: { "Content-Type": "application/json" } }
       );
     }
     if (result.type === "item_not_found") {

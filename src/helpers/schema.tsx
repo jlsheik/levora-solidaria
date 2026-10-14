@@ -255,6 +255,59 @@ export interface OpportunityAllocations {
   updatedAt: Generated<Timestamp>;
 }
 
+export type UnitRegularizationCategory = "a_classificar" | "conferencia_fisica" | "conversao_nao_suportada" | "erro_cadastral" | "informacao_insuficiente";
+
+export type UnitRegularizationStatus = "aberto" | "conferido" | "corrigido" | "encerrado" | "resolvido";
+
+export type UnitRegularizationEventType = "aberto" | "conferencia_devolvida" | "conferencia_registrada" | "correcao_cadastral" | "encerrado" | "validada_resolvida";
+
+export interface UnitRegularizationCases {
+  allocationId: number | null;
+  category: Generated<UnitRegularizationCategory>;
+  checkedQuantity: Numeric | null;
+  checkedUnit: string | null;
+  closedAt: Timestamp | null;
+  closedByUserId: number | null;
+  closedReason: string | null;
+  conferredAt: Timestamp | null;
+  conferredByUserId: number | null;
+  createdAt: Generated<Timestamp>;
+  divergenceKind: "unidade_diferente" | "unidade_nao_classificada";
+  divergenceReason: string | null;
+  donationOpportunityId: number | null;
+  id: Generated<number>;
+  informedQuantity: Numeric;
+  itemId: number;
+  itemUnit: string;
+  offeredQuantity: Numeric | null;
+  offeredUnit: string | null;
+  openedByUserId: number;
+  organizationId: number;
+  receiptNotes: string | null;
+  resolvedStockTransactionId: Int8 | null;
+  sourceType: "allocation" | "local_donation";
+  status: Generated<UnitRegularizationStatus>;
+  updatedAt: Generated<Timestamp>;
+  validatedAt: Timestamp | null;
+  validatedByUserId: number | null;
+  withoutSecondValidation: Generated<boolean>;
+}
+
+export interface UnitRegularizationEvents {
+  actorUserId: number | null;
+  caseId: number;
+  createdAt: Generated<Timestamp>;
+  eventType: UnitRegularizationEventType;
+  fieldRef: string | null;
+  id: Generated<Int8>;
+  newValue: string | null;
+  organizationId: number;
+  previousValue: string | null;
+  quantityAfter: Numeric | null;
+  quantityBefore: Numeric | null;
+  reason: string | null;
+}
+
 export interface PlatformAssignmentSettings {
   id: number;
   responseDeadlineHours: Generated<number>;
@@ -430,6 +483,8 @@ export interface DB {
   organizations: Organizations;
   sessions: Sessions;
   sources: Sources;
+  unitRegularizationCases: UnitRegularizationCases;
+  unitRegularizationEvents: UnitRegularizationEvents;
   stockTransactions: StockTransactions;
   userPasswords: UserPasswords;
   users: Users;

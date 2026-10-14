@@ -51,11 +51,12 @@ async function seedOrg(opts: { units: { item: string[]; need: string[]; capacity
   }
   const source = await createTestSource(admin.userId);
   const registry = await createTestOpportunityRegistry(source.id, admin.userId, { title: "Oferta sigilosa do doador" });
-  await db.updateTable("opportunityRegistry").set({ unit: opts.units.registry }).where("id", "=", registry.id).execute();
   const allocation = await createTestAllocation(registry.id, org.id, { status: "em_transporte", quantityAllocated: 5 });
   const ledgerItem = await createTestInventoryItem(org.id, owner.userId, { name: "Item do ledger", unit: opts.units.ledgerItem });
   const receive = await receiveHandle(buildRequest("allocations-receive", { method: "POST", cookie: owner.cookie, body: { organizationId: org.id, allocationId: allocation.id, itemId: ledgerItem.id, quantityReceived: 5 } }));
   expect(receive.status).toBe(200);
+  // Fase 99C: o recebimento acima exige oferta sem divergência; o valor de unidade da oferta a inventariar é gravado DEPOIS (dado histórico direto, como num banco antigo).
+  await db.updateTable("opportunityRegistry").set({ unit: opts.units.registry }).where("id", "=", registry.id).execute();
   return { owner, org };
 }
 

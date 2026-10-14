@@ -103,7 +103,7 @@ describe("caminho de atualização × instalação nova", () => {
       expect({ key, soNaInstalacaoNova: onlyInstall, soNoCaminhoDeAtualizacao: onlyUpgrade }).toEqual({ key, soNaInstalacaoNova: [], soNoCaminhoDeAtualizacao: [] });
       expect(a[key].length, key).toBeGreaterThan(0);
     }
-    expect(a.tables.length).toBe(26); // +1 na Fase 98: platform_assignment_settings (0015)
+    expect(a.tables.length).toBe(28); // +1 na Fase 98: platform_assignment_settings (0015); +2 na Fase 99C: unit_regularization_cases e _events (0016)
   });
 
   it("o catálogo detecta divergência de verdade (controle): uma coluna a mais num dos bancos aparece na comparação", async () => {

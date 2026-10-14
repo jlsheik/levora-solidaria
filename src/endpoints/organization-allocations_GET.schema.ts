@@ -20,6 +20,8 @@ export type OutputType = {
     closedReason: string | null;
     /** Atribuição automática aguardando a primeira movimentação da organização, dentro do prazo ou vencida e ainda não processada. */
     pendingAction: boolean;
+    /** Fase 99C: caso de regularização de unidade ativo desta atribuição (o recurso foi apresentado, mas nada foi lançado no estoque). */
+    pendingRegularizationCaseId: number | null;
     opportunityId: number;
     opportunityTitle: string;
     opportunityDescription: string | null;

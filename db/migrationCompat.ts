@@ -31,6 +31,7 @@ export const MIGRATION_COMPAT: Record<string, Compat> = {
   "0013_users_email_case_insensitive.sql": { kind: "precheck" },
   "0014_allocation_response_deadline.sql": { kind: "safe", category: "coluna-nullable-sem-rejeicao", reason: "adiciona response_due_at, closed_at e closed_reason a opportunity_allocations como colunas NULLABLE sem DEFAULT e sem backfill: as linhas antigas ficam NULL, o CHECK de closed_reason aceita NULL e o índice idx_opportunity_allocations_response_due é parcial e não único." },
   "0015_platform_assignment_settings.sql": { kind: "safe", category: "tabela-nova-vazia", reason: "cria a tabela platform_assignment_settings, que não existia antes: não há linhas anteriores para violar os CHECK de id e de response_deadline_hours nem a chave estrangeira para users." },
+  "0016_unit_regularization.sql": { kind: "safe", category: "tabela-nova-vazia", reason: "cria as tabelas unit_regularization_cases e unit_regularization_events, que não existiam: não há linhas anteriores para violar os CHECK, os índices únicos parciais, as chaves estrangeiras ou os gatilhos de integridade; nenhum dado antigo é lido, copiado ou reclassificado (sem backfill)." },
 };
 
 /** Termos que, sozinhos, não justificam nada. */
