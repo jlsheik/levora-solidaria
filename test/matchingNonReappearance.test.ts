@@ -304,7 +304,7 @@ describe("histórico, auditoria e invariantes das fases anteriores", () => {
     const opp = await makeOpp(ad, undefined, "reservada");
     const refused = await proposal(opp, a.org.id);
     await decide(a, refused, "recusada");
-    const manual = (org: number, cookie = ad.cookie) => manualAllocateHandle(buildRequest("opportunity-allocations", { method: "POST", cookie, body: { opportunityId: opp, organizationId: org, quantityAllocated: 10 } }));
+    const manual = (org: number, cookie = ad.cookie, confirm = true) => manualAllocateHandle(buildRequest("opportunity-allocations", { method: "POST", cookie, body: { opportunityId: opp, organizationId: org, quantityAllocated: 10, ...(confirm ? { confirmPriorRefusal: true } : {}) } })); // Fase 98: com recusa anterior o servidor exige a confirmação explícita
     expect((await manual(a.org.id, a.owner.cookie)).status).toBe(403); // continua só para admin da plataforma
     expect((await manual(a.org.id)).status).toBe(200);
     const audit = await db.selectFrom("auditLog").select("metadata").where("action", "=", "atribuicao.proposta").where("organizationId", "=", a.org.id).executeTakeFirstOrThrow();

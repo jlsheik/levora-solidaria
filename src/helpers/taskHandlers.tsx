@@ -2,6 +2,7 @@ import { runMatchingSweep } from "./runMatchingSweep.js";
 import { expireReservations } from "./expireReservations.js";
 import { expireOpportunities } from "./expireOpportunities.js";
 import { expireApprovalRequests } from "./expireApprovalRequests.js";
+import { expireAssignmentDeadlines } from "./expireAssignmentDeadlines.js";
 import { verifyAuditChainScheduled } from "./verifyAuditChainTask.js";
 
 /**
@@ -21,5 +22,6 @@ export const TASK_HANDLERS: Record<string, () => Promise<void>> = {
   expireReservations,
   expireOpportunities,
   expireApprovalRequests,
+  expireAssignmentDeadlines,
   verifyAuditChain: verifyAuditChainScheduled,
 };

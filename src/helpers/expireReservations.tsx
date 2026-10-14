@@ -56,7 +56,7 @@ async function expireForOpportunity(opportunityRegistryId: number): Promise<Expi
 
     await trx
       .updateTable("opportunityAllocations")
-      .set({ status: "cancelada", updatedAt: new Date() })
+      .set({ status: "cancelada", closedAt: new Date(), closedReason: "reserva_expirada", updatedAt: new Date() })
       .where("id", "in", expired.map((a) => a.id))
       .where("status", "=", "proposta")
       .execute();

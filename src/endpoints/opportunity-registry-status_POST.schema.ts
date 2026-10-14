@@ -20,6 +20,8 @@ export const schema = z.object({
 
 export type OutputType = {
   opportunity: { id: number; status: string };
+  /** Propostas pendentes encerradas junto com a oferta (cancelar/expirar). */
+  closedProposals?: number;
 };
 
 export const postOpportunityRegistryStatus = async (

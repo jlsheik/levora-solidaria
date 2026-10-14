@@ -91,6 +91,9 @@ export async function handle(request: Request) {
       // Fase 97: a atribuição MANUAL do admin da plataforma é uma exceção explícita (ele escolhe a organização) e continua permitida, com as mesmas permissões e
       // auditoria. Mas não é silenciosa: se a organização já recusou/cancelou ESTA oportunidade, isso fica registrado na auditoria da atribuição.
       const priorRefusals = await getExplicitRefusals(trx, input.opportunityId, input.organizationId);
+      // Fase 98: o aviso da tela é validado também no servidor — sem a confirmação explícita nada é gravado (continua sendo a mesma permissão de admin da plataforma;
+      // não é um desvio de permissão, só uma confirmação auditável).
+      if (priorRefusals.length > 0 && !input.confirmPriorRefusal) return { type: "needs_confirmation" as const };
 
       const [allocation] = await trx
         .insertInto("opportunityAllocations")
@@ -128,7 +131,7 @@ export async function handle(request: Request) {
             organizationName: org.name,
             quantityAllocated: input.quantityAllocated,
             needId: input.needId ?? null,
-            ...(priorRefusals.length > 0 ? { reatribuicaoAposRecusaExplicita: true, atribuicoesRecusadasAnteriores: priorRefusals.map((r) => ({ id: r.allocationId, status: r.status })) } : {}),
+            ...(priorRefusals.length > 0 ? { reatribuicaoAposRecusaExplicita: true, confirmacaoExplicitaDoAdministrador: true, atribuicoesRecusadasAnteriores: priorRefusals.map((r) => ({ id: r.allocationId, status: r.status })) } : {}),
           },
         },
         trx
@@ -148,6 +151,15 @@ export async function handle(request: Request) {
       return { type: "success" as const, allocation, opportunityStatus: newOpportunityStatus };
     });
 
+    if (result.type === "needs_confirmation") {
+      return new Response(
+        superjson.stringify({
+          message: "Esta organização já recusou ou cancelou esta oportunidade. Confirme explicitamente para atribuí-la mesmo assim.",
+          code: "recusa_anterior_requer_confirmacao",
+        }),
+        { status: 409, headers: { "Content-Type": "application/json" } }
+      );
+    }
     if (result.type === "not_found") {
       return new Response(superjson.stringify({ message: "Descoberta não encontrada" }), {
         status: 404,

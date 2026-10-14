@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getOrganizations } from "../endpoints/organizations_GET.schema";
+import { getOrganizationAllocations } from "../endpoints/organization-allocations_GET.schema";
 import { getOrganizationMembers } from "../endpoints/organization-members_GET.schema";
 import { getOrganizationInvites } from "../endpoints/organization-invites_GET.schema";
 import { postOrganizationInvites } from "../endpoints/organization-invites_POST.schema";
@@ -106,6 +107,15 @@ export default function OrganizationDetailPage() {
     queryFn: () => getOrganizations(),
   });
   const org = orgsQuery.data?.organizations.find((o) => o.id === organizationId);
+
+  // Pendências das atribuições automáticas (Fase 98): MESMA consulta e mesma chave da página "Rede Levora" — uma fonte única, sem contagem paralela.
+  const allocationsQuery = useQuery({
+    queryKey: ["organization-allocations", organizationId],
+    queryFn: () => getOrganizationAllocations({ organizationId }),
+    enabled: Number.isFinite(organizationId),
+    refetchInterval: 60_000,
+  });
+  const pendingCount = allocationsQuery.data?.pendingCount ?? 0;
 
   const membersQuery = useQuery({
     queryKey: ["organization-members", organizationId],
@@ -299,8 +309,9 @@ export default function OrganizationDetailPage() {
         <Link to={`/organizacoes/${organizationId}/oportunidades`} className={styles.tabNavItem}>
           Oportunidades
         </Link>
-        <Link to={`/organizacoes/${organizationId}/atribuicoes`} className={styles.tabNavItem}>
+        <Link to={`/organizacoes/${organizationId}/atribuicoes`} className={styles.tabNavItem} aria-label={pendingCount > 0 ? `Rede Levora, ${pendingCount} ${pendingCount === 1 ? "pendência com prazo" : "pendências com prazo"}` : undefined}>
           Rede Levora
+          {pendingCount > 0 && <span className={styles.navBadge} aria-hidden="true">{pendingCount}</span>}
         </Link>
         <Link to={`/organizacoes/${organizationId}/prestacao-contas`} className={styles.tabNavItem}>
           Prestação de contas

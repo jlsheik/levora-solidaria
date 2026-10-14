@@ -9,6 +9,9 @@ import { schema } from "./allocations-decide_POST.schema.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
 
+// Estados em que a oferta (oportunidade) já foi encerrada: nenhuma proposta dela pode ser aceita.
+const CLOSED_OFFER_STATUSES: string[] = ["expirada", "cancelada", "recusada", "bloqueada", "duplicada", "concluida"];
+
 export async function handle(request: Request) {
   try {
     const { user } = await getServerUserSession(request);
@@ -29,6 +32,14 @@ export async function handle(request: Request) {
       if (!allocation) return { type: "not_found" as const };
       if (allocation.status !== "proposta") {
         return { type: "invalid_status" as const, status: allocation.status };
+      }
+
+      // Fase 98: aceitar exige que a OFERTA ainda exista como oferta. Lido sob a trava da linha da oportunidade (ordem: atribuição → oportunidade, a mesma dos outros
+      // caminhos). Se o cancelamento/expiração da oferta venceu a disputa, a proposta já foi encerrada junto com ela (ou é um resíduo antigo): não pode mais ser aceita.
+      // Recusar continua permitido.
+      if (input.decision === "aceita") {
+        const offer = await trx.selectFrom("opportunityRegistry").select("status").where("id", "=", allocation.opportunityRegistryId).forUpdate().executeTakeFirst();
+        if (!offer || CLOSED_OFFER_STATUSES.includes(offer.status)) return { type: "offer_closed" as const };
       }
 
       const [updated] = await trx
@@ -100,6 +111,12 @@ export async function handle(request: Request) {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
+    }
+    if (result.type === "offer_closed") {
+      return new Response(
+        superjson.stringify({ message: "A oferta desta atribuição foi encerrada e a proposta não pode mais ser aceita" }),
+        { status: 409, headers: { "Content-Type": "application/json" } }
+      );
     }
     if (result.type === "invalid_status") {
       return new Response(

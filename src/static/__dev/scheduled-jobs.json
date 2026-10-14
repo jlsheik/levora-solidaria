@@ -19,6 +19,11 @@
     "schedule": "0 * * * *",
     "timezone": "UTC"
   },
+  "expireAssignmentDeadlines": {
+    "enabled": true,
+    "schedule": "*/10 * * * *",
+    "timezone": "UTC"
+  },
   "verifyAuditChain": {
     "enabled": true,
     "schedule": "0 */6 * * *",

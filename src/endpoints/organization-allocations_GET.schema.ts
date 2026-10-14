@@ -13,6 +13,13 @@ export type OutputType = {
     quantityAllocated: number;
     notes: string | null;
     createdAt: string;
+    /** Fase 98: vencimento do prazo de resposta (só atribuições automáticas criadas após a Fase 98; senão null). */
+    responseDueAt: string | null;
+    closedAt: string | null;
+    /** Motivo do encerramento pelo sistema (prazo_expirado, reserva_expirada, oferta_*), ou null. */
+    closedReason: string | null;
+    /** Atribuição automática aguardando a primeira movimentação da organização, dentro do prazo ou vencida e ainda não processada. */
+    pendingAction: boolean;
     opportunityId: number;
     opportunityTitle: string;
     opportunityDescription: string | null;
@@ -23,6 +30,9 @@ export type OutputType = {
     opportunityLocationState: string | null;
     sourceName: string;
   }>;
+  pendingCount: number;
+  /** Relógio do servidor (banco) no momento da consulta. */
+  serverNow: string;
 };
 
 export const getOrganizationAllocations = async (

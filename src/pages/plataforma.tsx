@@ -6,6 +6,10 @@ import { getOpportunityRegistry } from "../endpoints/opportunity-registry_GET.sc
 import { postOpportunityRegistry } from "../endpoints/opportunity-registry_POST.schema";
 import { postOpportunityRegistryStatus } from "../endpoints/opportunity-registry-status_POST.schema";
 import { postOpportunityAllocations } from "../endpoints/opportunity-allocations_POST.schema";
+import { getAssignmentSettings } from "../endpoints/assignment-settings_GET.schema";
+import { postAssignmentSettings } from "../endpoints/assignment-settings_POST.schema";
+import { getOpportunityAllocationRefusals } from "../endpoints/opportunity-allocation-refusals_GET.schema";
+import { Checkbox } from "../components/Checkbox";
 import { getNeeds } from "../endpoints/needs_GET.schema";
 import { postOpportunityRegistryMatch } from "../endpoints/opportunity-registry-match_POST.schema";
 import { getMatchEvaluations } from "../endpoints/match-evaluations_GET.schema";
@@ -25,7 +29,7 @@ import { Badge } from "../components/Badge";
 import { Skeleton } from "../components/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/Select";
 import { z } from "zod";
-import { HeartHandshake, Radio, Search, Send, AlertTriangle, Sparkles, ListChecks, RefreshCw, Pencil } from "lucide-react";
+import { HeartHandshake, Radio, Search, Send, AlertTriangle, Sparkles, ListChecks, RefreshCw, Pencil, Clock } from "lucide-react";
 import { RenameSourceDialog } from "../components/RenameSourceDialog";
 import { toast } from "sonner";
 import styles from "./plataforma.module.css";
@@ -145,15 +149,42 @@ export default function PlatformPage() {
   const statusMutation = useMutation({
     mutationFn: (vars: { opportunityId: number; status: (typeof curatableStatuses)[number] }) =>
       postOpportunityRegistryStatus(vars),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["opportunity-registry"] });
-      toast.success("Status atualizado");
+      const closed = data.closedProposals ?? 0;
+      toast.success(closed > 0 ? `Status atualizado. ${closed} proposta(s) pendente(s) encerrada(s) junto com a oferta.` : "Status atualizado");
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Falha ao atualizar status"),
   });
 
   const allocationForm = useForm({ schema: allocationSchema, defaultValues: { quantityAllocated: 0, notes: "" } });
   const allocationOrgId = allocationForm.values.organizationId ? Number(allocationForm.values.organizationId) : undefined;
+
+  // Fase 98 — aviso de recusa anterior: consulta SEMPRE ao servidor (sem cache) quando uma organização é escolhida; o servidor também exige a confirmação.
+  const [confirmPriorRefusal, setConfirmPriorRefusal] = useState(false);
+  const refusalsQuery = useQuery({
+    queryKey: ["allocation-refusals", allocateTarget?.id, allocationOrgId],
+    queryFn: () => getOpportunityAllocationRefusals({ opportunityId: allocateTarget!.id, organizationId: allocationOrgId! }),
+    enabled: !!allocateTarget && !!allocationOrgId,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const priorRefusals = refusalsQuery.data?.refusals ?? [];
+  const refusalCheckPending = !!allocationOrgId && (refusalsQuery.isFetching || refusalsQuery.isError);
+  const needsConfirmation = priorRefusals.length > 0;
+
+  // Fase 98 — prazo global das atribuições automáticas (72 h por padrão).
+  const settingsQuery = useQuery({ queryKey: ["assignment-settings"], queryFn: () => getAssignmentSettings() });
+  const [hoursInput, setHoursInput] = useState<string>("");
+  const settingsMutation = useMutation({
+    mutationFn: (hours: number) => postAssignmentSettings({ responseDeadlineHours: hours }),
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ["assignment-settings"] });
+      setHoursInput("");
+      toast.success(r.changed ? `Prazo atualizado para ${r.responseDeadlineHours} h (vale para as novas atribuições automáticas).` : "O prazo já estava com este valor.");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Não foi possível salvar o prazo"),
+  });
 
   // Needs elegíveis para vínculo (Fase 45): reaproveita o mesmo endpoint e
   // os mesmos campos derivados (fulfilled/requiredRemaining/surplus) já
@@ -171,10 +202,11 @@ export default function PlatformPage() {
 
   const allocateMutation = useMutation({
     mutationFn: (data: z.infer<typeof allocationSchema>) =>
-      postOpportunityAllocations({ opportunityId: allocateTarget!.id, ...data }),
+      postOpportunityAllocations({ opportunityId: allocateTarget!.id, ...data, ...(confirmPriorRefusal ? { confirmPriorRefusal: true } : {}) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["opportunity-registry"] });
       toast.success("Atribuição proposta à organização");
+      setConfirmPriorRefusal(false);
       setAllocateTarget(null);
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Falha ao atribuir"),
@@ -452,6 +484,36 @@ export default function PlatformPage() {
           )}
         </section>
 
+        <section className={styles.section} aria-labelledby="prazo-titulo">
+          <h2 id="prazo-titulo" className={styles.sectionTitle}><Clock size={18} /> Prazo das atribuições automáticas</h2>
+          {settingsQuery.isFetching && !settingsQuery.data ? <Skeleton className={styles.listSkeleton} style={{ height: "4rem" }} /> : settingsQuery.isError ? (
+            <p className={styles.emptyText} role="alert">Não foi possível carregar o prazo. {settingsQuery.error instanceof Error ? settingsQuery.error.message : ""}</p>
+          ) : (
+            <>
+              <p className={styles.emptyText} style={{ marginBottom: "0.75rem" }}>
+                Prazo atual: <strong>{settingsQuery.data?.responseDeadlineHours} horas</strong>{settingsQuery.data?.isDefault ? " (padrão)" : ""}. É o mesmo para todas as
+                organizações. Vale para as <strong>novas</strong> atribuições automáticas de alta compatibilidade: as já criadas mantêm o vencimento que receberam.
+                Sem movimentação (coleta, transporte ou recebimento) até o vencimento, a atribuição é encerrada, a oportunidade volta para outras organizações e a mesma
+                organização fica {settingsQuery.data?.reassignmentPauseDays} dias sem ser escolhida automaticamente para aquela oportunidade. Expirar não é recusar.
+              </p>
+              <form
+                className={styles.formGrid}
+                style={{ maxWidth: "20rem" }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const n = Number(hoursInput);
+                  if (!Number.isInteger(n)) { toast.error("Informe um número inteiro de horas"); return; }
+                  settingsMutation.mutate(n);
+                }}
+              >
+                <label htmlFor="prazo-horas" style={{ fontSize: "0.875rem", fontWeight: 500 }}>Novo prazo, em horas ({settingsQuery.data?.minHours}–{settingsQuery.data?.maxHours})</label>
+                <Input id="prazo-horas" type="number" inputMode="numeric" min={settingsQuery.data?.minHours} max={settingsQuery.data?.maxHours} step={1} value={hoursInput} onChange={(e) => setHoursInput(e.target.value)} placeholder={String(settingsQuery.data?.responseDeadlineHours ?? 72)} />
+                <Button type="submit" size="sm" disabled={settingsMutation.isPending || hoursInput === ""}>{settingsMutation.isPending ? "Salvando..." : "Salvar prazo"}</Button>
+              </form>
+            </>
+          )}
+        </section>
+
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}><RefreshCw size={18} /> Tarefas de fundo</h2>
           <p className={styles.emptyText} style={{ marginBottom: "0.75rem" }}>
@@ -490,7 +552,7 @@ export default function PlatformPage() {
         </section>
       </main>
 
-      <Dialog open={!!allocateTarget} onOpenChange={(open) => !open && setAllocateTarget(null)}>
+      <Dialog open={!!allocateTarget} onOpenChange={(open) => { if (!open) { setAllocateTarget(null); setConfirmPriorRefusal(false); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Atribuir: {allocateTarget?.title}</DialogTitle>
@@ -503,7 +565,7 @@ export default function PlatformPage() {
                 <FormControl>
                   <Select
                     value={allocationForm.values.organizationId ? String(allocationForm.values.organizationId) : undefined}
-                    onValueChange={(v) => allocationForm.setValues((p: any) => ({ ...p, organizationId: v, needId: undefined }))}
+                    onValueChange={(v) => { setConfirmPriorRefusal(false); allocationForm.setValues((p: any) => ({ ...p, organizationId: v, needId: undefined })); }}
                   >
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
@@ -513,6 +575,25 @@ export default function PlatformPage() {
                 </FormControl>
                 <FormMessage />
               </FormItem>
+              {allocationOrgId && refusalsQuery.isError && (
+                <p className={styles.emptyText} role="alert">
+                  Não foi possível verificar o histórico de recusas desta organização. Tente novamente antes de atribuir.{" "}
+                  <Button type="button" size="sm" variant="outline" onClick={() => refusalsQuery.refetch()}>Verificar de novo</Button>
+                </p>
+              )}
+              {allocationOrgId && needsConfirmation && (
+                <div role="alert" style={{ border: "1px solid var(--warning)", borderRadius: "var(--radius-md)", padding: "0.75rem", background: "var(--surface)", fontSize: "0.875rem", lineHeight: 1.5 }}>
+                  <p style={{ margin: 0, fontWeight: 600 }}><AlertTriangle size={14} aria-hidden="true" style={{ verticalAlign: "-2px" }} /> Esta organização já recusou ou cancelou esta oportunidade</p>
+                  <p style={{ margin: "0.25rem 0" }}>
+                    Oportunidade: <strong>{allocateTarget?.title}</strong>. {priorRefusals.map((r) => `${r.kind === "recusada" ? "Recusou" : "Cancelou"} em ${new Date(r.occurredAt).toLocaleString("pt-BR")}`).join("; ")}.
+                    O matching automático não a escolhe de novo; atribuir manualmente é uma <strong>exceção administrativa</strong>, que fica registrada na auditoria.
+                  </p>
+                  <label style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", cursor: "pointer" }}>
+                    <Checkbox checked={confirmPriorRefusal} onChange={(e) => setConfirmPriorRefusal(e.target.checked)} aria-describedby="confirmar-recusa-ajuda" />
+                    <span id="confirmar-recusa-ajuda">Entendo e quero atribuir mesmo assim.</span>
+                  </label>
+                </div>
+              )}
               {allocationOrgId && (
                 <FormItem name="needId">
                   <FormLabel>Necessidade (opcional)</FormLabel>
@@ -551,7 +632,7 @@ export default function PlatformPage() {
                 <FormControl><Textarea value={allocationForm.values.notes || ""} onChange={(e) => allocationForm.setValues((p: any) => ({ ...p, notes: e.target.value }))} /></FormControl>
               </FormItem>
               <DialogFooter>
-                <Button type="submit" disabled={allocateMutation.isPending}>{allocateMutation.isPending ? "Enviando..." : "Propor atribuição"}</Button>
+                <Button type="submit" disabled={allocateMutation.isPending || refusalCheckPending || (needsConfirmation && !confirmPriorRefusal)}>{allocateMutation.isPending ? "Enviando..." : refusalCheckPending && refusalsQuery.isFetching ? "Verificando histórico..." : "Propor atribuição"}</Button>
               </DialogFooter>
             </form>
           </Form>

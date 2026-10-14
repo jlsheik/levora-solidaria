@@ -1,6 +1,7 @@
 import { sql } from "kysely";
 import type { Kysely, Transaction } from "kysely";
 import type { DB } from "./schema.js";
+import { REASSIGNMENT_PAUSE_DAYS } from "./assignmentSettings.js";
 
 /**
  * Recusa/cancelamento EXPLÍCITO de uma organização sobre uma oportunidade (Fase 97).
@@ -52,4 +53,20 @@ export async function getExplicitRefusals(trx: Db, opportunityRegistryId: number
 
 export async function getRefusingOrganizationIds(trx: Db, opportunityRegistryId: number): Promise<Set<number>> {
   return new Set((await getExplicitRefusals(trx, opportunityRegistryId)).map((r) => r.organizationId));
+}
+
+/**
+ * Pausa temporária de reatribuição (Fase 98): organizações cuja atribuição AUTOMÁTICA desta oportunidade foi encerrada por EXPIRAÇÃO DO PRAZO nos últimos
+ * REASSIGNMENT_PAUSE_DAYS dias (relógio do banco). Diferente da recusa explícita: expira sozinha, não é permanente e nunca é confundida com ela (o motivo vem de
+ * `closed_reason = 'prazo_expirado'`, gravado só pela tarefa de expiração do prazo).
+ */
+export async function getReassignmentPausedOrganizationIds(trx: Db, opportunityRegistryId: number): Promise<Set<number>> {
+  const rows = await trx
+    .selectFrom("opportunityAllocations")
+    .select("organizationId")
+    .where("opportunityRegistryId", "=", opportunityRegistryId)
+    .where("closedReason", "=", "prazo_expirado")
+    .where(sql<boolean>`closed_at > now() - make_interval(days => ${REASSIGNMENT_PAUSE_DAYS})`)
+    .execute();
+  return new Set(rows.map((r) => r.organizationId));
 }

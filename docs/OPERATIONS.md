@@ -12,6 +12,7 @@ recuperação de desastre, filas/tarefas assíncronas).
 |---|---|---|
 | `runMatchingSweep` | a cada 15 min | reavalia matching para oportunidades aguardando destinação: lote de 20, com até 10 vagas para as nunca avaliadas e as demais em rodízio por id (cursor persistido em `background_task_runs`); também recupera oportunidades presas em `reservada`/`atribuida` sem atribuição em andamento |
 | `expireReservations` | a cada 10 min | libera atribuições propostas cuja reserva de 30 min venceu; uma transação por oportunidade (cancelar + concluir/reabrir + auditar juntos ou nada) |
+| `expireAssignmentDeadlines` | a cada 10 min | expira atribuições AUTOMÁTICAS de nota alta (`aceita`, `auto_matched`, ninguém decidiu, `response_due_at` vencido pelo relógio do banco) que não tiveram movimentação; cancela com `closed_reason = 'prazo_expirado'`, reabre a oportunidade e roda o matching (a organização fica 7 dias em pausa para aquela oportunidade); uma transação por atribuição |
 | `expireOpportunities` | a cada hora | expira oportunidades vencidas |
 | `expireApprovalRequests` | a cada hora | expira pedidos de dupla autorização parados há mais de `APPROVAL_REQUEST_EXPIRATION_DAYS` dias |
 | `verifyAuditChain` | a cada 6 horas | verifica a integridade da hash-chain de `audit_log` (Fase 53, SEC-06) — reusa `verifyAuditLogChain`, o mesmo verificador do endpoint sob demanda. Ver `docs/AUDIT.md`. |

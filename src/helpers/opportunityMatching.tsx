@@ -7,7 +7,8 @@ import type { Transaction } from "kysely";
 import type { DB, Json, NeedPriority } from "./schema.js";
 import { roundQuantity } from "./quantityRules.js";
 import { createHash } from "node:crypto";
-import { getRefusingOrganizationIds } from "./allocationRefusals.js";
+import { getRefusingOrganizationIds, getReassignmentPausedOrganizationIds } from "./allocationRefusals.js";
+import { getResponseDeadlineHours } from "./assignmentSettings.js";
 
 /**
  * Motor de correspondência — determinístico + IA como apoio, nunca como
@@ -193,6 +194,10 @@ export async function runMatchingForOpportunity(
     // função (sweep, mudança de status, matching manual do admin, reabertura após decisão/logística/expiração, recuperação). Expiração automática NÃO entra aqui.
     const refusingOrgIds = await getRefusingOrganizationIds(trx, opportunityRegistryId);
     for (const orgId of refusingOrgIds) existingOrgIds.add(orgId);
+    // Fase 98 — pausa temporária (7 dias) depois de uma EXPIRAÇÃO POR PRAZO: não é recusa, não é permanente e não vale para outras oportunidades. Lida do registro
+    // persistente do encerramento (`closed_reason = 'prazo_expirado'` + `closed_at`), com o relógio do banco.
+    const pausedOrgIds = await getReassignmentPausedOrganizationIds(trx, opportunityRegistryId);
+    for (const orgId of pausedOrgIds) existingOrgIds.add(orgId);
 
     const candidates = await trx
       .selectFrom("needs")
@@ -542,6 +547,7 @@ export async function runMatchingForOpportunity(
     const allocationsCreated: MatchRunResult["allocationsCreated"] = [];
     const discarded: MatchRunResult["discarded"] = [];
     let unboundedProcessed = 0;
+    const responseDeadlineHours = await getResponseDeadlineHours(trx);
     let opportunityBecameReserved = false;
     let opportunityBecameAssigned = false;
 
@@ -605,6 +611,9 @@ export async function runMatchingForOpportunity(
           status: allocationStatus,
           autoMatched: true,
           reservedUntil: isHighConfidence ? null : new Date(Date.now() + RESERVATION_MINUTES * 60 * 1000),
+          // Fase 98: a atribuição automática de nota alta nasce 'aceita' sem ação humana; o prazo de resposta (global, 72 h por padrão) é gravado AGORA, com o relógio do
+          // banco, e não muda se o valor global for alterado depois. Propostas (nota média) têm a reserva de 30 min e não recebem este prazo.
+          responseDueAt: isHighConfidence ? sql<Date>`now() + make_interval(hours => ${responseDeadlineHours})` : null,
           notes: `Match automático (algoritmo ${ALGORITHM_VERSION}): ${cand.finalScore}%`,
           createdByUserId: triggeredByUserId,
         })
@@ -658,7 +667,7 @@ export async function runMatchingForOpportunity(
         action: "matching.executado",
         entityType: "opportunity_registry",
         entityId: String(opportunityRegistryId),
-        metadata: { candidatosAvaliados: evaluated.length, atribuicoesCriadas: allocationsCreated.length, descartados: discarded.length, algoritmo: ALGORITHM_VERSION, assinatura: signature, ...(refusingOrgIds.size > 0 ? { organizacoesExcluidasPorRecusa: [...refusingOrgIds].sort((a, b) => a - b) } : {}) },
+        metadata: { candidatosAvaliados: evaluated.length, atribuicoesCriadas: allocationsCreated.length, descartados: discarded.length, algoritmo: ALGORITHM_VERSION, assinatura: signature, ...(refusingOrgIds.size > 0 ? { organizacoesExcluidasPorRecusa: [...refusingOrgIds].sort((a, b) => a - b) } : {}), ...(pausedOrgIds.size > 0 ? { organizacoesEmPausaPorExpiracao: [...pausedOrgIds].sort((a, b) => a - b) } : {}) },
       },
       trx
     );

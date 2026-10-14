@@ -424,10 +424,17 @@ CREATE TABLE opportunity_allocations (
   -- automáticas continuam usando match_evaluations; as duas fontes nunca
   -- coexistem para a mesma allocation). FK adicionada abaixo, depois de
   -- needs já existir.
-  need_id INTEGER
+  need_id INTEGER,
+  -- Fase 98 (0014): prazo de resposta da atribuição AUTOMÁTICA (gravado na criação; NULL = sem prazo) e motivo/instante do encerramento pelo sistema.
+  response_due_at TIMESTAMPTZ,
+  closed_at TIMESTAMPTZ,
+  closed_reason TEXT CONSTRAINT opportunity_allocations_closed_reason_chk CHECK (closed_reason IS NULL OR closed_reason IN (
+    'prazo_expirado', 'reserva_expirada', 'oferta_cancelada_admin', 'oferta_expirada_admin', 'oferta_expirada_automatica', 'oferta_encerrada'
+  ))
 );
 CREATE TRIGGER opportunity_allocations_set_updated_at BEFORE UPDATE ON opportunity_allocations FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE INDEX idx_opportunity_allocations_registry ON opportunity_allocations(opportunity_registry_id);
+CREATE INDEX idx_opportunity_allocations_response_due ON opportunity_allocations(response_due_at) WHERE response_due_at IS NOT NULL AND status = 'aceita';
 CREATE INDEX idx_opportunity_allocations_org ON opportunity_allocations(organization_id, status);
 CREATE INDEX idx_opportunity_allocations_need ON opportunity_allocations(need_id) WHERE need_id IS NOT NULL;
 -- FK composta (Fase 45): garante estruturalmente que uma allocation nunca
@@ -768,3 +775,13 @@ CREATE TABLE files (
 CREATE INDEX idx_files_org ON files(organization_id);
 
 COMMIT;
+
+-- ============================================================
+-- Fase 98 (0015) — configuração GLOBAL do prazo das atribuições automáticas (linha única; sem linha = 72 h)
+-- ============================================================
+CREATE TABLE platform_assignment_settings (
+  id SMALLINT PRIMARY KEY CONSTRAINT platform_assignment_settings_singleton_chk CHECK (id = 1),
+  response_deadline_hours INTEGER NOT NULL DEFAULT 72 CONSTRAINT platform_assignment_settings_hours_chk CHECK (response_deadline_hours BETWEEN 1 AND 720),
+  updated_by_user_id INTEGER REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
