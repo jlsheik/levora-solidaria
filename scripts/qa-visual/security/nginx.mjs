@@ -3,7 +3,7 @@
 // (uma build temporária). Cada troca é conferida: se a configuração mudar de forma que a troca não se aplique, a rotina falha em vez de testar
 // outra coisa. Tudo só em 127.0.0.1; o contêiner é removido ao final (e recuperado se a rotina for morta à força).
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -41,6 +41,17 @@ export function adaptProductionConf(text, { apiPort }) {
   return out;
 }
 
+/** Torna a pasta (e tudo dentro) legível pelo usuário `nginx` do contêiner. `mkdtemp` cria a pasta com modo 0700 e dono = usuário do runner; no Linux o processo
+ * trabalhador do nginx (outro uid) não consegue atravessá-la, e o `try_files` trata o acesso negado como arquivo inexistente: tudo vira 404 (visto na primeira execução
+ * do CI, run 38508085885). No Windows/Docker Desktop o problema não aparece, por isso só o runner Linux revelou. Idempotente. */
+export function makeReadableByContainer(dir) {
+  chmodSync(dir, 0o755);
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) makeReadableByContainer(p); else if (e.isFile()) chmodSync(p, 0o644);
+  }
+}
+
 /** Certificado autoassinado DESCARTÁVEL para localhost (gerado por um contêiner openssl; fica só no diretório temporário). */
 function makeCert(dir) {
   mkdirSync(dir, { recursive: true });
@@ -57,6 +68,7 @@ export async function startNginx({ confPath, distDir, apiPort, onContainer, onWo
   const stop = async () => { docker(["rm", "-f", name]); rmSync(work, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 }); };
   try {
     makeCert(certs);
+    makeReadableByContainer(distDir);
     const conf = adaptProductionConf(readFileSync(confPath, "utf8"), { apiPort });
     writeFileSync(path.join(work, "site.conf"), conf);
     onContainer?.(name);
@@ -65,8 +77,8 @@ export async function startNginx({ confPath, distDir, apiPort, onContainer, onWo
     const portOut = docker(["port", name, "443/tcp"]).stdout.trim().split("\n")[0] ?? "";
     const port = Number(portOut.split(":").pop());
     if (!port) throw new Error(`não descobri a porta do nginx (${portOut})`);
-    for (let i = 0; i < 40; i++) { try { await httpsRequest(port, "/index.html"); return { port, name, workDir: work, stop }; } catch { await new Promise((r) => setTimeout(r, 250)); } }
-    throw new Error(`o nginx não respondeu: ${(docker(["logs", name]).stderr || "").slice(-300)}`);
+    for (let i = 0; i < 40; i++) { let last = "sem resposta"; try { const r = await httpsRequest(port, "/index.html"); if (r.status === 200) return { port, name, workDir: work, stop }; last = `GET /index.html respondeu ${r.status}`; } catch (e) { last = String(e?.message ?? e); } await new Promise((r) => setTimeout(r, 250)); }
+    throw new Error(`o nginx não serviu /index.html com 200 (${last}): ${(docker(["logs", name]).stderr || "").slice(-300)}`);
   } catch (e) { await stop(); throw e; }
 }
 

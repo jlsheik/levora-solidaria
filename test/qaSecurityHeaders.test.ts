@@ -3,13 +3,13 @@
  * da configuração do nginx, casos de upload e recuperação de contêineres órfãos. Não provam o app: provam que a ferramenta classifica certo.
  */
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 // @ts-expect-error módulos .mjs sem tipos
 import { parseCsp, analyzeDocumentCsp, analyzeApiCsp, checkHeaders, headerCount } from "../scripts/qa-visual/security/csp.mjs";
 // @ts-expect-error módulos .mjs sem tipos
-import { adaptProductionConf } from "../scripts/qa-visual/security/nginx.mjs";
+import { adaptProductionConf, makeReadableByContainer } from "../scripts/qa-visual/security/nginx.mjs";
 // @ts-expect-error módulos .mjs sem tipos
 import { uploadCases } from "../scripts/qa-visual/security/uploads.mjs";
 // @ts-expect-error módulos .mjs sem tipos
@@ -80,6 +80,23 @@ describe("checkHeaders", () => {
     const api = { "content-security-policy": "default-src 'none'; frame-ancestors 'none'", "x-content-type-options": "nosniff", "x-frame-options": "DENY", "strict-transport-security": "max-age=15552000" };
     expect(checkHeaders("api", res(api))).toEqual([]);
     expect(() => checkHeaders("xx", res(api))).toThrow();
+  });
+});
+
+describe("makeReadableByContainer (regressão do 404 do nginx no runner Linux do CI)", () => {
+  it("abre a pasta temporária (mkdtemp = 0700) e o conteúdo para outro uid, sem tocar fora dela", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "levora-qa-perm-"));
+    try {
+      const dist = path.join(root, "dist"); mkdirSync(path.join(dist, "assets"), { recursive: true });
+      writeFileSync(path.join(dist, "index.html"), "x"); writeFileSync(path.join(dist, "assets", "a.js"), "y");
+      chmodSync(dist, 0o700); chmodSync(path.join(dist, "assets"), 0o700); chmodSync(path.join(dist, "index.html"), 0o600);
+      makeReadableByContainer(dist);
+      if (process.platform !== "win32") { // o Windows não tem bits de permissão POSIX
+        for (const d of [dist, path.join(dist, "assets")]) expect(statSync(d).mode & 0o555).toBe(0o555);
+        for (const f of ["index.html", "assets/a.js"]) expect(statSync(path.join(dist, f)).mode & 0o444).toBe(0o444);
+      }
+      expect(readFileSync(path.join(dist, "assets", "a.js"), "utf8")).toBe("y");
+    } finally { rmSync(root, { recursive: true, force: true }); }
   });
 });
 
