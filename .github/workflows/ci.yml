@@ -17,6 +17,8 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Observado nos runs remotos: ~7,5 a ~10 min. 30 min dá margem de ~3x sem deixar um job travado ocupar o runner por 6 h (padrão do GitHub).
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -40,10 +42,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        # actions/checkout v4.4.0 (SHA completo; atualizar a SHA e o comentário juntos). Nenhum passo faz operação Git depois do checkout.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        # actions/setup-node v4.4.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22"
           cache: "npm"
@@ -136,10 +142,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        # actions/checkout v4.4.0 (SHA completo; atualizar a SHA e o comentário juntos). Nenhum passo faz operação Git depois do checkout.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        # actions/setup-node v4.4.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22"
           cache: "npm"
@@ -157,11 +167,11 @@ jobs:
           docker --version
           mkdir -p reports
 
-      # A rotina não baixa imagens por conta própria: o pull é explícito e fixado por tag (nginx real + openssl para o certificado descartável).
+      # A rotina não baixa imagens por conta própria: o pull é explícito e fixado por tag E digest (nginx real + openssl para o certificado descartável); os mesmos valores estão em scripts/qa-visual/security/nginx.mjs (test/qaCi.test.ts exige a igualdade).
       - name: Pull Docker images for the nginx header checks
         run: |
-          docker pull nginx:1.27-alpine
-          docker pull alpine/openssl:3.5.9
+          docker pull nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+          docker pull alpine/openssl:3.5.9@sha256:e8a2319d15637db5296c0ff540bb028cfabc480b22fcdd4a020582393d32673f
 
       - name: qa:visual (reduced profile, Chrome only)
         run: npm run qa:visual -- --browser chrome --profile ci --out reports/qa-visual.json
@@ -195,7 +205,8 @@ jobs:
       # rodou) ainda publica os relatórios, que são o diagnóstico.
       - name: Upload reports
         if: always() && steps.audit.outputs.status != '2' && hashFiles('reports/summary.md') != ''
-        uses: actions/upload-artifact@v4
+        # actions/upload-artifact v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: qa-browser-reports
           path: |

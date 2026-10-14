@@ -16,6 +16,8 @@ import { selectionSummary, Report, EXIT } from "../scripts/qa-visual/lib/report.
 // @ts-expect-error módulos .mjs sem tipos
 import { evaluateReports, findSecrets } from "../scripts/qa-visual/lib/ci-report.mjs";
 // @ts-expect-error módulos .mjs sem tipos
+import { NGINX_IMAGE, OPENSSL_IMAGE } from "../scripts/qa-visual/security/nginx.mjs";
+// @ts-expect-error módulos .mjs sem tipos
 import { assertDisposableDatabase } from "../scripts/qa-visual/lib/guard.mjs";
 
 const wf = yaml.load(readFileSync(".github/workflows/ci.yml", "utf8")) as any;
@@ -183,5 +185,22 @@ describe("workflow .github/workflows/ci.yml", () => {
     expect(get("Cleanup leftovers").run).toContain("--cleanup");
     expect(get("Cleanup leftovers").run).toContain("levora-qa-nginx-");
     expect(get("Cleanup leftovers").run).not.toMatch(/pkill|killall|taskkill/);
+  });
+  it("hardening: ações fixadas em SHA completo, checkout sem credenciais persistidas, limite de tempo em todo job", () => {
+    const steps = Object.values<any>(wf.jobs).flatMap((j) => j.steps);
+    const uses = steps.map((s: any) => s.uses).filter(Boolean) as string[];
+    expect(uses.length).toBeGreaterThan(0);
+    for (const u of uses) expect(u, u).toMatch(/^actions\/[a-z-]+@[0-9a-f]{40}$/); // nada de tag móvel (@v4) nem ação de terceiros
+    for (const s of steps.filter((x: any) => /^actions\/checkout@/.test(x.uses ?? ""))) expect(s.with?.["persist-credentials"]).toBe(false);
+    for (const [name, j] of Object.entries<any>(wf.jobs)) { expect(j["timeout-minutes"], name).toBeGreaterThan(0); expect(j["timeout-minutes"], name).toBeLessThanOrEqual(60); }
+    expect(wf.jobs["qa-browser"]["timeout-minutes"]).toBe(40); // não reduzido
+    const raw = readFileSync(".github/workflows/ci.yml", "utf8");
+    for (const v of ["v4.4.0", "v4.6.2"]) expect(raw).toContain(v); // comentário legível com a versão de cada SHA
+  });
+  it("imagens Docker: tag + digest, e o workflow baixa exatamente as referências que a ferramenta exige", () => {
+    for (const ref of [NGINX_IMAGE, OPENSSL_IMAGE]) expect(ref, ref).toMatch(/^[a-z0-9./-]+:[0-9][0-9a-z.-]*@sha256:[0-9a-f]{64}$/);
+    const pull = job.steps.find((s: any) => s.name === "Pull Docker images for the nginx header checks").run as string;
+    expect(pull).toContain(`docker pull ${NGINX_IMAGE}`);
+    expect(pull).toContain(`docker pull ${OPENSSL_IMAGE}`);
   });
 });

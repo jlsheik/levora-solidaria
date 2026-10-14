@@ -8,8 +8,10 @@ import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-export const NGINX_IMAGE = "nginx:1.27-alpine";
-export const OPENSSL_IMAGE = "alpine/openssl:3.5.9"; // versão fixa (a mesma do primeiro run verde do CI); "latest" mudava sem aviso
+// Tag + digest do índice multi-arquitetura (confirmado: o digest do nginx é o mesmo que o runner do GitHub baixou para a tag; ambos têm linux/amd64).
+// Para atualizar: faça o pull da nova tag, confira o digest e troque aqui e em .github/workflows/ci.yml juntos.
+export const NGINX_IMAGE = "nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10";
+export const OPENSSL_IMAGE = "alpine/openssl:3.5.9@sha256:e8a2319d15637db5296c0ff540bb028cfabc480b22fcdd4a020582393d32673f"; // versão 3.5.9 + digest (o que o CI usou)
 const docker = (args, opt = {}) => spawnSync("docker", args, { encoding: "utf8", windowsHide: true, env: { ...process.env, MSYS_NO_PATHCONV: "1" }, timeout: 120000, ...opt });
 const toDockerPath = (p) => p.replace(/\\/g, "/");
 
