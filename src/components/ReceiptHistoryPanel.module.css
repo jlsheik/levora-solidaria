@@ -1,0 +1,26 @@
+.panel { margin-top: var(--spacing-3); padding: var(--spacing-3); background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius); }
+.title { font-size: 0.875rem; font-weight: 600; margin: 0 0 var(--spacing-2) 0; color: var(--card-foreground); }
+.summary { font-size: 0.8125rem; color: var(--card-foreground); margin: 0 0 var(--spacing-2) 0; line-height: 1.5; overflow-wrap: anywhere; }
+.warning { font-size: 0.8125rem; color: var(--card-foreground); background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--spacing-2) var(--spacing-3); margin: var(--spacing-2) 0; line-height: 1.5; }
+.hint { font-size: 0.75rem; color: var(--muted-foreground); margin: var(--spacing-1) 0 0 0; line-height: 1.5; }
+.rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-2); }
+.row { font-size: 0.8125rem; color: var(--card-foreground); padding-bottom: var(--spacing-2); border-bottom: 1px solid var(--border); }
+.row:last-child { border-bottom: none; padding-bottom: 0; }
+.row[data-state="substituida"], .row[data-state="estornada"] { opacity: 0.75; }
+.rowHead { display: flex; align-items: center; gap: var(--spacing-2); flex-wrap: wrap; }
+.rowMeta { font-size: 0.75rem; color: var(--muted-foreground); margin-top: 2px; overflow-wrap: anywhere; }
+.rowReason { font-size: 0.75rem; color: var(--card-foreground); margin-top: 2px; overflow-wrap: anywhere; }
+.pending { margin-top: var(--spacing-3); padding: var(--spacing-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); font-size: 0.8125rem; }
+.pending p { margin: var(--spacing-2) 0 0 0; overflow-wrap: anywhere; }
+.actions { display: flex; gap: var(--spacing-2); margin-top: var(--spacing-3); flex-wrap: wrap; }
+.form { display: flex; flex-direction: column; gap: var(--spacing-3); margin-top: var(--spacing-3); min-width: 0; }
+.form > * { max-width: 100%; box-sizing: border-box; min-width: 0; }
+.form input[type="number"], .form input:not([type]), .form textarea { width: 100%; box-sizing: border-box; }
+.choice { display: flex; flex-direction: column; gap: var(--spacing-2); font-size: 0.875rem; }
+.skeleton { height: 6rem; border-radius: var(--radius); margin-top: var(--spacing-3); }
+
+/* Fase 78: alvos de toque de ~44px em telas estreitas/tablet. */
+@media (max-width: 768px) {
+  .actions button, .choice label { min-height: 2.75rem; display: inline-flex; align-items: center; }
+  .actions { width: 100%; }
+}

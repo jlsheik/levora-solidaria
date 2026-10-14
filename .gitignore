@@ -4,8 +4,11 @@ dist-server/
 .env
 .env.test
 storage/
+backups/
+.staging-runtime/
 .claude/
 .claude-flow/
+graphify-out/
 *.log
 npm-debug.log*
 .DS_Store

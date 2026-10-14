@@ -1,9 +1,10 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requireOrganizationMembership } from "../helpers/organizationAccess";
-import { schema } from "./organization-members_GET.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requireOrganizationMembership } from "../helpers/organizationAccess.js";
+import { roleHasPermission } from "../helpers/permissions.js";
+import { schema } from "./organization-members_GET.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
   try {
@@ -14,9 +15,12 @@ export async function handle(request: Request) {
     });
 
     // Só membros ativos da organização podem ver a lista de membros.
-    await requireOrganizationMembership(user.id, input.organizationId);
+    const membership = await requireOrganizationMembership(user.id, input.organizationId);
 
-    const rows = await db
+    // Ex-membros (inativos) só aparecem para quem gerencia membros.
+    const canSeeFormerMembers = roleHasPermission(membership.role, "membros.gerencie");
+
+    let query = db
       .selectFrom("memberships")
       .innerJoin("users", "users.id", "memberships.userId")
       .select([
@@ -29,9 +33,13 @@ export async function handle(request: Request) {
         "memberships.status",
         "memberships.createdAt",
       ])
-      .where("memberships.organizationId", "=", input.organizationId)
-      .orderBy("memberships.createdAt", "asc")
-      .execute();
+      .where("memberships.organizationId", "=", input.organizationId);
+
+    if (!canSeeFormerMembers) {
+      query = query.where("memberships.status", "=", "ativo");
+    }
+
+    const rows = await query.orderBy("memberships.createdAt", "asc").execute();
 
     return new Response(
       superjson.stringify({

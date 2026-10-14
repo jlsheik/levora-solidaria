@@ -1,11 +1,11 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requireOrganizationMembership } from "../helpers/organizationAccess";
-import { getNeedFulfillmentBalanceBatch, computeNeedProgress } from "../helpers/needFulfillment";
-import { schema } from "./needs_GET.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requireOrganizationMembership } from "../helpers/organizationAccess.js";
+import { getNeedFulfillmentBalanceBatch, computeNeedProgress } from "../helpers/needFulfillment.js";
+import { schema } from "./needs_GET.schema.js";
 import { sql } from "kysely";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
   try {

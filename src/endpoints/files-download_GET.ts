@@ -1,11 +1,13 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requireOrganizationMembership } from "../helpers/organizationAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { storageAdapter } from "../helpers/storageAdapter";
-import { schema } from "./files-download_GET.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requireOrganizationMembership } from "../helpers/organizationAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { adapterForProvider, keyBelongsToOrganization } from "../helpers/storageAdapter.js";
+import { schema } from "./files-download_GET.schema.js";
+import { ALLOWED_CONTENT_TYPES } from "./files-upload_POST.schema.js";
+import { buildContentDisposition } from "../helpers/contentDisposition.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 // Arquivo privado por padrão (master prompt, seção sobre armazenamento):
 // nunca uma URL pública direta. Este endpoint É o "signed URL" — a
@@ -33,7 +35,13 @@ export async function handle(request: Request) {
 
     await requireOrganizationMembership(user.id, file.organizationId);
 
-    const buffer = await storageAdapter.download(file.storageKey);
+    // Chave adulterada no banco (de outra organização, com `..` ou fora do formato) nunca vai ao armazenamento: o objeto servido tem de ser da organização do registro.
+    if (!keyBelongsToOrganization(file.storageKey, file.organizationId)) {
+      throw new Error(`Chave de armazenamento inconsistente com a organização do arquivo ${file.id}`);
+    }
+
+    // Provedor GRAVADO no registro (não o configurado agora), resolvido só DEPOIS da autorização acima; valor desconhecido/sem configuração = erro controlado.
+    const buffer = await adapterForProvider(file.storageProvider).download(file.storageKey);
 
     await recordAuditLogEntry({
       organizationId: file.organizationId,
@@ -49,12 +57,17 @@ export async function handle(request: Request) {
     // arquivo gravado antes dessa validação existir (ou por qualquer outro
     // caminho futuro que escreva `files.original_filename`) não pode virar
     // injeção de cabeçalho HTTP aqui.
-    const safeFilename = file.originalFilename.replace(/["\r\n]/g, "");
+    // (buildContentDisposition cuida disso: só ASCII, sem aspas/barras/;, nome Unicode em filename*.)
+    //
+    // Só os tipos que o upload aceita (imagens e PDF) são exibidos no navegador ("ver comprovante"). Uma linha ANTIGA com qualquer outro
+    // tipo (text/html, image/svg+xml...) nunca é servida como conteúdo renderizável na origem autenticada: vira download genérico.
+    const renderable = (ALLOWED_CONTENT_TYPES as readonly string[]).includes(file.contentType);
 
     return new Response(new Uint8Array(buffer), {
       headers: {
-        "Content-Type": file.contentType,
-        "Content-Disposition": `inline; filename="${safeFilename}"`,
+        "Content-Type": renderable ? file.contentType : "application/octet-stream",
+        "Content-Disposition": buildContentDisposition(renderable ? "inline" : "attachment", file.originalFilename),
+        "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-store",
       },
     });

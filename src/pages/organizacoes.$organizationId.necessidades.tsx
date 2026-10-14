@@ -37,7 +37,8 @@ import {
   SelectValue,
 } from "../components/Select";
 import { z } from "zod";
-import { ArrowLeft, Plus, ClipboardList } from "lucide-react";
+import { ArrowLeft, Plus, ClipboardList, Pencil } from "lucide-react";
+import { EditNeedDialog, type EditableNeed } from "../components/EditNeedDialog";
 import { toast } from "sonner";
 import styles from "./organizacoes.$organizationId.necessidades.module.css";
 
@@ -74,6 +75,7 @@ export default function NeedsPage() {
   const params = useParams<{ organizationId: string }>();
   const organizationId = Number(params.organizationId);
   const queryClient = useQueryClient();
+  const [editNeed, setEditNeed] = useState<EditableNeed | null>(null);
   const [newNeedOpen, setNewNeedOpen] = useState(false);
 
   const orgsQuery = useQuery({
@@ -336,6 +338,11 @@ export default function NeedsPage() {
                 </div>
               </div>
               <div className={styles.needActions}>
+                {canManage && (
+                  <Button variant="ghost" size="icon-sm" onClick={() => setEditNeed({ id: need.id, title: need.title, description: need.description, priority: need.priority })} aria-label={"Editar a necessidade " + need.title}>
+                    <Pencil size={14} />
+                  </Button>
+                )}
                 {canManage ? (
                   <Select
                     value={need.status}
@@ -368,6 +375,7 @@ export default function NeedsPage() {
           Nenhuma necessidade cadastrada ainda para esta organização.
         </div>
       )}
+      <EditNeedDialog organizationId={organizationId} need={editNeed} onOpenChange={(open) => !open && setEditNeed(null)} />
     </div>
   );
 }

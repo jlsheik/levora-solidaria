@@ -1,9 +1,9 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePermissionToRead } from "../helpers/organizationAccess";
-import { schema } from "./approval-requests_GET.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePermissionToRead } from "../helpers/organizationAccess.js";
+import { schema } from "./approval-requests_GET.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
   try {

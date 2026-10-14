@@ -1,6 +1,6 @@
-import { db } from "./db";
-import { computeAuditEventHash } from "./auditLog";
-import type { Json } from "./schema";
+import { db } from "./db.js";
+import { computeAuditEventHash } from "./auditLog.js";
+import type { Json } from "./schema.js";
 
 /**
  * Percorre audit_log inteira (ordem de id) e recalcula cada event_hash a

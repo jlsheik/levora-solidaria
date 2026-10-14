@@ -10,8 +10,13 @@ describe("catálogo de permissões (RBAC granular)", () => {
     }
   });
 
-  it("proprietario e administrador têm exatamente as mesmas permissões hoje", () => {
-    expect([...ROLE_PERMISSIONS.proprietario].sort()).toEqual([...ROLE_PERMISSIONS.administrador].sort());
+  it("administrador tem as mesmas permissões do proprietário, exceto propriedade.gerencie (exclusiva de proprietário)", () => {
+    const withoutOwnership = [...ROLE_PERMISSIONS.proprietario].filter((p) => p !== "propriedade.gerencie").sort();
+    expect([...ROLE_PERMISSIONS.administrador].sort()).toEqual(withoutOwnership);
+    expect(roleHasPermission("proprietario", "propriedade.gerencie")).toBe(true);
+    expect(roleHasPermission("administrador", "propriedade.gerencie")).toBe(false);
+    expect(roleHasPermission("operador", "propriedade.gerencie")).toBe(false);
+    expect(roleHasPermission("voluntario", "propriedade.gerencie")).toBe(false);
   });
 
   it("proprietario tem todas as permissões do catálogo", () => {

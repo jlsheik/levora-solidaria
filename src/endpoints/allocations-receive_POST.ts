@@ -1,13 +1,14 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePermission } from "../helpers/organizationAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { getItemStockBalance } from "../helpers/stockBalance";
-import { concludeOpportunityIfAllTerminalAndReceived } from "../helpers/concludeOpportunity";
-import { createNeedFulfillment } from "../helpers/needFulfillment";
-import { schema } from "./allocations-receive_POST.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePermission } from "../helpers/organizationAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { getItemStockBalance } from "../helpers/stockBalance.js";
+import { concludeOpportunityIfAllTerminalAndReceived } from "../helpers/concludeOpportunity.js";
+import { computeNeedProgress, createNeedFulfillment, getNeedFulfillmentBalance } from "../helpers/needFulfillment.js";
+import { schema } from "./allocations-receive_POST.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { roundQuantity } from "../helpers/quantityRules.js";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
   try {
@@ -20,7 +21,7 @@ export async function handle(request: Request) {
     const result = await db.transaction().execute(async (trx) => {
       const allocation = await trx
         .selectFrom("opportunityAllocations")
-        .select(["id", "status", "opportunityRegistryId"])
+        .select(["id", "status", "opportunityRegistryId", "quantityAllocated"])
         .where("id", "=", input.allocationId)
         .where("organizationId", "=", input.organizationId)
         .forUpdate()
@@ -115,6 +116,28 @@ export async function handle(request: Request) {
       // essa ordem ficou invertida em algum caminho.
       const concluded = await concludeOpportunityIfAllTerminalAndReceived(trx, allocation.opportunityRegistryId);
 
+      // Política de excedentes (decisão do dono): receber MAIS que o alocado/necessário é PERMITIDO (a realidade física manda; o ledger
+      // guarda o valor realmente recebido, sem corte). O excedente fica IDENTIFICÁVEL na auditoria, só com ids e números.
+      const allocated = Number(allocation.quantityAllocated);
+      const overAllocation = Math.max(0, roundQuantity(input.quantityReceived - allocated));
+      const ledgerRow = await trx
+        .selectFrom("needFulfillments as nf")
+        .leftJoin("needs as n", "n.id", "nf.needId")
+        .select(["nf.needId", "nf.isCountable", "n.quantityNeeded"])
+        .where("nf.allocationId", "=", input.allocationId)
+        .where("nf.entryType", "=", "original")
+        .executeTakeFirst();
+      let needProgress: { fulfilled: number; requiredRemaining: number; surplus: number } | null = null;
+      let overNeed = 0;
+      if (ledgerRow?.needId != null && ledgerRow.quantityNeeded != null) {
+        const needed = Number(ledgerRow.quantityNeeded);
+        const fulfilledAfter = await getNeedFulfillmentBalance(trx, ledgerRow.needId);
+        needProgress = computeNeedProgress(needed, fulfilledAfter);
+        // quanto do excedente da necessidade ESTE recebimento causou (0 se a unidade divergiu e a linha não conta)
+        const fulfilledBefore = ledgerRow.isCountable ? roundQuantity(fulfilledAfter - input.quantityReceived) : fulfilledAfter;
+        overNeed = roundQuantity(needProgress.surplus - computeNeedProgress(needed, fulfilledBefore).surplus);
+      }
+
       await recordAuditLogEntry(
         {
           organizationId: input.organizationId,
@@ -122,7 +145,18 @@ export async function handle(request: Request) {
           action: "atribuicao.recebida",
           entityType: "opportunity_allocation",
           entityId: String(input.allocationId),
-          metadata: { itemId: input.itemId, itemName: item.name, quantityReceived: input.quantityReceived, stockTransactionId: String(tx.id) },
+          metadata: {
+            itemId: input.itemId,
+            itemName: item.name,
+            quantityReceived: input.quantityReceived,
+            stockTransactionId: String(tx.id),
+            needId: ledgerRow?.needId ?? null,
+            quantidadeAlocada: allocated,
+            acimaDaAlocacao: overAllocation > 0,
+            excedenteAlocacao: overAllocation,
+            excedenteNecessidade: overNeed,
+            progressoNecessidade: needProgress,
+          },
         },
         trx
       );

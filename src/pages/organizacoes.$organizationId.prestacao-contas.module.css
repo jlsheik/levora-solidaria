@@ -9,7 +9,8 @@
 .title { display: flex; align-items: center; gap: var(--spacing-2); font-family: var(--font-family-display); font-size: 1.5rem; font-weight: 600; margin: 0 0 var(--spacing-1) 0; }
 .subtitle { color: var(--muted-foreground); font-size: 0.875rem; margin: 0; max-width: 36rem; line-height: 1.5; }
 .notAllowed { display: flex; flex-direction: column; align-items: center; gap: var(--spacing-3); padding: var(--spacing-12); text-align: center; color: var(--muted-foreground); }
-.filters { display: flex; gap: var(--spacing-4); margin-bottom: var(--spacing-6); }
+.filters { display: flex; gap: var(--spacing-4); margin-bottom: var(--spacing-3); flex-wrap: wrap; }
+.filterField { flex: 1 1 10rem; max-width: 18rem; }
 .filterLabel { display: block; font-size: 0.75rem; color: var(--muted-foreground); margin-bottom: var(--spacing-1); }
 .reportSkeleton { height: 24rem; border-radius: var(--radius-lg); }
 .report { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--spacing-8); }
@@ -21,6 +22,7 @@
 .summaryLabel { font-size: 0.75rem; color: var(--muted-foreground); }
 .sectionTitle { font-family: var(--font-family-display); font-size: 1.0625rem; font-weight: 600; margin: var(--spacing-8) 0 var(--spacing-3) 0; color: var(--card-foreground); }
 .emptyText { color: var(--muted-foreground); font-size: 0.875rem; }
+.tableScroll { max-width: 100%; overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
 .table th { text-align: left; padding: var(--spacing-2); border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-weight: 500; }
 .table td { padding: var(--spacing-2); border-bottom: 1px solid var(--border); font-family: var(--font-family-monospace); color: var(--card-foreground); }
@@ -29,8 +31,63 @@
 .receivedRow { font-size: 0.8125rem; color: var(--card-foreground); padding-bottom: var(--spacing-2); border-bottom: 1px solid var(--border); }
 .disclaimer { margin-top: var(--spacing-8); padding-top: var(--spacing-4); border-top: 1px dashed var(--border); font-size: 0.75rem; color: var(--muted-foreground); line-height: 1.5; }
 .noPrint { }
+
+.scopeNote { font-size: 0.75rem; color: var(--muted-foreground); line-height: 1.5; margin: 0 0 var(--spacing-6) 0; max-width: 60rem; }
+.summarySub { font-size: 0.6875rem; color: var(--muted-foreground); line-height: 1.4; }
+.sectionHint { font-size: 0.75rem; color: var(--muted-foreground); margin: calc(var(--spacing-2) * -1) 0 var(--spacing-3) 0; line-height: 1.5; }
+.cellSub { font-family: var(--font-family-base); font-size: 0.6875rem; color: var(--muted-foreground); margin-top: 2px; }
+.table td, .table th { vertical-align: top; }
+.cardList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-3); }
+.miniCard { display: flex; flex-direction: column; gap: var(--spacing-1); padding: var(--spacing-3); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8125rem; color: var(--card-foreground); }
+.cardTop { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-2); flex-wrap: wrap; overflow-wrap: anywhere; }
+.kv { display: flex; justify-content: space-between; gap: var(--spacing-3); font-family: var(--font-family-monospace); }
+.kv > span:first-child { font-family: var(--font-family-base); color: var(--muted-foreground); }
+.statusWarning { display: flex; align-items: flex-start; gap: var(--spacing-1); margin-top: var(--spacing-1); padding: var(--spacing-1) var(--spacing-2); font-family: var(--font-family-base); font-size: 0.75rem; line-height: 1.4; color: var(--card-foreground); background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); }
+.statusWarning svg { flex-shrink: 0; margin-top: 2px; }
+.truncNotice { margin: var(--spacing-3) 0 0 0; padding: var(--spacing-2) var(--spacing-3); font-size: 0.8125rem; color: var(--card-foreground); background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); }
+.receivedRow { overflow-wrap: anywhere; }
+.groupList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-4); }
+.group { padding: var(--spacing-3); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8125rem; color: var(--card-foreground); break-inside: avoid; }
+.groupHead { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--spacing-2); overflow-wrap: anywhere; }
+.groupMeta { font-size: 0.75rem; color: var(--muted-foreground); }
+.originalLine { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-2); padding-bottom: var(--spacing-2); overflow-wrap: anywhere; }
+.originalLine .physicalLine { flex-basis: 100%; }
+.eventList { list-style: none; margin: 0; padding: 0 0 0 var(--spacing-3); display: flex; flex-direction: column; gap: var(--spacing-3); border-left: 2px solid var(--border); }
+.eventItem { display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.eventHead { display: flex; align-items: center; flex-wrap: wrap; gap: var(--spacing-2); }
+.eventMeta { font-size: 0.75rem; color: var(--muted-foreground); }
+.eventDetail { font-size: 0.75rem; color: var(--card-foreground); }
+.eventReason { font-size: 0.75rem; color: var(--card-foreground); }
+.physicalLine { display: flex; align-items: center; flex-wrap: wrap; gap: var(--spacing-1); font-size: 0.75rem; color: var(--muted-foreground); padding-left: var(--spacing-3); }
+.outside { opacity: 0.7; }
+.netLine { margin-top: var(--spacing-3); padding-top: var(--spacing-2); border-top: 1px dashed var(--border); font-size: 0.8125rem; }
+.printOnly { display: none; font-size: 0.8125rem; color: var(--card-foreground); margin: 0 0 var(--spacing-4) 0; }
+.mobileOnly { display: none; }
+.desktopOnly { display: block; }
+
+/* Mobile/tablet (375–768): tabelas largas viram cartões; a página nunca rola na horizontal. */
+@media (max-width: 768px) {
+  .page { padding: var(--spacing-4); }
+  .report { padding: var(--spacing-4); }
+  .desktopOnly { display: none; }
+  .mobileOnly { display: flex; }
+  .filterField { max-width: none; flex: 1 1 100%; }
+  .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--spacing-3); }
+  .summaryValue { font-size: 1.25rem; }
+  .filters button, .filters input { min-height: 2.75rem; }
+}
+
 @media print {
-  .backLink, .tabNav, .filters, .noPrint { display: none !important; }
+  .backLink, .tabNav, .filters, .noPrint, .scopeNote { display: none !important; }
+  .printOnly { display: block !important; }
+  .desktopOnly { display: block !important; }
+  .mobileOnly { display: none !important; }
   .page { padding: 0; max-width: none; }
   .report { border: none; padding: 0; }
+  .group, .miniCard, .summaryCard { break-inside: avoid; }
+  .table { font-size: 0.6875rem; }
 }
+
+/* Campos de data nativos têm largura mínima intrínseca: nunca deixar o campo vazar do contêiner (overflow horizontal em 375px). */
+.filterField { min-width: 0; }
+.filterField input { width: 100%; min-width: 0; box-sizing: border-box; max-width: 100%; }

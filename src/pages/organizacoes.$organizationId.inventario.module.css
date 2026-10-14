@@ -26,6 +26,7 @@
   gap: var(--spacing-1);
   border-bottom: 1px solid var(--border);
   margin-bottom: var(--spacing-6);
+  flex-wrap: wrap;
 }
 
 .tabNavItem,
@@ -226,7 +227,7 @@
 
 .deltaNegative {
   font-family: var(--font-family-monospace);
-  color: var(--error);
+  color: var(--error-text);
   font-weight: 600;
   flex-shrink: 0;
 }

@@ -101,14 +101,26 @@
     --spinner-color: var(--primary-foreground);
   }
 
+  /* Hover/ativo: o fundo se AFASTA da cor do texto (claro: texto claro => fundo escurece; escuro: texto escuro => fundo clareia). Misturar com
+     --primary-foreground aproximava texto e fundo: hover 4,02:1 / ativo 3,67:1 (claro) e 4,35:1 / 4,01:1 (escuro). Agora >= 5:1 nos dois. */
   .primary:hover {
-    background-color: color-mix(in oklch, var(--primary) 90%, var(--primary-foreground));
-    border-color: color-mix(in oklch, var(--primary) 90%, var(--primary-foreground));
+    background-color: color-mix(in srgb, var(--primary) 90%, black);
+    border-color: color-mix(in srgb, var(--primary) 90%, black);
   }
 
   .primary:active {
-    background-color: color-mix(in oklch, var(--primary) 85%, var(--primary-foreground));
-    border-color: color-mix(in oklch, var(--primary) 85%, var(--primary-foreground));
+    background-color: color-mix(in srgb, var(--primary) 85%, black);
+    border-color: color-mix(in srgb, var(--primary) 85%, black);
+  }
+
+  :global(.dark) .primary:hover {
+    background-color: color-mix(in srgb, var(--primary) 90%, white);
+    border-color: color-mix(in srgb, var(--primary) 90%, white);
+  }
+
+  :global(.dark) .primary:active {
+    background-color: color-mix(in srgb, var(--primary) 85%, white);
+    border-color: color-mix(in srgb, var(--primary) 85%, white);
   }
 
   .secondary {
@@ -152,6 +164,18 @@
       0 0 0 4px var(--error);
   }
 
+  /* Tema escuro: texto escuro sobre --error; o hover/ativo escureciam o fundo (4,03:1 / 3,70:1). Clarear o fundo AUMENTA o contraste. O tema claro
+     já passa (5,14:1 / 4,64:1) e não muda. */
+  :global(.dark) .destructive:hover {
+    background-color: color-mix(in srgb, var(--error) 90%, white);
+    border-color: color-mix(in srgb, var(--error) 90%, white);
+  }
+
+  :global(.dark) .destructive:active {
+    background-color: color-mix(in srgb, var(--error) 85%, white);
+    border-color: color-mix(in srgb, var(--error) 85%, white);
+  }
+
   /* Outline - Brand color text with brand color border, no background */
   .outline {
     background-color: transparent;
@@ -160,33 +184,54 @@
     --spinner-color: var(--primary);
   }
 
+  /* Texto do botão habilitado: o --primary puro dá 4,46:1 (claro, sobre painel) e a tinta de hover/ativo o derrubava para 3,38:1/2,97:1 (claro) e
+     3,91:1/3,47:1 (escuro). Aqui o texto vai 20% rumo ao preto (claro) / branco (escuro), na direção que AUMENTA o contraste, e o hover/ativo
+     tinge só 10%/15% do próprio --primary sobre a superfície real (transparente), mantendo a borda. O desabilitado não muda (:not(:disabled)). */
+  .outline:not(:disabled) {
+    color: color-mix(in srgb, var(--primary) 80%, black);
+  }
+
+  :global(.dark) .outline:not(:disabled) {
+    color: color-mix(in srgb, var(--primary) 80%, white);
+  }
+
   .outline:hover {
-    background-color: color-mix(in oklch, var(--primary) 12%, var(--background));
+    background-color: color-mix(in srgb, var(--primary) 10%, transparent);
     border-color: color-mix(in oklch, var(--primary) 90%, var(--primary-foreground));
-    color: color-mix(in oklch, var(--primary) 90%, var(--primary-foreground));
   }
 
   .outline:active {
-    background-color: color-mix(in oklch, var(--primary) 15%, var(--background));
+    background-color: color-mix(in srgb, var(--primary) 15%, transparent);
     border-color: color-mix(in oklch, var(--primary) 85%, var(--primary-foreground));
-    color: color-mix(in oklch, var(--primary) 85%, var(--primary-foreground));
   }
 
   /* Ghost - Brand color text only, minimal styling until interaction */
+  /* O ghost não definia cor de texto: o ícone herdava o preto do navegador para <button> (1,30–1,35:1 sobre o fundo escuro). Agora usa --foreground.
+     No hover/ativo o ícone ganha a cor da marca (a mesma do texto do outline) sobre uma tinta de 10%/15% do --primary na superfície real;
+     antes a mistura com --primary-foreground deixava o ativo em 2,97:1 (claro), abaixo dos 3:1 de ícone. */
   .ghost {
     background-color: transparent;
     border-color: transparent;
+    color: var(--foreground);
     --spinner-color: var(--primary);
   }
 
+  .ghost:not(:disabled):hover,
+  .ghost:not(:disabled):active {
+    color: color-mix(in srgb, var(--primary) 80%, black);
+  }
+
+  :global(.dark) .ghost:not(:disabled):hover,
+  :global(.dark) .ghost:not(:disabled):active {
+    color: color-mix(in srgb, var(--primary) 80%, white);
+  }
+
   .ghost:hover {
-    background-color: color-mix(in oklch, var(--primary) 12%, var(--background));
-    color: color-mix(in oklch, var(--primary) 90%, var(--primary-foreground));
+    background-color: color-mix(in srgb, var(--primary) 10%, transparent);
   }
 
   .ghost:active {
-    background-color: color-mix(in oklch, var(--primary) 15%, var(--background));
-    color: color-mix(in oklch, var(--primary) 85%, var(--primary-foreground));
+    background-color: color-mix(in srgb, var(--primary) 15%, transparent);
   }
 
   /* Link - Brand color text, underline on hover */

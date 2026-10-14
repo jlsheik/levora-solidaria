@@ -14,7 +14,11 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    max-width: 90vw;
+    /* Fase 69: sem reset global de box-sizing, o padding (2 x spacing-6) se
+       soma ao max-width. Em 375px o diálogo media 385,5px e perdia 5px de
+       cada lado. Descontar o padding aqui deixa o total em 90vw sem alterar
+       a largura em telas largas (onde vale width: 32rem). */
+    max-width: calc(90vw - 2 * var(--spacing-6));
     max-height: 85vh;
     width: 32rem;
     background-color: var(--popup);
@@ -26,6 +30,12 @@
     padding: var(--spacing-6);
     animation: contentShow var(--animation-duration-normal)
       cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Tema escuro: texto na cor primária (botão outline "Cancelar", links) sobre --popup (hsl 20 18% 15%) dá 4,48:1, abaixo do 4,5:1 do AA para texto
+     normal. Dentro do diálogo o fundo passa a ser --card (hsl 20 18% 14%, 4,63:1); o token --popup continua igual para os demais popups. */
+  :global(.dark) .content {
+    background-color: var(--card);
   }
 
   .close {

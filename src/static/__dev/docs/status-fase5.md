@@ -1,3 +1,8 @@
+> **DOCUMENTO HISTÓRICO** — retrata a Fase 5 em 24/09. Hoje o matching está
+> na versão 1.4 (aqui: 1.0), há 407 testes automatizados (aqui: nenhum) e o
+> agendador foi observado rodando de verdade (Fases 12, 62 e 69). Estado
+> atual em `docs/ROADMAP_ATUAL.md`. Texto original preservado abaixo.
+
 ## Status de implementação — fase 5 (Motor de tarefas e Motor de correspondência)
 
 Testado ponta a ponta via API real (não simulado):

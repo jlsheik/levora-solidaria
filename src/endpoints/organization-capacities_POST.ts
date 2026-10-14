@@ -1,10 +1,10 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePermission } from "../helpers/organizationAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { schema } from "./organization-capacities_POST.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePermission } from "../helpers/organizationAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { schema } from "./organization-capacities_POST.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 /**
  * Cria ou atualiza o teto de capacidade para uma (categoria, unidade) da

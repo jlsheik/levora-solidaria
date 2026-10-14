@@ -41,6 +41,13 @@ CREATE TABLE users (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Fase 48: UNIQUE(email) acima é case-sensível — sem isto, "Teste@x.com" e
+-- "teste@x.com" coexistiam como identidades diferentes (achado SEC-02 da
+-- auditoria de segurança). Mesmo padrão já usado em
+-- idx_organization_invites_pending_unique abaixo, para o mesmo problema
+-- noutro contexto (ver db/migrations/0013_users_email_case_insensitive.sql).
+CREATE UNIQUE INDEX idx_users_email_lower ON users (LOWER(email));
+
 CREATE TABLE user_passwords (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

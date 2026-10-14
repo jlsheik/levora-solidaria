@@ -1,10 +1,10 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePlatformAdmin } from "../helpers/platformAccess";
-import { schema } from "./background-tasks-retry_POST.schema";
-import { TASK_HANDLERS } from "../helpers/taskHandlers";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePlatformAdmin } from "../helpers/platformAccess.js";
+import { schema } from "./background-tasks-retry_POST.schema.js";
+import { TASK_HANDLERS } from "../helpers/taskHandlers.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 // Reprocessamento manual real: reexecuta a mesma função da tarefa (não
 // apenas marca a linha como "reprocessada"). Cada execução gera sua

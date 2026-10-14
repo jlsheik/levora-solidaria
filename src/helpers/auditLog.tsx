@@ -1,7 +1,7 @@
-import { db } from "./db";
+import { db } from "./db.js";
 import { createHash } from "node:crypto";
 import { sql, type Transaction } from "kysely";
-import type { DB, Json } from "./schema";
+import type { DB, Json } from "./schema.js";
 
 /**
  * Grava uma entrada na trilha de auditoria (audit_log), com hash

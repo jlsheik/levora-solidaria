@@ -1,11 +1,11 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePlatformAdmin } from "../helpers/platformAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { runMatchingForOpportunity } from "../helpers/opportunityMatching";
-import { schema } from "./opportunity-registry-status_POST.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePlatformAdmin } from "../helpers/platformAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { runMatchingForOpportunity } from "../helpers/opportunityMatching.js";
+import { schema } from "./opportunity-registry-status_POST.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 // Máquina de estados validada no servidor — a interface pode sugerir o
 // próximo passo, mas é esta tabela que decide o que é permitido.

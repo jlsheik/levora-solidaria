@@ -1,7 +1,27 @@
 import superjson from "superjson";
-import { NotAuthenticatedError } from "./getSetServerSession";
-import { OrganizationAccessError } from "./organizationAccess";
-import { PlatformAccessError } from "./platformAccess";
+import { ZodError } from "zod";
+import { NotAuthenticatedError } from "./getSetServerSession.js";
+import { OrganizationAccessError } from "./organizationAccess.js";
+import { PlatformAccessError } from "./platformAccess.js";
+
+/**
+ * Lançado deliberadamente por um endpoint para sinalizar um conflito de
+ * estado/unicidade real (ex.: ação já executada, alocação já recebida) —
+ * nunca para erros inesperados. Mensagem sempre segura para o público
+ * (quem lança decide o texto, igual às outras classes tipadas abaixo).
+ * Fase 65 — achado real de auditoria: antes desta classe existir, o único
+ * lugar do projeto que precisava de 409
+ * (`opportunities-status_POST.ts`, "oportunidade já recebida") lançava um
+ * `Error` genérico, caindo no default (então 400) do `buildErrorResponse`
+ * — nunca 409, apesar do comentário no topo deste arquivo já prever esse
+ * caso desde a primeira versão.
+ */
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConflictError";
+  }
+}
 
 /**
  * Único ponto de verdade para transformar um erro lançado num endpoint em
@@ -17,23 +37,77 @@ function mapTypedErrorToStatus(error: unknown): number | null {
   if (error instanceof NotAuthenticatedError) return 401;
   if (error instanceof OrganizationAccessError) return 403;
   if (error instanceof PlatformAccessError) return 403;
+  if (error instanceof ConflictError) return 409;
+  if (error instanceof ZodError) return 400;
+  // `superjson.parse(await request.text())` lança SyntaxError nativo
+  // quando o corpo nem chega a ser JSON válido (ex.: corpo vazio, HTML de
+  // um <form> cross-site, texto qualquer) — achado real de regressão
+  // desta fase: ao mudar o default de "desconhecido" de 400 para 500
+  // (ver getPublicMessage), a suíte de testes pegou isto de verdade
+  // (test/securityHardening.test.ts, caso de CSRF com corpo não-superjson)
+  // — corpo malformado é claramente erro do CLIENTE, nunca do servidor,
+  // tem que continuar 400. Mesma classificação já aplicada isoladamente
+  // em login_with_password_POST.ts na Fase 64; agora centralizada aqui
+  // para todo endpoint que usa buildErrorResponse.
+  if (error instanceof SyntaxError) return 400;
   return null;
 }
 
 /**
- * Monta a Response de erro padrão dos endpoints. `extraStatus` cobre os
- * poucos casos de status específico do endpoint (ex.: 409 para uma
- * atribuição já recebida) — só é consultado quando o erro não é um dos
- * tipos conhecidos acima, preservando a mesma prioridade que o código
- * duplicado tinha antes (acesso/autenticação sempre vence).
+ * Fase 65 — achado real de auditoria, reproduzido de verdade contra o
+ * Postgres: `error.message` de um erro NÃO tipado pode conter detalhes
+ * internos de verdade — confirmado com um erro de conexão real
+ * (`getaddrinfo ENOTFOUND <host>`, expõe o hostname do banco) e um erro
+ * de query real (`relation "x" does not exist`, expõe nome de
+ * tabela/schema). Os 49 endpoints que usam `buildErrorResponse` sempre
+ * passaram `error.message` direto pro cliente para QUALQUER `Error`, não
+ * só os tipos conhecidos abaixo — essa função é o único lugar que
+ * precisa mudar para fechar isso em todos eles de uma vez. Para os tipos
+ * conhecidos (autenticação/autorização/conflito/validação), a mensagem
+ * sempre foi escrita a dedo por quem lançou o erro (nunca derivada de
+ * uma biblioteca externa) — continua segura, sem alteração de
+ * comportamento. Para qualquer outro erro, a mensagem pública nunca mais
+ * é a do erro em si — sempre `fallbackMessage`, o texto específico e
+ * seguro que cada endpoint já define.
+ */
+function getPublicMessage(error: unknown, fallbackMessage: string): string {
+  if (
+    error instanceof NotAuthenticatedError ||
+    error instanceof OrganizationAccessError ||
+    error instanceof PlatformAccessError ||
+    error instanceof ConflictError ||
+    error instanceof ZodError
+  ) {
+    return error.message;
+  }
+  // Mensagem fixa e genérica, não `fallbackMessage` (que descreve a AÇÃO
+  // de negócio, ex. "Não foi possível criar a organização" — enganoso
+  // aqui, já que a ação nem chegou a começar) nem `error.message` bruto
+  // do SyntaxError nativo (textos tipo "Unexpected token..." não ajudam
+  // quem chama a API e variam por engine).
+  if (error instanceof SyntaxError) return "Corpo da requisição inválido";
+  return fallbackMessage;
+}
+
+/**
+ * Monta a Response de erro padrão dos endpoints. `extraStatus` cobre
+ * casos específicos de um endpoint que precisem de um status diferente
+ * do default — só é consultado quando o erro não é um dos tipos
+ * conhecidos acima (nenhum consumidor usa isto hoje; preservado por
+ * compatibilidade). Default agora é 500 (Fase 65) — um erro
+ * verdadeiramente desconhecido é, por definição, inesperado do lado do
+ * servidor, nunca um erro de entrada do cliente; ver achado de auditoria
+ * acima sobre por que isto não afeta nenhum uso legítimo do 400 anterior
+ * (nenhum dos 49 endpoints tinha nenhum outro caminho de erro além dos
+ * tipos já cobertos por `mapTypedErrorToStatus` e validação Zod).
  */
 export function buildErrorResponse(
   error: unknown,
   fallbackMessage: string,
   extraStatus?: (message: string) => number | undefined
 ): Response {
-  const message = error instanceof Error ? error.message : fallbackMessage;
-  const status = mapTypedErrorToStatus(error) ?? extraStatus?.(message) ?? 400;
+  const message = getPublicMessage(error, fallbackMessage);
+  const status = mapTypedErrorToStatus(error) ?? extraStatus?.(message) ?? 500;
   return new Response(superjson.stringify({ message }), {
     status,
     headers: { "Content-Type": "application/json" },

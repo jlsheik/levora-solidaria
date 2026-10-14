@@ -83,13 +83,44 @@ matematicamente se a sequência de eventos foi adulterada por alguém com
 acesso direto ao Postgres — qualquer alteração retroativa quebra o hash a
 partir daquele ponto, detectável rodando `verifyAuditLogChain`.
 
-**Limitação que continua existindo**: a verificação precisa ser rodada
-(hoje, sob demanda via o endpoint) — não há um job agendado que a rode
-periodicamente e alerte se encontrar divergência. Adicionar isso ao
-agendador (`src/helpers/scheduler.tsx`) é o próximo passo natural, não
-implementado ainda por não haver mecanismo de alerta (ver
-`docs/INCIDENT_RESPONSE.md`) para o que fazer se a verificação encontrar
-algo.
+**RESOLVIDO (Fase 53)**: a verificação deixou de depender só de alguém
+lembrar de chamar o endpoint sob demanda. `verifyAuditChainScheduled`
+(`src/helpers/verifyAuditChainTask.tsx`) reutiliza o MESMO verificador
+canônico (`verifyAuditLogChain`, nenhuma segunda implementação do
+algoritmo) dentro da infraestrutura de tarefa agendada já existente
+(`scheduler.tsx` + `scheduled-jobs.json` + `TASK_HANDLERS`), a cada 6 horas
+(custo medido: ~0,004ms/evento de CPU pura, mesmo em 100 mil eventos
+sintéticos — a frequência não é limitada por custo, escolhida por ser um
+intervalo operacional razoável para um processo interno, não por
+necessidade de performance).
+
+Protegida contra execução concorrente pelo MESMO mecanismo que as outras 4
+tarefas agendadas já usam (`withScheduledTaskLock`, advisory lock de
+SESSÃO do Postgres — não um `boolean` em memória, que não protegeria entre
+processos caso o deployment um dia tenha mais de uma instância) —
+provado empiricamente com duas execuções simultâneas reais em
+`test/verifyAuditChainTaskMocked.test.ts`: a segunda nunca chega a chamar
+o verificador.
+
+Três resultados distintos, nunca confundidos: `integrity_valid` (sucesso),
+`integrity_invalid` (divergência real — tratado como FALHA operacional de
+propósito, reaproveitando a rotina já documentada "revisar
+background_task_runs com status=falhou periodicamente" e o painel
+administrativo já existente, `GET /_api/v1/background-tasks` consumido por
+`plataforma.tsx` — nenhuma tela nova), e `verification_error` (erro de
+infraestrutura ao RODAR a verificação, nunca confundido com corrupção
+real). O resultado é persistido em `background_task_runs` (tabela
+operacional já existente, nunca uma segunda "audit log") — a verificação
+NUNCA escreve de volta em `audit_log`, mesmo para registrar a própria
+falha, para nunca contaminar a cadeia que acabou de ser considerada
+possivelmente comprometida.
+
+**Continua sem canal de alerta externo** (e-mail/webhook/SMS) — não existe
+infraestrutura de notificação neste projeto hoje (ver
+`docs/INCIDENT_RESPONSE.md`), e não foi criada artificialmente só para
+esta fase. O ponto de integração para um alerta futuro fica claramente
+preparado: `error.kind === "integrity_invalid"` em qualquer linha de
+`background_task_runs` é o sinal inequívoco a observar.
 
 ## Correção de erro (não é exclusão)
 

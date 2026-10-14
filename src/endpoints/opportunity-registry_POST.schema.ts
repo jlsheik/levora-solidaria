@@ -1,13 +1,14 @@
 import { z } from "zod";
+import { positiveQuantity } from "../helpers/quantityRules.js";
 import superjson from "superjson";
-import { OpportunityUrgencyArrayValues } from "../helpers/schema";
+import { OpportunityUrgencyArrayValues } from "../helpers/schema.js";
 
 export const schema = z.object({
   sourceId: z.coerce.number().int().positive(),
   title: z.string().min(3, "Informe um título"),
   description: z.string().optional(),
   category: z.string().optional(),
-  quantity: z.coerce.number().positive().optional(),
+  quantity: positiveQuantity("Informe uma quantidade maior que zero").optional(),
   unit: z.string().optional(),
   condition: z.string().optional(),
   locationCity: z.string().optional(),

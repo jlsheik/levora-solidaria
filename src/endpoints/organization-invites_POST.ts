@@ -1,14 +1,14 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePermission } from "../helpers/organizationAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { generateInviteToken, hashInviteToken, buildInviteAcceptUrl, INVITE_EXPIRATION_DAYS } from "../helpers/organizationInvites";
-import { emailAdapter } from "../helpers/emailAdapter";
-import { schema } from "./organization-invites_POST.schema";
-import { checkRateLimit, rateLimitResponse } from "../helpers/rateLimit";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePermission } from "../helpers/organizationAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { generateInviteToken, hashInviteToken, buildInviteAcceptUrl, INVITE_EXPIRATION_DAYS } from "../helpers/organizationInvites.js";
+import { emailAdapter } from "../helpers/emailAdapter.js";
+import { schema } from "./organization-invites_POST.schema.js";
+import { checkRateLimit, rateLimitResponse } from "../helpers/rateLimit.js";
 import { sql } from "kysely";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 // Por usuário, não por IP: quem convida já está autenticado, e o risco
 // aqui é alguém com uma conta legítima usando o próprio e-mail da

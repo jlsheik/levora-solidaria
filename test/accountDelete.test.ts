@@ -56,6 +56,26 @@ describe("exclusão de conta (LGPD)", () => {
     expect(stillThere).toBeDefined();
   });
 
+  it("bloqueia (429) após 5 tentativas de senha incorreta em 15 minutos (Fase 52 — SEC-07: bcrypt sem limite era um achado real desta fase)", async () => {
+    const user = await createAuthenticatedUser();
+
+    for (let i = 0; i < 5; i++) {
+      const attempt = await postAccountDelete(
+        buildRequest("auth/account-delete", { method: "POST", cookie: user.cookie, body: { password: "senha-errada" } })
+      );
+      expect(attempt.status).toBe(401);
+    }
+
+    // A 6ª tentativa fica bloqueada mesmo com a senha certa.
+    const blocked = await postAccountDelete(
+      buildRequest("auth/account-delete", { method: "POST", cookie: user.cookie, body: { password: TEST_PASSWORD } })
+    );
+    expect(blocked.status).toBe(429);
+
+    const stillThere = await db.selectFrom("userPasswords").select(["id"]).where("userId", "=", user.userId).executeTakeFirst();
+    expect(stillThere).toBeDefined();
+  });
+
   it("bloqueia (409) exclusão quando o usuário é o único proprietário ativo de uma organização", async () => {
     const owner = await createAuthenticatedUser();
     const org = await createTestOrganization(owner.userId);

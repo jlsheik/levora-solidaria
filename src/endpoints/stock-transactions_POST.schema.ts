@@ -1,12 +1,13 @@
 import { z } from "zod";
 import superjson from "superjson";
-import { StockTransactionTypeArrayValues } from "../helpers/schema";
+import { nonZeroQuantity } from "../helpers/quantityRules.js";
+import { StockTransactionTypeArrayValues } from "../helpers/schema.js";
 
 export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),
   itemId: z.coerce.number().int().positive(),
   type: z.enum(StockTransactionTypeArrayValues),
-  quantity: z.coerce.number().refine((v) => v !== 0, "Informe uma quantidade diferente de zero"),
+  quantity: nonZeroQuantity("Informe uma quantidade diferente de zero"),
   reason: z.string().min(2, "Descreva o motivo do lançamento"),
 });
 

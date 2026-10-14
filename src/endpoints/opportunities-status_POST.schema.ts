@@ -1,6 +1,6 @@
 import { z } from "zod";
 import superjson from "superjson";
-import { OpportunityStatusArrayValues } from "../helpers/schema";
+import { OpportunityStatusArrayValues } from "../helpers/schema.js";
 
 const nonReceiveStatuses = OpportunityStatusArrayValues.filter((s) => s !== "recebida");
 

@@ -1,16 +1,30 @@
 // adapt this to your database schema
-import { db } from "../../helpers/db";
+import { db } from "../../helpers/db.js";
 import { sql } from "kysely";
-import { schema } from "./login_with_password_POST.schema";
+import { z } from "zod";
+import { schema } from "./login_with_password_POST.schema.js";
 import { compare } from "bcryptjs";
 import { randomBytes } from "crypto";
 import {
   setServerSession,
   SessionExpirationSeconds,
-} from "../../helpers/getSetServerSession";
-import { User } from "../../helpers/User";
-import { checkRateLimit, getClientIp, rateLimitResponse } from "../../helpers/rateLimit";
+} from "../../helpers/getSetServerSession.js";
+import { User } from "../../helpers/User.js";
+import { checkRateLimit, getClientIp, rateLimitResponse } from "../../helpers/rateLimit.js";
 import superjson from "superjson";
+
+// Fase 51 (SEC-04): hash bcrypt fixo, pré-computado uma única vez (nunca
+// gerado por request, nunca configurável), usado só para que o caminho de
+// "usuário não existe" pague o MESMO custo de CPU que `compare()` contra
+// um hash real pagaria — sem isto, medimos uma diferença real e
+// consistente de ~59ms entre os dois caminhos (150 amostras, desvio-padrão
+// <2ms nos dois cenários, ver relatório da Fase 51), porque o caminho
+// "não existe" simplesmente nunca chamava bcrypt. Mesmo custo (saltRounds
+// 10) de `generatePasswordHash.tsx`, para que o tempo de CPU gasto seja
+// equivalente nos dois ramos. Nunca precisa corresponder a nenhuma senha
+// real — só existe para a comparação ser chamada.
+const DUMMY_PASSWORD_HASH_FOR_TIMING_EQUALIZATION =
+  "$2b$10$P5TW/tRpgKhmoNqyNmfS5O8W.A5vnV1knJ4hRoOLxQEZOYfUv.aSa";
 
 // Configuration constants
 const RATE_LIMIT_CONFIG = {
@@ -111,7 +125,11 @@ export async function handle(request: Request) {
         }
       }
 
-      // Find user by email (normalized)
+      // Find user by email (normalized). Desde a Fase 48
+      // (idx_users_email_lower), existe no máximo UMA linha cujo
+      // LOWER(email) bate aqui — o LIMIT 1 deixou de ser uma aposta sobre
+      // qual das duas linhas o Postgres devolveria (achado SEC-02 da
+      // auditoria de segurança) e passou a ser só defesa em profundidade.
       const userResults = await trx
         .selectFrom("users")
         .innerJoin("userPasswords", "users.id", "userPasswords.userId")
@@ -128,6 +146,12 @@ export async function handle(request: Request) {
         .execute();
 
       if (userResults.length === 0) {
+        // Fase 51 (SEC-04): paga o mesmo custo de CPU que o caminho de
+        // usuário existente pagaria em compare() — resultado sempre
+        // descartado, só existe para equalizar o tempo de resposta (ver
+        // DUMMY_PASSWORD_HASH_FOR_TIMING_EQUALIZATION acima).
+        await compare(password, DUMMY_PASSWORD_HASH_FOR_TIMING_EQUALIZATION);
+
         // Log failed attempt for non-existent user
         await trx
           .insertInto("loginAttempts")
@@ -282,10 +306,43 @@ export async function handle(request: Request) {
 
     return response;
   } catch (error) {
+    // Achado real da Fase 63, corrigido na Fase 64: este catch cobria TUDO
+    // que pudesse dar errado aqui — entrada inválida (JSON malformado,
+    // schema.parse) e também falhas de infraestrutura genuínas (ex.:
+    // PostgreSQL indisponível) — e devolvia sempre o mesmo 400 "Falha na
+    // autenticação", sem nenhum log. Reproduzido de verdade (Fase 63,
+    // Postgres derrubado em staging): uma falha de banco virava
+    // indistinguível de "você digitou a senha errada" tanto para quem usa
+    // quanto para quem for investigar um incidente depois — nenhum rastro
+    // do erro real existia em lugar nenhum.
+    //
+    // As falhas de credencial de verdade (e-mail/senha errados, rate
+    // limit) já são tratadas ACIMA, fora deste catch, com seus próprios
+    // status (401/429) — este catch só é alcançado por entrada
+    // malformada ou por uma exceção inesperada. Separar os dois:
+    // entrada malformada (schema Zod ou JSON/superjson que nem chega a
+    // parsear) é erro do cliente (400); qualquer outra coisa é inesperada.
+    if (error instanceof z.ZodError || error instanceof SyntaxError) {
+      return new Response(
+        superjson.stringify({ message: "Dados de login inválidos" }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
+    // Erro inesperado (ex.: banco indisponível) — nunca mascarado como
+    // falha de autenticação, sempre registrado no log do servidor, e a
+    // mensagem pública nunca expõe detalhes internos (stack trace, SQL,
+    // host do banco, credenciais).
+    console.error("Erro inesperado ao processar login:", error);
     return new Response(
-      superjson.stringify({ message: "Falha na autenticação" }),
+      superjson.stringify({ message: "Erro interno. Tente novamente em instantes." }),
       {
-        status: 400,
+        status: 500,
         headers: {
           "Content-Type": "application/json",
         },

@@ -6,9 +6,19 @@ on:
   pull_request:
     branches: [master]
 
+# Fase 54 (SEC-08): princípio do menor privilégio — este workflow só faz
+# checkout, instala dependências e roda scripts locais (typecheck, testes,
+# build, audit). Nunca escreve no repositório, nunca publica nada, nunca
+# comenta em PR — não precisa de "contents: write" nem de nenhuma outra
+# permissão além de ler o próprio código.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Observado nos runs remotos: ~7,5 a ~10 min. 30 min dá margem de ~3x sem deixar um job travado ocupar o runner por 6 h (padrão do GitHub).
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -32,10 +42,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        # actions/checkout v4.4.0 (SHA completo; atualizar a SHA e o comentário juntos). Nenhum passo faz operação Git depois do checkout.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        # actions/setup-node v4.4.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22"
           cache: "npm"
@@ -48,3 +62,156 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      # Fase 54: build do cliente (tsc + vite build) — confirmado
+      # localmente que não exige nenhuma variável de ambiente (DATABASE_URL,
+      # JWT_SECRET, etc.): é puramente frontend estático.
+      - name: Build
+        run: npm run build
+
+      # Fase 66 — gate real do artefato de produção do backend. O
+      # comentário que existia aqui antes ("já coberto pelo typecheck
+      # acima") estava errado: a Fase 58 descobriu, executando
+      # `build:server` pela primeira vez nesta sessão, 535 erros em 109
+      # arquivos que `npm run typecheck` (tsconfig.json, moduleResolution
+      # Bundler) nunca detectava, porque tsconfig.server.json usa
+      # moduleResolution NodeNext — exige extensão `.js` explícita em
+      # import relativo, regra que o typecheck do frontend não aplica.
+      # `npm test`/`typecheck`/`build` verdes não garantiam, sozinhos, que
+      # o artefato que `npm start` roda em produção (dist-server/)
+      # sequer compilava. Determinismo confirmado localmente (Fase 66):
+      # duas builds limpas em sequência produzem a mesma lista de
+      # arquivos e os mesmos hashes SHA-256 byte a byte.
+      - name: Build server (production backend artifact)
+        run: npm run build:server
+
+      # Fase 66 — verificação mínima e não frágil do artefato: confere
+      # que as três coisas que já quebraram de verdade (Fases 58/59)
+      # continuam presentes, sem fixar uma contagem exata de arquivos
+      # (frágil a qualquer novo endpoint legítimo).
+      - name: Verify server build artifact
+        run: |
+          test -f dist-server/server/index.js
+          test -f dist-server/src/static/__dev/scheduled-jobs.json
+          endpoint_count=$(find dist-server/src/endpoints -name "*_GET.js" -o -name "*_POST.js" | wc -l)
+          echo "Endpoints no artefato compilado: $endpoint_count"
+          if [ "$endpoint_count" -eq 0 ]; then
+            echo "Nenhum endpoint encontrado em dist-server/src/endpoints — artefato vazio ou corrompido."
+            exit 1
+          fi
+
+      # Fase 54 (fecha SEC-08): política de severidade deliberada —
+      # "moderate" ou mais bloqueia o pipeline; "low"/"info" não (ruído
+      # comum em dependências transitivas, não justifica travar todo PR).
+      # Esta política teria bloqueado a própria vulnerabilidade corrigida
+      # na Fase 49 (react-router, severidade moderate) se ela tivesse sido
+      # introduzida depois deste gate existir. Ver docs/SECURITY.md.
+      - name: Dependency audit (fails on moderate+ severity)
+        run: npm audit --audit-level=moderate
+
+  # Fase 94 — QA de NAVEGADOR em modo reduzido (camada ADICIONAL: não substitui nem enfraquece o job `test`; os dois são independentes e ambos
+  # precisam passar para o workflow ficar verde). Ver docs/QA_VISUAL.md ("Execução reduzida no CI"). Comparado com a matriz completa local:
+  # um navegador só (o Chrome do runner, nunca o Edge), `qa:visual` com o perfil `ci` (18 de 27 cenários × 4 viewports × 2 temas) e `qa:security` com
+  # as 5 partes (calibração, CSRF, XSS, uploads e cabeçalhos do nginx REAL em Docker).
+  qa-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: levora
+          POSTGRES_PASSWORD: levora
+          POSTGRES_DB: levora_solidaria_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U levora"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # Sem DATABASE_URL de propósito: o QA só escreve no banco `_qa` descartável abaixo (a guarda de lib/guard.mjs recusa qualquer outro nome ou host
+    # não local). Sem secrets: tudo aqui é valor de teste do serviço efêmero deste job.
+    env:
+      QA_DATABASE_URL: postgres://levora:levora@localhost:5432/levora_solidaria_qa
+      JWT_SECRET: ci-only-secret-not-for-production-use-please
+      # Runner efêmero + só páginas locais com dados sintéticos: o sandbox do Chrome pode ser barrado pelo AppArmor do Ubuntu; opt-in explícito.
+      QA_BROWSER_NO_SANDBOX: "1"
+
+    steps:
+      - name: Checkout
+        # actions/checkout v4.4.0 (SHA completo; atualizar a SHA e o comentário juntos). Nenhum passo faz operação Git depois do checkout.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        # actions/setup-node v4.4.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Falha se o Node NÃO for 22.x (a compatibilidade com Node 22 é provada pela execução, não presumida) e registra as versões no log.
+      - name: Record and assert environment
+        run: |
+          echo "commit: $GITHUB_SHA"
+          echo "node: $(node -v)"
+          test "$(node -p 'process.versions.node.split(".")[0]')" = "22"
+          google-chrome --version
+          docker --version
+          mkdir -p reports
+
+      # A rotina não baixa imagens por conta própria: o pull é explícito e fixado por tag E digest (nginx real + openssl para o certificado descartável); os mesmos valores estão em scripts/qa-visual/security/nginx.mjs (test/qaCi.test.ts exige a igualdade).
+      - name: Pull Docker images for the nginx header checks
+        run: |
+          docker pull nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+          docker pull alpine/openssl:3.5.9@sha256:e8a2319d15637db5296c0ff540bb028cfabc480b22fcdd4a020582393d32673f
+
+      - name: qa:visual (reduced profile, Chrome only)
+        run: npm run qa:visual -- --browser chrome --profile ci --out reports/qa-visual.json
+
+      # `!cancelled()`: uma falha do qa:visual não esconde o resultado do qa:security (o job falha de qualquer forma).
+      - name: qa:security (all parts, Chrome only)
+        if: ${{ !cancelled() }}
+        run: npm run qa:security -- --browser chrome --out reports/qa-security.json
+
+      # Relê os relatórios: falha se algo obrigatório não rodou, se o Node/navegador não for o esperado ou se o relatório parecer conter segredo.
+      - name: Audit reports and write summary
+        id: audit
+        if: always()
+        run: |
+          status=0
+          node scripts/qa-visual/ci-summary.mjs --visual reports/qa-visual.json --security reports/qa-security.json --expect-node 22 --expect-browser chrome > reports/summary.md || status=$?
+          cat reports/summary.md >> "$GITHUB_STEP_SUMMARY"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      # Limpeza com semântica always(): complementa (não substitui) a limpeza da própria ferramenta. Só remove o que a rotina cria
+      # (contêineres levora-qa-nginx-*, diretórios levora-qa-profile-*, banco *_qa) — nunca processos genéricos.
+      - name: Cleanup leftovers
+        if: always()
+        run: |
+          npm run qa:security -- --cleanup || true
+          docker ps -aq --filter "name=levora-qa-nginx-" | xargs -r docker rm -f
+          rm -rf "${TMPDIR:-/tmp}"/levora-qa-profile-*
+
+      # A auditoria sai com 2 quando o relatório parece conter segredo: nesse caso o artefato NÃO é publicado. Qualquer outra reprovação (FAIL, etapa que não
+      # rodou) ainda publica os relatórios, que são o diagnóstico.
+      - name: Upload reports
+        if: always() && steps.audit.outputs.status != '2' && hashFiles('reports/summary.md') != ''
+        # actions/upload-artifact v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qa-browser-reports
+          path: |
+            reports/qa-visual.json
+            reports/qa-security.json
+            reports/summary.md
+          retention-days: 14
+          if-no-files-found: warn

@@ -1,13 +1,14 @@
 import { z } from "zod";
+import { positiveQuantity } from "../helpers/quantityRules.js";
 import superjson from "superjson";
-import { NeedPriorityArrayValues } from "../helpers/schema";
+import { NeedPriorityArrayValues } from "../helpers/schema.js";
 
 export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),
   title: z.string().min(3, "Informe um título para a necessidade"),
   description: z.string().optional(),
   itemId: z.coerce.number().int().positive().optional(),
-  quantityNeeded: z.coerce.number().positive("Informe uma quantidade maior que zero"),
+  quantityNeeded: positiveQuantity("Informe uma quantidade maior que zero"),
   unit: z.string().min(1, "Informe a unidade de medida"),
   priority: z.enum(NeedPriorityArrayValues).default("media"),
 });

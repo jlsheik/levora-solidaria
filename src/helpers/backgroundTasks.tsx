@@ -1,5 +1,5 @@
-import { db } from "./db";
-import type { Json } from "./schema";
+import { db } from "./db.js";
+import type { Json } from "./schema.js";
 
 /**
  * Contabilidade real de execução de tarefas de fundo — histórico,
@@ -104,10 +104,16 @@ export async function finishTaskRun(runId: string, result: Json = {}): Promise<v
     .execute();
 }
 
-export async function failTaskRun(runId: string, error: unknown): Promise<void> {
+export async function failTaskRun(runId: string, error: unknown, extra?: Record<string, Json>): Promise<void> {
+  // `extra` (Fase 53): campos estruturados adicionais mesclados no JSON de
+  // erro — usado por verifyAuditChainTask.tsx para anexar as divergências
+  // encontradas (id/motivo), sem forçar quem só tem um Error genérico a
+  // passar nada. Opcional e aditivo: nenhum chamador existente (as 4
+  // tarefas agendadas originais) precisa mudar.
   const errorJson: Json = {
     message: error instanceof Error ? error.message : String(error),
     stack: error instanceof Error ? error.stack ?? null : null,
+    ...(extra ?? {}),
   };
   await db
     .updateTable("backgroundTaskRuns")

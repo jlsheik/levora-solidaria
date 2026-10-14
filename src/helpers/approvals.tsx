@@ -1,6 +1,6 @@
-import { db } from "./db";
+import { db } from "./db.js";
 import type { Transaction } from "kysely";
-import type { DB, Json } from "./schema";
+import type { DB, Json } from "./schema.js";
 
 /**
  * Dupla autorização genérica: uma ação de alto risco não executa na hora —

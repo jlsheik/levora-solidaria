@@ -1,13 +1,13 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePermission } from "../helpers/organizationAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { runMatchingForOpportunity } from "../helpers/opportunityMatching";
-import { reopenOpportunityIfNoActiveAllocations } from "../helpers/reopenOpportunity";
-import { concludeOpportunityIfAllTerminalAndReceived } from "../helpers/concludeOpportunity";
-import { schema } from "./allocations-decide_POST.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePermission } from "../helpers/organizationAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { runMatchingForOpportunity } from "../helpers/opportunityMatching.js";
+import { reopenOpportunityIfNoActiveAllocations } from "../helpers/reopenOpportunity.js";
+import { concludeOpportunityIfAllTerminalAndReceived } from "../helpers/concludeOpportunity.js";
+import { schema } from "./allocations-decide_POST.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
   try {

@@ -1,9 +1,9 @@
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePlatformAdmin } from "../helpers/platformAccess";
-import { runMatchingForOpportunity } from "../helpers/opportunityMatching";
-import { schema } from "./opportunity-registry-match_POST.schema";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePlatformAdmin } from "../helpers/platformAccess.js";
+import { runMatchingForOpportunity } from "../helpers/opportunityMatching.js";
+import { schema } from "./opportunity-registry-match_POST.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
   try {

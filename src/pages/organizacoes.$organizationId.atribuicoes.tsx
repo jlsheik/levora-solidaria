@@ -18,11 +18,13 @@ import { Textarea } from "../components/Textarea";
 import { Button } from "../components/Button";
 import { Badge } from "../components/Badge";
 import { Skeleton } from "../components/Skeleton";
+import { ReceiptHistoryPanel } from "../components/ReceiptHistoryPanel";
 import { FileDropzone } from "../components/FileDropzone";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/Select";
 import { z } from "zod";
 import { ArrowLeft, Network, PackageCheck, FileCheck, X } from "lucide-react";
 import { toast } from "sonner";
+import { isAllowedProofUrl } from "../helpers/proofUrl";
 import styles from "./organizacoes.$organizationId.atribuicoes.module.css";
 
 const statusLabels: Record<string, string> = {
@@ -37,7 +39,7 @@ const receiveSchema = z.object({
   itemId: z.coerce.number().int().positive({ message: "Selecione o item recebido" }),
   quantityReceived: z.coerce.number().positive("Informe a quantidade recebida"),
   notes: z.string().optional(),
-  proofUrl: z.string().optional(),
+  proofUrl: z.string().refine((v) => v === "" || isAllowedProofUrl(v), "Informe um endereço http(s) válido para o comprovante").optional(),
 });
 
 function fileToBase64(file: File): Promise<string> {
@@ -59,6 +61,7 @@ export default function OrganizationAllocationsPage() {
   const queryClient = useQueryClient();
   const [receiveTarget, setReceiveTarget] = useState<{ id: number; title: string } | null>(null);
   const [expandedTimelineId, setExpandedTimelineId] = useState<number | null>(null);
+  const [expandedReceiptId, setExpandedReceiptId] = useState<number | null>(null);
   const [uploadedProof, setUploadedProof] = useState<{ id: number; originalFilename: string } | null>(null);
 
   const orgsQuery = useQuery({ queryKey: ["organizations"], queryFn: () => getOrganizations() });
@@ -209,6 +212,14 @@ export default function OrganizationAllocationsPage() {
                   </Button>
                 </div>
               )}
+              {a.status === "recebida" && (
+                <div className={styles.actions}>
+                  <Button size="sm" variant="outline" onClick={() => setExpandedReceiptId(expandedReceiptId === a.id ? null : a.id)}>
+                    {expandedReceiptId === a.id ? "Ocultar" : "Ver"} histórico do recebimento
+                  </Button>
+                </div>
+              )}
+              {a.status === "recebida" && expandedReceiptId === a.id && <ReceiptHistoryPanel organizationId={organizationId} allocationId={a.id} />}
               {expandedTimelineId === a.id && (
                 <div className={styles.timelineBox}>
                   {timelineQuery.isFetching && !timelineQuery.data ? <Skeleton className={styles.listSkeleton} /> : (
@@ -220,7 +231,8 @@ export default function OrganizationAllocationsPage() {
                           <li key={ev.id} className={styles.timelineRow}>
                             <strong>{logisticsEventLabels[ev.eventType]}</strong> — {ev.actorDisplayName ?? "sistema"} · {new Date(ev.occurredAt).toLocaleString("pt-BR")}
                             {ev.notes ? ` — ${ev.notes}` : ""}
-                            {ev.proofUrl && (
+                            {ev.proofUrl && !isAllowedProofUrl(ev.proofUrl) && " — comprovante com endereço não permitido (não exibido)"}
+                            {ev.proofUrl && isAllowedProofUrl(ev.proofUrl) && (
                               <>
                                 {" — "}
                                 <a href={ev.proofUrl} target="_blank" rel="noopener noreferrer" className={styles.proofLink}>

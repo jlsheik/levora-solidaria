@@ -1,10 +1,10 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePlatformAdmin } from "../helpers/platformAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { schema } from "./opportunity-registry_POST.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePlatformAdmin } from "../helpers/platformAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { schema } from "./opportunity-registry_POST.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
   try {

@@ -31,6 +31,12 @@ export default function AcceptInvitePage() {
   const { authState } = useAuth();
   const [acceptedTriggered, setAcceptedTriggered] = useState(false);
   const autoAcceptAttempted = useRef(false);
+  // Fase 51 (SEC-03): PasswordRegisterForm não loga mais automaticamente
+  // (ver docs/SECURITY.md) — depois de um cadastro enviado, troca para a
+  // aba "Já tenho conta" em vez de deixar a pessoa parada sem próximo
+  // passo óbvio.
+  const [authTab, setAuthTab] = useState<"entrar" | "cadastro">("cadastro");
+  const [justSubmittedRegistration, setJustSubmittedRegistration] = useState(false);
 
   const lookupQuery = useQuery({
     queryKey: ["organization-invites-lookup", token],
@@ -143,16 +149,31 @@ export default function AcceptInvitePage() {
               Entre com uma conta que use o e-mail <strong>{invite.email}</strong>, ou crie uma conta agora, para
               aceitar o convite.
             </p>
-            <Tabs defaultValue="cadastro" className={styles.tabs}>
+            <Tabs
+              value={authTab}
+              onValueChange={(value) => setAuthTab(value as "entrar" | "cadastro")}
+              className={styles.tabs}
+            >
               <TabsList className={styles.tabsList}>
                 <TabsTrigger value="entrar">Já tenho conta</TabsTrigger>
                 <TabsTrigger value="cadastro">Criar conta</TabsTrigger>
               </TabsList>
               <TabsContent value="entrar" className={styles.tabsContent}>
+                {justSubmittedRegistration && (
+                  <p className={styles.instructions}>
+                    Cadastro enviado — entre com o e-mail e a senha que você acabou de definir.
+                  </p>
+                )}
                 <PasswordLoginForm redirectTo={`/convites/${token}`} />
               </TabsContent>
               <TabsContent value="cadastro" className={styles.tabsContent}>
-                <PasswordRegisterForm redirectTo={`/convites/${token}`} defaultValues={{ email: invite.email }} />
+                <PasswordRegisterForm
+                  defaultValues={{ email: invite.email }}
+                  onSubmitted={() => {
+                    setJustSubmittedRegistration(true);
+                    setAuthTab("entrar");
+                  }}
+                />
               </TabsContent>
             </Tabs>
           </>

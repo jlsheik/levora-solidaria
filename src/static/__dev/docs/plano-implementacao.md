@@ -1,5 +1,12 @@
 # Plano de implementação — Levora Solidária
 
+> **Registro histórico (Fase 72).** Este arquivo documenta cada fase na
+> ordem em que aconteceu, com os achados e decisões da época; **não foi
+> reescrito**. O **estado atual** (o que está concluído, parcial, pendente,
+> adiado ou bloqueado) está em `docs/ROADMAP_ATUAL.md`, e a seção 7 desse
+> documento mapeia, linha a linha, onde este arquivo diverge da realidade
+> (títulos "EM ANDAMENTO", caixas `[ ]` já resolvidas, "Fases seguintes").
+
 Este documento traduz o MASTER PROMPT V2.1 (fornecido pelo proprietário do
 projeto) em fases executáveis dentro do ambiente Floot. Cada fase só é
 considerada concluída quando testada de ponta a ponta — nenhuma tela ou botão
@@ -20,6 +27,11 @@ negociável, isso exige hospedagem fora do Floot — a decisão fica registrada
 aqui para o proprietário confirmar antes de prosseguirmos além da fase 1.
 
 ## Fase 1 — Fundação (EM ANDAMENTO)
+
+> Nota (Fase 72): título histórico. Todos os itens abaixo foram concluídos
+> (convites na Fase 9, painel de plataforma na Fase 4). O ciclo de vida dos
+> membros (alterar papel, desativar, sair) segue **pendente** e está
+> especificado em `docs/MEMBROS_ESPECIFICACAO.md`.
 
 - [x] Autenticação por e-mail/senha (provisionada pelo Floot: `users`,
       `sessions`, `user_passwords`, `login_attempts`).
@@ -164,6 +176,11 @@ depois da fase 3. Auditoria completa das 7 perguntas em
       continua rotulada como heurística, não IA.
 
 ## Fase 5 — Motor de tarefas e Motor de correspondência (EM ANDAMENTO)
+
+> Nota (Fase 72): título histórico. O motor de tarefas e o matching foram
+> concluídos nas Fases 12, 22–26 e 43 (hoje Matching 1.4). Caixas `[ ]` desta
+> seção que ainda aparecem abertas estão classificadas em
+> `docs/ROADMAP_ATUAL.md` §7.
 
 Decisão revista pelo proprietário: o agendamento e o matching automático
 NÃO ficam para depois — são construídos agora, mesmo sem fontes externas
@@ -2116,6 +2133,1437 @@ Implementa a decisão da Fase 44.
       compartilhado `Dialog`/`Select`, não deste diálogo específico —
       registrado para uma fase dedicada de UI.
 
+## Fase 46 — Varredura completa do ecossistema de capacidades (CONCLUÍDA — só inventário, read-only)
+
+Inventário exaustivo de skills/plugins/MCPs/dependências/integrações
+genuinamente disponíveis (vs. não-conectados/não-encontrados), sem
+instalar/conectar/alterar nada. Confirmou `recharts`/`Chart.tsx` instalado
+mas usado em zero páginas, ausência de `helmet`/CORS/ESLint/Prettier/
+Dockerfile, presença/ausência de variáveis de ambiente sensíveis sem
+nunca imprimir valores. Relatório entregue no chat, não neste arquivo.
+
+## Fase 47 — Auditoria profunda de segurança, dependências e superfície de ataque (CONCLUÍDA — só auditoria, read-only)
+
+`npm audit` real: 2 vulnerabilidades moderadas em `react-router`
+(transitiva de `react-router-dom@6.30.6`), fix disponível é major bump,
+não aplicado nesta fase. `security-review`/`dependency-doctor` tiveram
+limitações de ambiente documentadas (sem `origin/HEAD` resolvível; sem
+Python instalado) e foram substituídas por auditoria manual equivalente.
+Maior achado: SEC-02 — `users.email` permitia duas identidades por
+capitalização (`UNIQUE` case-sensível + login já normalizando com
+`LOWER()`), confirmado por reprodução real em transação revertida.
+Nenhum achado CRÍTICO/ALTO. Relatório completo (matriz de risco com 8
+achados) entregue no chat, não neste arquivo. SEC-02 foi fechado na
+Fase 48 abaixo; os demais (SEC-01/03/04/05/06/07/08) seguem registrados
+para fases dedicadas futuras.
+
+## Fase 48 — Correção de identidade de e-mail (CONCLUÍDA)
+
+Fecha o achado SEC-02 da Fase 47.
+
+- [x] Investigação prévia confirmou `register_with_password_POST.ts`
+      como o ÚNICO produtor de linhas em `users` (busca exaustiva por
+      `insertInto("users")` em todo `src/`) — convites nunca criam
+      usuário, só `memberships`/`organization_invites`, e já comparam
+      e-mail com `.toLowerCase()`/`LOWER()` em ambos os endpoints
+      (criação e aceite), portanto já seguros por construção.
+- [x] `SELECT LOWER(email), COUNT(*) ... HAVING COUNT(*) > 1` no banco de
+      desenvolvimento antes da migration: **0 grupos duplicados, 0
+      registros afetados** (nenhum valor de e-mail impresso).
+- [x] `db/migrations/0013_users_email_case_insensitive.sql`: índice único
+      funcional `idx_users_email_lower ON users (LOWER(email))` — mesmo
+      padrão já usado em `idx_organization_invites_pending_unique`. O
+      `UNIQUE(email)` case-sensível existente foi mantido (fica
+      estruturalmente redundante, mas removê-lo não trazia benefício e
+      não era o objetivo desta fase).
+- [x] `register_with_password_POST.ts`: normaliza e-mail com
+      `.toLowerCase()` (mesma regra já usada em login/convites — nenhuma
+      normalização nova inventada) antes de checar duplicidade
+      (`LOWER(email)`) e antes de persistir — o valor gravado em
+      `users.email` passa a ser sempre minúsculo para contas novas.
+      Captura `unique_violation` (código Postgres `23505`) na inserção e
+      traduz para o mesmo 409 do caminho não-concorrente, em vez de um
+      500 genérico — o SELECT prévio é só UX, a proteção real é o banco.
+- [x] `login_with_password_POST.ts`: comentário adicionado documentando
+      que o `LIMIT 1` sobre `LOWER(users.email)` deixou de depender de
+      sorte (só uma linha pode bater agora); nenhuma lógica alterada.
+- [x] 11 testes novos (`test/emailCaseInsensitive.test.ts`): cadastro
+      aceita o primeiro e-mail e persiste normalizado; rejeita duplicata
+      exata/minúscula/maiúscula; e-mail com espaço externo continua
+      rejeitado por formato (nenhum trim introduzido, comportamento
+      inalterado); login funciona com qualquer capitalização; INSERT
+      direto com variante de case é rejeitado pela constraint (transação
+      revertida); índice confirmado via `pg_indexes`; convite não cria
+      usuário duplicado mesmo com capitalização diferente da conta já
+      registrada; convite para e-mail inexistente não cria linha em
+      `users`; duas requisições de cadastro concorrentes com o mesmo
+      e-mail em capitalizações diferentes resultam em exatamente 1
+      criada + 1 rejeitada (sem depender só do SELECT prévio).
+- [x] Suíte completa (328→339 testes) e `npx tsc --noEmit` sem erros.
+- [x] Central Visual real (desktop 961px + mobile 375×812): cadastro de
+      `CentralVisual48@Teste.local`, tentativa de recadastro com
+      `centralvisual48@teste.local` mostrando "Este e-mail já está
+      cadastrado..." corretamente, e login bem-sucedido com
+      `CENTRALVISUAL48@TESTE.LOCAL` (tudo maiúsculo) na mesma conta —
+      sem overflow em nenhum dos dois tamanhos.
+- [x] Não regressão: Modelo B, `need_resolutions`, Matching 1.4,
+      `requiredRemaining`, RBAC e rate limiting não tocados — confirmado
+      pela suíte completa e por `git diff --stat` restrito aos 3 arquivos
+      de auth + schema.sql + a nova migration/teste.
+- [ ] SEC-01/03/04/05/06/07/08 (achados restantes da Fase 47)
+      permanecem fora do escopo desta fase, para fases dedicadas futuras.
+
+## Fase 49 — Remediação controlada de SEC-01: upgrade do React Router (CONCLUÍDA)
+
+Fecha o achado SEC-01 da Fase 47.
+
+- [x] Investigação prévia: `npm audit` confirmou as duas vulnerabilidades
+      moderadas (`GHSA-wrjc-x8rr-h8h6` open redirect, `GHSA-337j-9hxr-rhxg`
+      injeção de construtor via SSR hydration) na faixa `>=6.0.0 <7.18.0`
+      — ou seja, TODA a série 6.x é vulnerável (6.30.6, a instalada, é a
+      última da série) e não existe patch 6.x que resolva; a única
+      correção real exige `react-router-dom@7.18.0+`.
+- [x] Mapeamento de uso real (`rg "react-router" src`): só
+      `createBrowserRouter`/`RouterProvider`/`Outlet` (App.tsx),
+      `Navigate` (ProtectedRoute.tsx), `useLocation`
+      (ScrollToHashElement.tsx), `useNavigate`/`useParams`/`Link` (6
+      páginas de organização + convites + formulários de auth). Projeto
+      usa a API de "data router" em modo biblioteca (sem o plugin Vite
+      `@react-router/dev`, sem loaders/actions/fetchers/Form, sem
+      `useSearchParams`/`NavLink`, sem rota splat `*`) — exatamente as
+      APIs que permanecem estáveis e sem mudança de assinatura entre v6 e
+      v7. Nenhuma incompatibilidade real encontrada.
+- [x] Upgrade: só `react-router-dom` `^6.28.0` → `^7.18.4` em
+      `package.json` (React 18.3.1, Node 22/24 — ambos já compatíveis com
+      os requisitos de v7). Nenhuma outra dependência tocada. Diff do
+      lockfile mínimo: `@remix-run/router` removido (fundido no core do
+      react-router em v7), `react-router`/`react-router-dom` → 7.18.4,
+      2 dependências transitivas novas (`cookie`, `set-cookie-parser`,
+      usadas internamente por APIs de SSR que este app CSR não exercita).
+- [x] `npm audit` pós-upgrade: **0 vulnerabilidades** (nenhum residual).
+- [x] Nenhuma alteração de código de rotas foi necessária — zero uso de
+      API removida/depreciada entre v6 e v7 neste projeto.
+- [x] Suíte de testes de backend inalterada (339/339, não exercita router
+      de front-end) — sem infraestrutura de teste de componente no
+      projeto (mesma situação já registrada na Fase 45), validação de
+      rotas feita inteiramente via Central Visual real.
+- [x] `npx tsc --noEmit` limpo. `npm run build` (`tsc -p tsconfig.json
+      && vite build`) concluído com sucesso — aviso pré-existente de
+      "chunk maior que 500kB" (bundle único, sem code-splitting), não
+      introduzido por esta fase e fora de escopo corrigir aqui.
+- [x] Central Visual real (desktop 961px + mobile 375×812): login,
+      cadastro, logout, redirect de usuário não autenticado (`/` →
+      `/login`), bloqueio RBAC de `/plataforma` para papel `user`
+      (idêntico a antes), navegação por `Link` entre abas de organização,
+      criação de organização via `useNavigate` para rota com parâmetro
+      dinâmico (`/organizacoes/:organizationId`), refresh de rota pública
+      e de rota autenticada aninhada (sessão e dados sobrevivem),
+      voltar/avançar do navegador preservando o histórico corretamente,
+      rota inexistente — tela de erro padrão do React Router
+      ("Unexpected Application Error! 404 Not Found"), confirmada como
+      comportamento IDÊNTICO ao de antes do upgrade (o projeto nunca
+      configurou `errorElement` em nenhuma rota) — registrado como
+      lacuna de UX pré-existente, não uma regressão desta fase.
+- [x] Não regressão: RBAC (`AdminRoute`/`UserRoute` via
+      `ProtectedRoute.tsx`) continua bloqueando por papel exatamente
+      como antes — a proteção de rota é um componente de aplicação, não
+      uma API do react-router, portanto o upgrade não tem nenhum caminho
+      para alterá-la. Modelo B, Matching 1.4, RBAC de backend, rate
+      limiting e auditoria não tocados (fora do escopo desta fase, nenhum
+      arquivo desses no diff).
+- [ ] Diagnóstico (não é correção desta fase): o pipeline de e-mail
+      continua sem `trim()` em nenhum endpoint (confirmado na Fase 48) —
+      registrado como possível hardening futuro, não alterado aqui.
+
+## Fase 50 — Hardening HTTP e security headers (CONCLUÍDA)
+
+Fecha o achado SEC-05 da Fase 47.
+
+- [x] Investigação prévia: `server/index.ts` só serve `/_api/*` — nunca o
+      HTML do cliente (documentado em `docs/DEPLOYMENT.md`, confirmado por
+      busca: zero `express.static`/`dist/` no servidor). Inventário
+      exaustivo de recursos externos (`rg "https?://"`): só Google Fonts
+      (`@import` em `src/base.css`) é carregado pelo navegador;
+      `api.anthropic.com` (`aiClient.tsx`) é usado exclusivamente pelo
+      backend (confirmado: `opportunityMatching.tsx`, o único importador,
+      nunca é importado por nenhuma página/componente). Zero iframe, zero
+      WebSocket próprio, zero Worker, zero `data:`/`blob:`, zero `<img>`.
+      `style={{...}}` inline encontrado em uso real (ex.:
+      `AuthLoadingState.tsx`) + Radix UI (Dialog/Select/Popover/Tooltip,
+      usado em todo o front-end) depende de `style` inline calculado em JS
+      para posicionamento — evidência concreta que justifica
+      `style-src 'unsafe-inline'` (nenhuma evidência equivalente para
+      `script-src`: `dist/index.html` não tem nenhum `<script>` inline).
+- [x] Centralizado em `src/helpers/securityHeaders.ts`: `API_SECURITY_
+      HEADERS` (API), `DOCUMENT_CSP`/`DOCUMENT_CSP_WITH_FRAME_ANCESTORS`/
+      `PERMISSIONS_POLICY` (documento HTML) — uma única fonte de verdade,
+      sem duas cópias divergentes.
+- [x] `server/index.ts`: `buildApp()` extraído de `main()` (testável sem
+      abrir porta real nem iniciar o agendador); middleware de security
+      headers como PRIMEIRO do pipeline; guarda de entrypoint ESM
+      (`process.argv[1]` vs `import.meta.url`) para que importar `buildApp`
+      em teste não dispare `main()`.
+      **Achado de regressão descoberto e corrigido na própria fase**: o
+      404 padrão do Express (`finalhandler`) sobrescrevia o
+      `Content-Security-Policy` com um valor próprio mais curto (sem
+      `frame-ancestors`) — corrigido com um handler 404 explícito que
+      devolve JSON (consistente com o resto da API).
+- [x] `vite.config.ts`: headers não-CSP aplicados também em dev
+      (`server.headers`); CSP completa (com `frame-ancestors`, só possível
+      como header HTTP real) aplicada em `preview.headers`; plugin próprio
+      (`transformIndexHtml`) injeta a CSP como `<meta>` SÓ na build de
+      produção (`ctx.server` ausente) — nunca no dev server, porque o
+      preâmbulo inline do React Fast Refresh (confirmado via `curl` na
+      resposta real do dev server) exigiria `'unsafe-inline'` em
+      `script-src`. Novo config `"preview"` em `.claude/launch.json` (só
+      local) para validar isso ao vivo via Central Visual.
+- [x] 13 testes novos (`test/securityHeaders.test.ts`): valores exatos dos
+      5 headers da API no health check, num endpoint de autenticação real
+      (401) e em múltiplos endpoints; regressão do 404/finalhandler
+      coberta explicitamente; conteúdo da CSP do documento testado
+      diretiva por diretiva (script-src sem unsafe-inline/unsafe-eval,
+      style-src com unsafe-inline+Google Fonts, connect-src só 'self' sem
+      anthropic.com, object-src 'none', zero wildcard); Permissions-Policy
+      testada por capacidade.
+- [x] Suíte completa (339→352 testes), `npx tsc --noEmit` e `npm run
+      build` sem erros (aviso pré-existente de bundle único >500kB,
+      inalterado). `npm audit`: 0 vulnerabilidades, sem alteração (nenhuma
+      dependência nova instalada).
+- [x] Central Visual real contra a build de produção de verdade (`vite
+      preview`, não o dev server — CSP completa de fato aplicada):
+      login, cadastro, logout, dashboard, abas de organização
+      (Visão geral/Inventário/Necessidades/Oportunidades), abertura de um
+      Dialog real (Radix, prova que `unsafe-inline` em style-src
+      funciona), bloqueio de `/plataforma` para papel `user`, fontes do
+      Google carregando de verdade (`document.fonts` confirmando
+      `status: "loaded"` para Fraunces/IBM Plex), zero mensagem de
+      violação de CSP no console em toda a sessão. Mobile (375×812):
+      dashboard, refresh de sessão autenticada — sem tela branca, sem
+      quebra visual.
+- [x] HSTS: deliberadamente NÃO configurado em código (nem API nem build)
+      — este repositório não controla a camada que termina TLS em
+      produção; registrado como dependência operacional explícita em
+      `docs/DEPLOYMENT.md`, não fabricado.
+- [x] Não regressão: Modelo B, Matching 1.4, RBAC, rate limiting,
+      React Router e normalização de e-mail (Fase 48) não tocados —
+      confirmado pela suíte completa e pelo diff restrito a
+      `server/index.ts`, `vite.config.ts`,
+      `src/helpers/securityHeaders.ts`, docs e o novo teste.
+- [ ] SEC-03/04/06/07/08 (achados restantes da Fase 47) permanecem fora
+      do escopo desta fase, para fases dedicadas futuras.
+
+## Fase 51 — Hardening de autenticação: enumeração, timing e normalização (CONCLUÍDA)
+
+Fecha SEC-03 e SEC-04 da Fase 47.
+
+- [x] Superfície pública de autenticação mapeada por completo: só
+      `register_with_password_POST` e `login_with_password_POST` aceitam
+      e-mail de fonte não autenticada. `organization-invites-lookup_GET`
+      é keyed por token aleatório (não por e-mail, não é oráculo de
+      enumeração). `organization-invites_POST` exige sessão + permissão
+      `membros.gerencie` (ameaça diferente — insider, não anônimo).
+      Confirmado (de novo, como a Fase 47): nenhum endpoint de reset de
+      senha/verificação de e-mail existe, oculto ou não.
+- [x] **SEC-03 reproduzido**: cadastro com e-mail já existente respondia
+      409 "Este e-mail já está em uso" — oráculo de enumeração público e
+      direto. Estratégias A/B/C avaliadas explicitamente: B (confirmação
+      assíncrona por e-mail) exigiria um fluxo de verificação que não
+      existe (fora do escopo construir aqui); C (manter 409) rejeitada —
+      a exposição não é aceitável nem compensada o bastante só pelo rate
+      limit existente. Escolhida **Estratégia A**: resposta pública
+      SEMPRE idêntica (200, mesma mensagem, nunca `Set-Cookie`), o que
+      exigiu remover o login automático após cadastro (senão a PRESENÇA
+      do cookie seria, sozinha, o sinal distinguível) — login continua
+      existindo, só deixou de ser automático. Hash da senha calculado
+      SEMPRE (mesmo quando o e-mail já existe, resultado descartado) para
+      que o TEMPO de resposta não reabra o mesmo oráculo.
+      `PasswordRegisterForm.tsx` atualizado (mensagem de sucesso única, só
+      instrui a entrar); `convites.$token.tsx` ajustado para trocar para a
+      aba "Entrar" automaticamente após o envio do cadastro (sem isso, a
+      pessoa ficaria parada sem próximo passo óbvio).
+- [x] **SEC-04 medido e confirmado** (não mais "possível, não
+      reproduzido" como na Fase 47): script temporário, 150 amostras por
+      cenário, uma conta nova por amostra (achado metodológico da própria
+      medição: reusar o mesmo e-mail disparava o bloqueio por e-mail do
+      próprio sistema depois de 5 tentativas, mascarando a diferença).
+      Resultado antes da correção: usuário inexistente ~59ms mais rápido
+      que senha incorreta (desvio-padrão <2ms nos dois lados — diferença
+      real). Corrigido com hash bcrypt fixo pré-computado (mesmo custo —
+      saltRounds 10 — de `generatePasswordHash.tsx`), comparado e
+      descartado quando o e-mail não existe. Depois da correção:
+      diferença de média 0.00ms. Script de medição removido após gerar o
+      resultado (documentado no relatório da fase, não mantido como teste
+      de CI — benchmark de latência é instável em CI compartilhado).
+- [x] Normalização de e-mail: `z.string().email()` sozinho já rejeitava
+      (nunca corrigia silenciosamente) e-mail com espaço externo, de forma
+      já consistente entre cadastro/login/convite — não havia a
+      inconsistência que a fase foi investigar. Decisão tomada mesmo
+      assim: adotar `trim()` como regra canônica (friccão desnecessária
+      para um erro de copiar/colar trivial), aplicado de forma
+      SIMULTÂNEA nos três schemas (`register_with_password_POST.schema.ts`,
+      `login_with_password_POST.schema.ts`,
+      `organization-invites_POST.schema.ts`) — nunca só num deles.
+      Diagnóstico no banco de desenvolvimento antes de decidir: 0 e-mails
+      com espaço, 0 colisões novas depois de `LOWER(TRIM(email))`.
+- [x] Rate limiting: confirmado que a unificação da resposta do cadastro
+      não cria bypass — o limite de 10/hora/IP continua aplicado ANTES de
+      qualquer lógica sensível ao e-mail, inalterado. Arquitetura do
+      limitador (`rateLimit.tsx`) não tocada (SEC-07 continua para fase
+      própria).
+- [x] 11 testes novos (`test/authEnumeration.test.ts`: 5; mais os
+      ajustados em `test/auth.test.ts` e `test/emailCaseInsensitive.test.ts`
+      que passaram a checar resposta unificada em vez de 409): resposta
+      idêntica para e-mail novo/existente no cadastro; cadastro nunca cria
+      sessão; cadastro duplicado nunca sobrescreve senha/nome da conta
+      original; login responde idêntico para usuário inexistente e senha
+      errada; o hash-dummy nunca é confundido com senha real.
+- [x] Suíte completa (352→357 testes), `npx tsc --noEmit`, `npm run
+      build` e `npm audit` (0 vulnerabilidades, nenhuma dependência nova)
+      sem erros.
+- [x] Central Visual real (desktop + mobile): cadastro com e-mail novo
+      (mensagem de confirmação, sem login automático), cadastro com
+      e-mail já existente (mensagem IDÊNTICA), login em seguida com a
+      senha definida, login com capitalização diferente, erro de senha
+      incorreta, logout, fluxo de convite com cadastro (troca automática
+      para a aba "Entrar").
+- [x] Não regressão: Modelo B, Matching 1.4, RBAC, rate limiting, React
+      Router, security headers/CSP (Fase 50) e a constraint
+      case-insensitive de e-mail (Fase 48) não tocados — confirmado pela
+      suíte completa e pelo diff restrito aos arquivos de autenticação.
+- [ ] SEC-06/07/08 (achados restantes da Fase 47) permanecem fora do
+      escopo desta fase, para fases dedicadas futuras.
+
+## Fase 52 — Rate limiting e proteção contra abuso (CONCLUÍDA)
+
+Fecha SEC-07 da Fase 47.
+
+- [x] Inventário completo: 5 endpoints já protegidos (login 20/15min/IP +
+      5/15min/e-mail; register 10/hora/IP; organization-invites-lookup
+      30/hora/IP; organization-invites-create 20/hora/usuário;
+      files-upload 30/hora/usuário). Achado real: `account-delete`
+      comparava senha via bcrypt SEM nenhum rate limit — único gap
+      encontrado na varredura "qualquer endpoint com bcrypt".
+- [x] IP/proxy testado contra um servidor Express real (não só o helper
+      isolado): sem `TRUST_PROXY` (padrão), 11 requisições com
+      `X-Forwarded-For` forjado e diferente a cada vez continuam
+      compartilhando o mesmo contador — spoofing não funciona. Com
+      `TRUST_PROXY=1` configurado explicitamente, as mesmas 11
+      requisições recebem contadores independentes — comportamento
+      correto só quando há um proxy real confiável na frente. Nenhuma
+      confiança ampla (`trust proxy: true`) foi adicionada.
+- [x] Concorrência confirmada sem race condition: 50 requisições de
+      cadastro disparadas via `Promise.all` contra o mesmo IP, servidor
+      real — exatamente 10 permitidas, 40 bloqueadas, nunca excedente.
+      Explicado pela ausência de `await` dentro da seção crítica de
+      `checkRateLimit` (roda síncrona do início ao fim).
+- [x] Multi-processo confirmado como limitação real (não hipotética):
+      dois processos `tsx server/index.ts` reais em portas diferentes,
+      atacados pela MESMA origem real — processo A bloqueou na 11ª
+      tentativa, processo B aceitou a sua livremente. Contadores
+      totalmente independentes entre processos, como já documentado,
+      agora com prova empírica.
+- [x] Decisão de arquitetura: manter o limiter em memória. Deployment
+      real hoje é genuinamente um único processo (`docs/DEPLOYMENT.md`);
+      trocar para Postgres/Redis agora adicionaria uma consulta extra em
+      todo hot path sensível sem nenhum ganho de correção na topologia
+      atual. Threshold documentado para revisitar: quando a
+      infraestrutura de produção definir mais de uma instância.
+- [x] Cadastro + bcrypt (preocupação específica pós-Fase 51): confirmado
+      que o limite de IP é checado ANTES de qualquer hash — a 11ª
+      tentativa de cadastro nunca paga o custo de bcrypt, seja e-mail
+      novo ou repetido. 10/hora/IP já contém o custo total em no máximo
+      10 hashes por IP por hora.
+- [x] `account-delete_POST.ts`: adicionado rate limit (5/15min, por
+      usuário autenticado — não por IP, já que o atacante aqui já estaria
+      autenticado via sessão comprometida).
+- [x] 5 testes novos (`test/rateLimitHardening.test.ts`: 4, contra um
+      servidor Express real via `buildApp()`; mais 1 em
+      `test/accountDelete.test.ts`): resistência a spoofing sem
+      TRUST_PROXY; TRUST_PROXY honrando X-Forwarded-For corretamente;
+      concorrência sem excedente; 429 do cadastro nunca revela se o
+      e-mail já existia (continuidade de SEC-03); bloqueio de
+      account-delete após 5 tentativas.
+- [x] Suíte completa (357→362 testes), `npx tsc --noEmit`, `npm run
+      build` e `npm audit` (0 vulnerabilidades, nenhuma dependência nova)
+      sem erros.
+- [x] Central Visual real (desktop + mobile): login até 429, cadastro,
+      cadastro repetido, logout — sem tela branca, sem overflow, sem
+      redirect inesperado.
+- [x] Não regressão: Modelo B, Matching 1.4, RBAC, React Router, security
+      headers/CSP (Fase 50), identidade de e-mail (Fase 48) e a
+      mitigação de timing/enumeração (Fase 51) não tocadas — confirmado
+      pela suíte completa e pelo diff restrito a `account-delete_POST.ts`,
+      docs e os dois novos arquivos de teste.
+- [ ] SEC-06/08 (achados restantes da Fase 47) permanecem fora do escopo
+      desta fase, para fases dedicadas futuras.
+
+## Fase 53 — Verificação periódica da audit hash-chain (CONCLUÍDA)
+
+Fecha SEC-06 da Fase 47.
+
+- [x] Mapeamento completo: tabela `audit_log`, campos `event_hash`/
+      `previous_event_hash`, SHA-256, ordenação por `id` (confirmado — não
+      por `created_at`), hash cobre
+      organizationId/actorUserId/action/entityType/entityId/metadata
+      (stableStringify)/createdAt/previousEventHash, advisory lock de
+      TRANSAÇÃO (`pg_advisory_xact_lock(hashtext(...))`) na escrita,
+      verificador canônico já existente (`verifyAuditLogChain`), já
+      exposto sob demanda (`GET /audit-log-verify`). Scheduler já
+      centralizado (`scheduler.tsx`+`scheduled-jobs.json`+
+      `TASK_HANDLERS`+`node-cron`) e mecanismo de registro operacional já
+      existente (`background_task_runs`+`claimTaskRun`/`finishTaskRun`/
+      `failTaskRun`) e de exclusão mútua multi-processo já existente
+      (`withScheduledTaskLock`, advisory lock de SESSÃO) — tudo
+      encontrado e reutilizado, nada criado do zero.
+- [x] Custo medido: recomputar 100.000 eventos sintéticos (hash+stringify)
+      levou 377ms (~0,0038ms/evento). Verificação real contra o banco de
+      teste: poucos ms. Frequência escolhida (6 em 6 horas) não é
+      limitada por custo — é um intervalo operacional razoável para uma
+      verificação interna sem urgência de detecção em tempo real.
+- [x] `src/helpers/verifyAuditChainTask.tsx` (novo): reusa
+      `verifyAuditLogChain` sem nenhuma segunda implementação. Registrado
+      em `TASK_HANDLERS`, `SCHEDULED_TASK_LOCK_IDS` (objid 5) e
+      `scheduled-jobs.json` (`0 */6 * * *`, UTC) — três pontos de
+      integração mínimos na infraestrutura já existente, nenhuma tabela
+      nova, nenhum mecanismo de lock novo.
+- [x] Três resultados nunca confundidos: `integrity_valid`
+      (`finishTaskRun`, status "concluida"); `integrity_invalid`
+      (`failTaskRun` DE PROPÓSITO — reaproveita a rotina operacional já
+      documentada "revisar background_task_runs com status=falhou" e o
+      painel admin já existente em `plataforma.tsx`, sem nenhuma UI nova);
+      `verification_error` (`failTaskRun` do catch externo, erro de
+      infraestrutura, nunca confundido com corrupção real — provado com
+      teste que mocka uma exceção e confirma `error.kind` diferente dos
+      dois outros casos). `failTaskRun` ganhou um parâmetro opcional
+      `extra` (aditivo, nenhum dos 4 chamadores existentes precisou
+      mudar) para anexar `kind`/`divergencias`/contagens estruturadas.
+      Nunca escreve o resultado de volta em `audit_log` (evitaria
+      arquitetura circular — contaminar a cadeia que acabou de ser
+      considerada possivelmente comprometida).
+- [x] 9 testes novos: 4 em `test/auditChain.test.ts` (caso 2 — hash atual
+      isolado; caso 3/6 — predecessor forjado mas internamente
+      consistente; caso 4 — conteúdo divergente do hash; caso 5 — DELETE
+      estruturalmente bloqueado pelo trigger, não "simulável" porque
+      genuinamente impossível); 2 em `test/verifyAuditChainTask.test.ts`
+      (tarefa com cadeia íntegra/corrompida, verificador real); 2 em
+      `test/verifyAuditChainTaskMocked.test.ts` (erro de infraestrutura
+      distinto de corrupção; concorrência real — duas chamadas
+      simultâneas, só uma chama o verificador, provado contando
+      invocações do mock).
+- [x] Suíte completa (362→370 testes), `npx tsc --noEmit`, `npm run
+      build` e `npm audit` (0 vulnerabilidades, nenhuma dependência nova
+      — `node-cron` já existia) sem erros.
+- [x] Validado contra o banco de desenvolvimento REAL (não só o de
+      teste): tarefa executada manualmente, resultado
+      `{kind: "integrity_valid", totalEventos: 39, eventosVerificados:
+      26, eventosPreExistentesSemHash: 13, duracaoMs: 3}` gravado em
+      `background_task_runs`, visível no painel "Tarefas de fundo" real
+      de `/plataforma` (desktop + mobile, sem overflow) — zero UI nova
+      necessária, o painel já existia.
+- [x] Não regressão: Modelo B, Matching 1.4, RBAC, rate limiting, React
+      Router, security headers/CSP, identidade de e-mail, mitigação de
+      timing/enumeração não tocadas — confirmado pela suíte completa e
+      pelo diff restrito aos arquivos listados acima.
+- [ ] SEC-08 (achado restante da Fase 47) permanece fora do escopo desta
+      fase, para uma fase dedicada futura.
+
+## Fase 54 — CI security gates e reprodutibilidade (CONCLUÍDA)
+
+Fecha SEC-08 da Fase 47 — o último achado da auditoria de segurança
+original.
+
+- [x] Auditoria do pipeline existente: checkout + Node 22
+      (`actions/setup-node@v4`, cache npm) + `npm ci` + typecheck + testes
+      — sem build, sem `npm audit`, sem lint, sem `permissions:` explícito.
+      Confirmado lendo `.github/workflows/ci.yml` diretamente, não
+      presumido das fases anteriores.
+- [x] `npm ci` já era usado (reprodutibilidade confirmada: rodado
+      localmente com sucesso, 0 vulnerabilidades). `npm run build`
+      confirmado sem exigir NENHUMA variável de ambiente (testado com
+      `env -i`, ambiente completamente limpo).
+- [x] `engines.node: "22.x"` adicionado a `package.json` — mesma versão
+      já usada pelo CI, agora declarada no projeto como fato único (antes
+      só existia dentro do YAML).
+- [x] `.github/workflows/ci.yml`: adicionados `permissions: contents:
+      read` (menor privilégio — o workflow só lê e roda scripts, nunca
+      escreve no repositório), step `Build` (`npm run build`) e step
+      `Dependency audit` (`npm audit --audit-level=moderate` — política
+      de severidade deliberada e documentada: moderate+ bloqueia, low/info
+      não). Ordem final: `npm ci → typecheck → testes → build → audit`.
+- [x] `security-review` avaliado para CI e descartado por motivo técnico
+      concreto (não achado/limitação genérica): é uma skill do Claude
+      Code, não um binário/script invocável por um `run:` do GitHub
+      Actions — não existe caminho de automação determinístico para ela
+      neste ambiente. `npm audit` continua como o gate determinístico de
+      segurança de dependências.
+- [x] Lint investigado e confirmado ausente (zero config ESLint, zero
+      script `lint`, zero dependência) — não instalado, conforme
+      instrução explícita de não transformar esta fase numa reforma geral
+      do projeto.
+- [x] Os 4 gates testados de propósito, não só "YAML parece correto":
+      erro de tipo introduzido temporariamente em
+      `src/helpers/rateLimit.tsx` (typecheck falhou, exit code 2,
+      revertido); assertion falsa introduzida em
+      `test/rateLimit.test.ts` (teste falhou, exit code 1, revertido);
+      erro de sintaxe introduzido em `src/App.tsx` (build falhou, exit
+      code 2, revertido); gate de audit provado com uma fixture ISOLADA
+      fora deste repositório (nunca tocando o lockfile real), fixando
+      `react-router-dom@6.28.0` (conhecidamente vulnerável) — `npm audit
+      --audit-level=moderate` retornou exit code 1 ali. Todos os 4
+      reverted e confirmados limpos de novo depois.
+- [x] CI remoto: **não executado nesta sessão** (nenhum push realizado —
+      registrado honestamente, não fingido). Os comandos exatos do
+      workflow foram validados localmente, incluindo os 4 testes de
+      falha acima.
+- [x] Suíte completa (370 testes, sem alteração — fase não mexeu em
+      código de aplicação), `npx tsc --noEmit`, `npm run build` e
+      `npm audit --audit-level=moderate` (0 vulnerabilidades) sem erros.
+- [x] Central Visual mínima (fase é CI, não UI): login e dashboard
+      carregando normalmente depois das alterações de configuração —
+      nenhuma UI nova criada.
+- [x] Não regressão: Modelo B, Matching 1.4, RBAC, rate limiting, React
+      Router, security headers/CSP, identidade de e-mail, mitigação de
+      timing/enumeração, hash-chain não tocadas — único ponto de
+      integração foi o workflow de CI e `package.json#engines`.
+
+**Com isto, todos os 8 achados da auditoria de segurança da Fase 47
+(SEC-01 a SEC-08) foram endereçados** — SEC-01 (Fase 49), SEC-02 (Fase
+48), SEC-03/04 (Fase 51), SEC-05 (Fase 50), SEC-06 (Fase 53), SEC-07
+(Fase 52), SEC-08 (esta fase). SEC-02 foi na verdade a Fase 48 em si
+(identidade de e-mail), não um item separado da lista original.
+
+## Fase 55 — Auditoria de prontidão para produção (CONCLUÍDA — só diagnóstico/documentação)
+
+Fecha o ciclo das Fases 47–54 com uma pergunta diferente: não "o código
+tem uma vulnerabilidade?", mas "o que falta para hospedar isto de
+verdade?". Nenhum deploy, nenhuma infraestrutura contratada, nenhum
+código de aplicação alterado — só investigação e um documento novo.
+
+- [x] `docs/PRODUCTION_READINESS.md` criado (22 seções): arquitetura
+      runtime completa, frontend, API, Postgres/migrations, scheduler
+      (multi-processo já seguro via advisory lock — confirmado, não
+      presumido), storage, e-mail, IA, matriz de secrets (12 variáveis,
+      presença/ausência sem valores), TLS/proxy (`TRUST_PROXY` —
+      depende da topologia real, nunca `true` cego), rate limiting
+      (limitação multi-processo documentada com threshold explícito),
+      backup/restore (ausente — acha real, não fabricado), observabilidade,
+      health checks (`/_api/__health` é só liveness, não verifica
+      Postgres — achado real), graceful shutdown (ausente — confirmado
+      por busca exaustiva, zero `process.on("SIGTERM"/"SIGINT")`),
+      escalabilidade, CI/CD (CD não existe e não foi implementado aqui),
+      bloqueadores reais (3: camada estática do frontend indefinida,
+      backup nunca testado, TLS não decidido — autenticação por cookie
+      `Secure` não funciona sem HTTPS real), decisões pendentes, e itens
+      explicitamente adiáveis para pós-MVP.
+- [x] Nenhuma infraestrutura nova instalada, nenhum provedor escolhido,
+      nenhum dado real usado — confirmado pelo próprio conteúdo do
+      documento (cada item tem uma classificação objetiva, nunca "parece
+      pronto").
+- [x] Suíte completa (370 testes, inalterada — fase não tocou código de
+      aplicação), `npx tsc --noEmit`, `npm run build` e
+      `npm audit --audit-level=moderate` sem erros.
+- [x] Central Visual (smoke test, conforme pedido pela fase): login,
+      dashboard, uma rota autenticada de organização — tudo carregando
+      normalmente, nenhuma UI nova criada.
+- [x] Não regressão: nenhum arquivo de domínio (Modelo B, Matching,
+      needs, stock, RBAC, autenticação, rate limiter, audit chain, React
+      Router, CSP, CI, migrations históricas) tocado — o único arquivo
+      novo é o próprio documento.
+
+## Fase 56 — Arquitetura-alvo de produção (CONCLUÍDA)
+
+Transforma o diagnóstico da Fase 55 numa decisão concreta. Nenhum deploy
+real feito; uma mudança de código pequena e diretamente justificada pela
+arquitetura escolhida.
+
+- [x] Arquitetura decidida: **Alternativa B** — nginx same-origin
+      (serve `dist/` com fallback de SPA + proxy reverso de `/_api/*`
+      para o Express) + Postgres gerenciado. Comparada explicitamente
+      contra origens separadas (CDN+API em domínios diferentes) —
+      rejeitada por exigir CORS novo (hoje zero) e por forçar revisão da
+      análise de CSRF já fechada em `docs/SECURITY.md`, sem nenhum
+      ganho técnico que compense no estágio atual.
+      `TRUST_PROXY=1` (exatamente 1 salto — o nginx). Express nunca
+      exposto diretamente à internet (só `127.0.0.1`/rede interna).
+- [x] **Graceful shutdown implementado** (único ponto de código desta
+      fase, diretamente exigido pela arquitetura escolhida — systemd/
+      orquestrador envia SIGTERM a cada deploy): `server/index.ts`
+      (handlers SIGTERM/SIGINT, `server.close()` com timeout de 10s) +
+      `closeDbPool()` novo em `db.tsx` (fecha o pool do `postgres`
+      de verdade). Verificado com o processo real rodando: o handler
+      dispara, `server.close()` e `closeDbPool()` completam sem erro.
+      **Limitação de ambiente registrada explicitamente**: entrega de
+      SIGTERM entre processos diferentes não é testável de forma
+      confiável no Windows (libuv não suporta SIGTERM nativo nessa
+      plataforma) — verificado via `process.emit` no mesmo processo
+      (prova a lógica do handler) e documentado que o destino real de
+      produção é Linux, onde SIGTERM é nativo e este é o padrão
+      universal do Express/Node.
+- [x] Storage: disco local com volume persistente aceito para o
+      lançamento inicial (single-instance); gatilho de migração para S3
+      documentado explicitamente (adapter já existe, zero código novo
+      quando chegar a hora).
+- [x] Rate limiting: mantido em memória — decisão explícita de que a
+      arquitetura escolhida (1 processo) não justifica Redis/Postgres
+      agora; gatilho de migração documentado.
+- [x] Backup/restore: único item classificado como bloqueador real sem
+      nenhuma mitigação parcial — frequência/retenção/RPO/RTO/teste de
+      restauração definidos como requisitos obrigatórios, nada
+      implementado (depende do provedor).
+- [x] `docs/PRODUCTION_READINESS.md` ganhou a seção "Arquitetura-alvo de
+      produção": matriz consolidada, comparação de alternativas, 15
+      subseções (frontend/API/Postgres/storage/scheduler/rate limiting/
+      secrets/headers/TRUST_PROXY/cookies/e-mail/IA/health/shutdown/
+      backup/CI-CD/deploy order/rollback/observabilidade/ambientes) e
+      diagrama final — nenhum componente crítico ficou "indefinido".
+- [x] Suíte completa (370 testes, inalterada), `npx tsc --noEmit`,
+      `npm run build` e `npm audit --audit-level=moderate` sem erros.
+- [x] Central Visual (smoke test): login, dashboard, rota autenticada de
+      organização — tudo carregando normalmente.
+- [x] Não regressão: Modelo B, Matching, needs, stock, RBAC,
+      autenticação, rate limiter (lógica), audit chain, React Router,
+      CSP, CI, migrations históricas não tocados — único código alterado
+      foi o shutdown gracioso, diretamente justificado pela arquitetura
+      escolhida nesta mesma fase.
+
+## Fase 57 — Backup, restore e recuperação do PostgreSQL (CONCLUÍDA)
+
+Fecha o único bloqueador real identificado nas Fases 55/56. Nenhum dado
+de produção usado — tudo contra o banco de desenvolvimento, num banco de
+teste separado (`levora_solidaria_restore_test`), descartado ao final.
+
+- [x] Inventário: Postgres 16.15, 26 tabelas, 22 triggers, 71 índices,
+      276 constraints, 23 sequences, 2 extensões (`pgcrypto`/`plpgsql`),
+      3 funções próprias da aplicação. **Achado real corrigido**:
+      `schema_migrations` tinha só 12/13 migrations rastreadas — `0013`
+      (Fase 48) foi aplicada via `psql -f` direto na época e nunca
+      registrada, apesar de seus efeitos estarem corretos no schema.
+      Corrigido inserindo a linha faltante (investigado antes de
+      modificar, como pedido pela fase).
+- [x] Formato escolhido: `pg_dump -Fc -Z 6` (custom, comprimido) — tabela
+      de comparação contra plain SQL documentada em
+      `docs/DATABASE_RECOVERY.md`.
+- [x] Backup real executado (142.386 bytes, 279ms), integridade
+      verificada (tamanho, SHA-256, `pg_restore --list` sem tocar no
+      banco).
+- [x] Restore real num banco separado (599ms) — estrutura idêntica ao
+      original em TODOS os itens comparados (contagem exata, não
+      estimativa — achado: `pg_stat_user_tables.n_live_tup` estava
+      desatualizado neste ambiente, `COUNT(*)` real usado em seu lugar).
+- [x] Validação funcional real: trigger append-only rejeitou um `DELETE`
+      de verdade contra o banco restaurado; `verifyAuditLogChain()` (o
+      verificador canônico, não uma reimplementação) confirmou
+      `integra: true`; aplicação real (servidor+cliente) apontada
+      temporariamente para o banco restaurado (nunca o `.env` editado)
+      validada via Central Visual — login, dashboard, organização,
+      painel de tarefas de fundo, desktop + mobile.
+- [x] Tempo medido (não estimado): banco+restore+validação estrutural
+      1.250ms; aplicação pronta (health check) +2.110ms — **≈3,4s
+      total**, com a ressalva explícita de que isso não inclui
+      provisionar um Postgres novo do zero (não exercido, nenhuma
+      infraestrutura contratada).
+- [x] RPO/RTO/retenção/criptografia/PITR documentados com justificativa
+      (PITR avaliado e conscientemente adiado — backup diário já cumpre
+      a meta de RPO≤24h para o volume atual).
+- [x] `docs/DATABASE_RECOVERY.md` criado (21 seções: inventário, formato,
+      backup, integridade, restore, validação estrutural/funcional,
+      audit chain, tempo, RPO, RTO, retenção, criptografia, storage
+      independente, PITR, disaster recovery, migrations pós-restore,
+      backup≠audit-chain, failure modes, storage de uploads, requisitos
+      do provedor, checklist repetível).
+      `docs/PRODUCTION_READINESS.md` atualizado (bloqueador de backup
+      fechado, matriz consolidada e bloqueadores reais revisados).
+- [x] Suíte completa (370 testes, inalterada — fase não tocou código de
+      aplicação, só um dado de bookkeeping no banco de desenvolvimento),
+      `npx tsc --noEmit`, `npm run build` e `npm audit --audit-level=moderate`
+      sem erros.
+- [x] Não regressão: nenhum arquivo de domínio tocado — o único "código"
+      alterado nesta fase foi uma correção de dado (`schema_migrations`)
+      no banco de desenvolvimento, não um arquivo versionado.
+
+## Fase 58 — Pacote de deploy e provisionamento reprodutível (CONCLUÍDA)
+
+Transforma a arquitetura das Fases 56/57 num procedimento de instalação
+concreto, validado de verdade contra um servidor Linux limpo (container
+Docker real) — nenhum deploy real, domínio real ou certificado real
+usado, como pedido pela fase.
+
+- [x] **Achado real 1 — `npm run build:server` nunca tinha funcionado**:
+      executado de verdade pela primeira vez nesta fase (a CI só roda
+      `npm run build`, o front-end), deu 535 erros em 109 arquivos —
+      `tsconfig.server.json` (NodeNext) exige extensão `.js` explícita em
+      imports relativos, nenhum arquivo do projeto tinha isso, e o
+      `include` varria hooks de front-end (`useScrollReveal.tsx` etc.) e
+      dois arquivos nunca usados (`connectorsManual.tsx`,
+      `connectorsTypes.tsx`). Corrigido: `.js` adicionado a 403
+      especificadores em 103 arquivos reais do backend; os 7 arquivos de
+      front-end/não usados excluídos explicitamente do
+      `tsconfig.server.json`. Build limpo depois, suíte de 370 testes e
+      `npx tsc --noEmit` inalterados.
+- [x] **Achado real 2 — `tsx` só em `devDependencies`**: as migrations
+      oficiais (`db:migrate`, `db:migrate:incremental`, `db:seed`) chamam
+      `tsx` direto; um `npm ci --omit=dev` de produção real não o
+      instalaria. Corrigido movendo `tsx` para `dependencies`; validado
+      de verdade com `npm ci --omit=dev` dentro de um container Linux.
+- [x] **Achado real 3 — agendador sem config no build compilado**:
+      `scheduler.tsx` lê `scheduled-jobs.json` via `fs`, relativo ao
+      próprio `__dirname` — `tsc` nunca copia esse arquivo, então o build
+      compilado rodava sem nenhuma tarefa agendada. Corrigido com
+      `scripts/copy-server-assets.cjs`, chamado por `build:server`.
+      Confirmado rodando o build real: 5 tarefas registradas.
+- [x] **Achado real 4 — descoberta de endpoints só reconhecia `.ts`**:
+      rodando o servidor compilado de verdade por trás, o log mostrou
+      "Descobertos 0 endpoints" — o regex de descoberta em
+      `server/index.ts` nunca casava `.js`. Um deploy real antes desta
+      correção teria subido saudável (health check OK) e completamente
+      sem nenhuma rota de API — falha silenciosa grave. Corrigido;
+      confirmado 54 endpoints descobertos e uma chamada real (sessão)
+      respondendo corretamente contra o Postgres.
+- [x] Migração em banco novo, do zero, só via mecanismo oficial, testada
+      de verdade em container Linux: 26/26 tabelas, 13/13 migrations.
+      Confirmado que `db:migrate:incremental` sozinho falha num banco
+      vazio (depende de `db:migrate` ter rodado primeiro) — documentado
+      como comportamento esperado, não um bug.
+- [x] SIGTERM real entre processos, em Linux, pela primeira vez nesta
+      sessão (a Fase 56 só validou no mesmo processo, por limitação do
+      Windows): `docker stop` → log de encerramento gracioso em ~0,4s.
+- [x] `TRUST_PROXY=1` validado através de nginx real pela primeira vez
+      (a Fase 52 só tinha testado contra o Express isolado): 25
+      requisições com `X-Forwarded-For` forjado e diferente a cada vez,
+      através de nginx real, todas no mesmo bucket de rate limit —
+      resistência a spoofing confirmada com a topologia completa.
+- [x] `deploy/nginx.conf` (SPA fallback, proxy `/_api/*`, CSP/HSTS de
+      referência, cache de assets com hash vs. `index.html`) — validado
+      com `nginx -t` real.
+- [x] `deploy/levora-api.service` (usuário dedicado, `EnvironmentFile`,
+      `Restart=on-failure`, `TimeoutStopSec` compatível com o shutdown
+      gracioso da Fase 56) — validado com `systemd-analyze verify`.
+- [x] `.env.example` revisado contra todo `process.env.*` real do
+      backend — sem lacunas, nenhuma alteração necessária.
+- [x] `docs/DEPLOYMENT_RUNBOOK.md` criado (16 seções: pré-requisitos,
+      provisionamento, instalação, secrets, PostgreSQL, migrations,
+      build, Nginx, Express/systemd, TLS, health check, backup,
+      rollback, troubleshooting, restore — mais checklist operacional).
+      `docs/PRODUCTION_READINESS.md` atualizado com o estado do pacote de
+      deploy e a atualização dos bloqueadores reais.
+- [x] Central Visual contra a build de produção real (`dist/` via `vite
+      preview`, mesmo proxy same-origin que o nginx real fará) + backend
+      compilado real: login, cadastro, dashboard, rota de convite
+      inválido (fallback de SPA), desktop e mobile — sem erro de CSP,
+      fonte ou asset no console.
+- [x] Checagem de segurança contra o ambiente de referência (não um
+      pentest completo): CSP/`frame-ancestors`/`X-Frame-Options` no
+      documento, cookie de sessão com `HttpOnly`/`Secure`/`SameSite=Lax`
+      já corretos (sem alteração necessária), API nunca exposta
+      diretamente (só via proxy nginx), `TRUST_PROXY=1` resistente a
+      spoofing (ver acima).
+- [x] CI re-confirmada sem alteração ampla: `npm run typecheck`,
+      `npm test` (370 testes), `npm run build`,
+      `npm audit --audit-level=moderate` (0 vulnerabilidades) — todos
+      rodados de novo depois de todas as correções desta fase.
+- [x] Ambiente Linux de validação (containers Docker descartáveis:
+      backend compilado + nginx real) totalmente desmontado ao final —
+      nenhum container, imagem ou banco de teste desta fase ficou
+      residente.
+
+## Fase 59 — Qualificação final do artefato de produção (CONCLUÍDA)
+
+Reproduz o procedimento da Fase 58 do zero, num segundo ambiente Linux
+totalmente independente (rede Docker nova, imagem base diferente,
+Postgres novo, nenhum arquivo reaproveitado) — prova que o resultado não
+dependeu do container específico da fase anterior. Nenhum deploy real.
+
+- [x] Build (frontend + backend) reproduzido do zero, hashes idênticos.
+- [x] `npm ci --omit=dev` + `npm start`/`node` direto confirmados sem
+      nenhuma instalação manual, em imagem `bullseye` nova (diferente da
+      `bookworm` da Fase 58).
+- [x] Server import closure: confirmado que nenhum dos 7 arquivos de
+      front-end excluídos de `tsconfig.server.json` é referenciado, direta
+      ou dinamicamente, por nenhum arquivo real do backend.
+- [x] Descoberta de endpoints: 54 arquivos no código-fonte = 54 no build
+      compilado = 54 descobertos em runtime, diff vazio.
+- [x] Endpoints críticos testados através do router real (não um atalho):
+      registro, login, sessão, organizações, logout, needs, opportunities,
+      inventory-items, platform-organizations (403 corretamente para
+      usuário comum), background-tasks (403), health. Validação Zod e
+      autorização por papel confirmadas funcionando de ponta a ponta.
+- [x] Scheduler confirmado carregado no build compilado (5 tarefas).
+- [x] Banco novo do zero via mecanismo oficial, reconfirmado
+      independentemente: 26 tabelas, 13/13 migrations (`0013` incluída).
+- [x] Restore real de um novo backup + `verifyAuditLogChain()` canônico
+      contra o banco restaurado: `integra: true`. Backend compilado
+      iniciado contra o banco restaurado com sucesso.
+- [x] **Achado real 1 — `deploy/nginx.conf` vazava headers do documento
+      para `/_api/*`**: `add_header` no nível do `server{}` era herdado
+      pela location do proxy, duplicando o `Content-Security-Policy` do
+      Express. Corrigido: headers do documento movidos para dentro de
+      `location = /index.html` e `location /` apenas. Reconfirmado sem
+      duplicação.
+- [x] **Achado real 2 — `npm start` nunca deve ser o `ExecStart`**:
+      testado isoladamente, `npm start` não repassa SIGTERM de forma
+      confiável ao processo Node filho (log mostrava `npm error signal
+      SIGTERM`, sem nenhuma linha de encerramento gracioso).
+      `deploy/levora-api.service` já chamava `node` diretamente desde a
+      Fase 58 — mas essa escolha agora tem evidência real, não só
+      convenção. Com `node` direto: SIGTERM funcionou (~0,3s, saída
+      limpa).
+- [x] Achado de processo: validar nginx só com `curl` não detecta
+      `mime.types` ausente — só um Central Visual real (navegador, não
+      `curl`) expôs que o JavaScript viria como `text/plain` nessa
+      condição. Nota adicionada em `deploy/nginx.conf`.
+- [x] Rate limiting + `TRUST_PROXY=1` reconfirmados através do nginx
+      real (já corrigido): 25 requisições com `X-Forwarded-For` forjado
+      e diferente a cada vez, mesmo bucket de rate limit.
+- [x] Restart limpo confirmado: banco íntegro, scheduler, 54 endpoints e
+      configuração todos de volta depois de `stop`/`start`.
+- [x] Environment sanitization: nenhum path absoluto de ambiente de dev
+      hardcoded no backend; referências a `localhost` são fallbacks
+      documentados e substituíveis por variável de ambiente.
+- [x] `package.json` auditado: nenhuma dependência duplicada entre
+      `dependencies`/`devDependencies`, lockfile consistente
+      (`npm ls --depth=0` sem erro).
+- [x] CI re-confirmada (`typecheck`, 370 testes, `build`,
+      `npm audit --audit-level=moderate`, `build:server`) — `build:server`
+      avaliado como estável e determinístico nesta fase (dois ambientes
+      Linux independentes, resultado idêntico), mas **não adicionado à
+      CI automaticamente** nesta fase, por decisão explícita do escopo.
+- [x] Central Visual completo através da topologia real (nginx + backend
+      compilado + Postgres novo): login, cadastro, dashboard, mobile —
+      sem erro de CSP/fonte/asset depois das correções.
+- [x] `docs/DEPLOYMENT_RUNBOOK.md` e `docs/PRODUCTION_READINESS.md`
+      atualizados com os dois achados reais e a tabela de requalificação.
+- [x] Ambiente de validação (containers, rede, imagem Docker, arquivos de
+      scratch) totalmente desmontado ao final.
+
+## Fase 60 — Seleção e validação da infraestrutura de produção (CONCLUÍDA)
+
+Sai da arquitetura abstrata (Fases 56–59) para a seleção factual de
+fornecedores reais para o primeiro ambiente de produção/staging. Pesquisa
+feita em 01/10/2026 direto nos sites/documentação oficiais de cada
+provedor. Nenhuma conta criada, nenhum domínio registrado, nenhum deploy
+real.
+
+- [x] Requisitos extraídos só da documentação já existente (Fases 55–59),
+      nenhum inventado: Linux, nginx, Node 22.x, HTTPS, Postgres 16+,
+      `sslmode=require`, backup com retenção ≥30 dias, RPO≤24h, RTO≤4h,
+      volume persistente, rede privada quando suportada, Postgres nunca
+      exposto diretamente.
+- [x] VPS pesquisados com preço/specs reais e atuais: Hetzner Cloud
+      (CPX22: 2vCPU/4GB/80GB/20TB, €19,99/mês) e DigitalOcean (Basic
+      Droplet: 2vCPU/4GB/80GB/4TB, US$24/mês).
+- [x] PostgreSQL gerenciado pesquisado: DigitalOcean Managed PostgreSQL
+      (US$15,15/mês, VPC gratuita com o Droplet), Neon (pay-as-you-go,
+      ~US$19-22/mês sem scale-to-zero), Supabase (US$25/mês Pro).
+      **Achado real**: Hetzner não oferece PostgreSQL gerenciado —
+      qualquer VPS Hetzner exigiria um provedor de banco separado, sem
+      VPC, só `sslmode=require` pela internet pública.
+- [x] **Achado real central**: nenhum dos três provedores de PostgreSQL
+      pesquisados cumpre sozinho a retenção ≥30 dias já exigida pelo
+      próprio projeto (Fase 57) — todos oferecem só 7 dias de backup/PITR
+      nativo no plano de entrada (Supabase precisaria do plano Team,
+      US$599/mês, para chegar a 14 dias, ainda assim menos que 30). O
+      procedimento `pg_dump`/`pg_restore` já validado na Fase 57 continua
+      sendo a camada que garante os 30 dias, qualquer que seja o provedor.
+- [x] DNS (Cloudflare, grátis) e TLS (Let's Encrypt, já referência desde
+      a Fase 58) confirmados sem custo e sem amarração a um único
+      provedor de VPS.
+- [x] Storage de backup independente pesquisado: Hetzner Storage Box
+      (1TB, €3,20/mês, SFTP/rsync — encaixa direto no `pg_dump` da Fase
+      57) e DigitalOcean Spaces (250GB, US$5/mês, S3-compatível).
+- [x] Duas topologias concretas comparadas (não ranqueadas por opinião,
+      só por custo e aderência aos requisitos já documentados): mesmo
+      provedor (DigitalOcean) com rede privada via VPC vs. provedores
+      cruzados (Hetzner + Neon) sem rede privada — custo mensal
+      equivalente (~US$44-47/mês) nas duas.
+- [x] **Decisão**: DigitalOcean Droplet (4GB/2vCPU) + DigitalOcean
+      Managed PostgreSQL (1GB/1vCPU) + DigitalOcean Spaces, mesma VPC —
+      critério de decisão explícito e factual: é a única das duas
+      topologias que cumpre, sem contorno, o requisito já documentado de
+      Postgres nunca exposto à internet / rede privada quando suportada.
+      Justificativa registrada em `docs/INFRASTRUCTURE_DECISION.md`, sem
+      nenhum "é o melhor" subjetivo.
+- [x] Staging, networking, security baseline e gatilhos de escalabilidade
+      futura (rate limiter compartilhado, object storage para uploads,
+      mudança de plano do Postgres Standard Edition anunciada pelo
+      provedor para out/nov de 2026) documentados, nenhum implementado.
+- [x] `docs/INFRASTRUCTURE_DECISION.md` criado;
+      `docs/PRODUCTION_READINESS.md` atualizado com o resumo da decisão.
+- [x] Regressão completa sem alteração de domínio do código:
+      `npx tsc --noEmit` (ambos tsconfigs), `npm run build`,
+      `npm run build:server`, `npm audit --audit-level=moderate`, suíte
+      de testes — todos verdes, inalterados desde a Fase 59.
+
+## Fase 61 — Staging zero-custo real via Docker + Cloudflare Tunnel (CONCLUÍDA)
+
+Mudança de estratégia: a Fase 60 tinha decidido uma infraestrutura paga
+(DigitalOcean), mas o projeto decidiu não assumir custo de hospedagem
+antes de haver investimento. Esta fase prova a mesma arquitetura
+validada nas Fases 58-60 de forma **real, pública e com custo zero**,
+usando Docker local + Cloudflare Tunnel gratuito (sem conta). Nenhum
+provedor pago, nenhum cartão, nenhuma conta nova.
+
+- [x] `Dockerfile` novo (multi-stage: build completo depois `npm ci
+      --omit=dev` só com o compilado) e `deploy/nginx.staging.conf`
+      (adaptação de `deploy/nginx.conf` só para rede Docker e ausência
+      de TLS local — a correção de headers da Fase 59 replicada de
+      propósito). `deploy/nginx.conf`/`deploy/levora-api.service`/
+      `docs/DEPLOYMENT_RUNBOOK.md` (deploy em VPS real) preservados sem
+      alteração para quando houver investimento.
+- [x] `docker-compose.staging.yml`: 3 serviços (postgres, app, nginx),
+      volumes nomeados persistentes (`postgres_data`, `uploads_data`).
+      `app` e `postgres` sem nenhuma porta publicada no host; `nginx` só
+      em `127.0.0.1:8088` — nenhum port forwarding necessário.
+- [x] Build real: `npm ci --omit=dev` (confirmado `tsx` presente, achado
+      da Fase 58 reconfirmado num ambiente novo), `npm run build`,
+      `npm run build:server`.
+- [x] Migrations pelo mecanismo oficial (nunca `psql -f`) contra um
+      Postgres novo: 26 tabelas, 22 triggers, **13/13 migrations,
+      incluindo `0013`**.
+- [x] **Cadeia de confiança de IP investigada e comprovada de verdade**
+      (não assumida): `CF-Connecting-IP` não pode ser forjado pelo
+      cliente (testado — a borda da Cloudflare devolveu 403 antes de a
+      requisição chegar ao túnel); `X-Forwarded-For` pode ser forjado,
+      mas a Cloudflare só acrescenta o IP real ao final, nunca
+      substitui. `nginx.staging.conf` usa só `CF-Connecting-IP`.
+- [x] Rate limiting reconfirmado através da cadeia completa real
+      (`Cloudflare → túnel → nginx → Express`): 25 tentativas de login
+      com XFF forjado e diferente a cada vez, 20 permitidas + 5
+      bloqueadas, mesmo bucket.
+- [x] Scheduler confirmado (5 tarefas) em toda subida/restart do
+      container.
+- [x] **Decisão de storage de uploads registrada explicitamente: volume
+      Docker local (Opção A)**, não object storage — testado (escrita,
+      leitura, persistência depois de `docker compose down`/`up` sem
+      `-v`).
+- [x] Backup real (`pg_dump`, 126.361 bytes, SHA-256 registrado) salvo
+      em `backups/` no host, fora de qualquer volume do Postgres —
+      inclui um usuário de teste real criado através do túnel público.
+- [x] Restore real num banco separado: 26/26 tabelas, 13/13 migrations,
+      dado do usuário preservado, `verifyAuditLogChain()` canônico
+      rodado com sucesso (`integra: true`), e um container `app`
+      temporário apontado para o banco restaurado respondeu login com
+      sucesso.
+- [x] Persistência confirmada: `docker compose down`/`up` completo sem
+      perder banco nem uploads.
+- [x] SIGTERM real (`docker stop`, ~303ms, saída limpa) e restart
+      limpos — reconfirma o achado da Fase 59 (nunca `npm start` como
+      entrypoint) num ambiente novo.
+- [x] Acesso pela URL pública do Cloudflare Tunnel (nunca por
+      `localhost`) confirmado via navegador de um ambiente isolado — Central
+      Visual completo (login, dashboard, fallback de SPA, mobile).
+      **Ressalva (corrigida na Fase 70):** o IP de origem desse teste estava
+      na mesma faixa pública do próprio host (ver
+      `docs/STAGING_ZERO_COST.md` §P), então ele prova a cadeia
+      Cloudflare → túnel → nginx → app, mas **não** um acesso a partir de
+      uma rede fisicamente distinta; essa verificação segue pendente.
+- [x] Segurança confirmada: Postgres e Express sem porta publicada no
+      host, `JWT_SECRET` de staging gerado fresco e nunca commitado,
+      `.env` real nunca tocado, cookies com `HttpOnly`/`Secure`/
+      `SameSite=Lax` intactos.
+- [x] Custo real: **US$0,00** — nenhuma conta paga criada.
+- [x] Limitações documentadas sem esconder: disponibilidade depende
+      deste computador/conexão residencial, backup sem independência
+      geográfica, instância única, sem alertas externos — classificado
+      explicitamente como staging/demonstração, nunca produção
+      empresarial.
+- [x] `docs/STAGING_ZERO_COST.md` criado;
+      `docs/PRODUCTION_READINESS.md` e `docs/INFRASTRUCTURE_DECISION.md`
+      atualizados — a decisão de infraestrutura paga da Fase 60
+      permanece válida para quando houver investimento, só adiada.
+- [x] Ao final: processo `cloudflared` encerrado (URL pública para de
+      responder) e `docker compose down` **sem `-v`** — volumes
+      `postgres_data`/`uploads_data` preservados para reuso.
+- [x] Regressão completa: `npx tsc --noEmit` (ambos tsconfigs), `npm
+      audit --audit-level=moderate` (0 vulnerabilidades), 370/370 testes
+      — todos verdes, nenhuma alteração de domínio do código.
+
+
+## Fase 62 — Operacionalização do staging gratuito (CONCLUÍDA)
+
+Transforma o staging zero-custo validado na Fase 61 em um ambiente
+operacional reproduzível: scripts PowerShell (`scripts\staging-up.ps1`,
+`staging-status.ps1`, `staging-down.ps1`, `staging-backup.ps1`,
+`staging-restore.ps1`, `staging-reset.ps1`, `staging-destroy.ps1`),
+runbook completo (`docs/STAGING_OPERATIONS.md`). Classificado
+explicitamente como demonstração/teste, nunca produção. Custo: US$0,00.
+
+- [x] `staging-up.ps1`: verifica/inicia o Docker, carrega ou gera
+      `STAGING_JWT_SECRET` (persistido fora do Git em
+      `.staging-runtime\secrets.env`), builda e sobe os containers,
+      detecta sozinho se o banco é novo ou um volume reaproveitado para
+      escolher entre `db:migrate` e `db:migrate:incremental` (achado
+      real: a primeira versão do script sempre rodava `db:migrate`, que
+      não é idempotente por design — corrigido antes de causar dano),
+      espera a aplicação responder, sobe o Cloudflare Quick Tunnel e
+      imprime a URL pública.
+- [x] `staging-status.ps1`, `staging-down.ps1` (nunca apaga volumes),
+      `staging-backup.ps1` (timestamp + SHA-256, sem BOM — achado real:
+      `Out-File -Encoding utf8` do PowerShell grava BOM, quebrando
+      `sha256sum -c` padrão, corrigido escrevendo o `.sha256` em ASCII
+      puro), `staging-restore.ps1` (sempre banco separado, confere
+      checksum antes de restaurar, valida schema + `verifyAuditLogChain`
+      + login real contra o banco restaurado).
+- [x] `staging-reset.ps1` e `staging-destroy.ps1`: perigosos por
+      definição, nome do banco de staging fixo e não-parametrizável
+      (nunca podem acertar outro banco), exigem digitar uma frase de
+      confirmação exata (`Read-Host`) — testado que, sem terminal
+      interativo, o script falha com segurança (nada é apagado) em vez
+      de prosseguir.
+- [x] Todos os scripts testados de verdade, não só lidos: dois achados
+      reais de encoding/API corrigidos durante o teste (em-dash UTF-8
+      sem BOM quebrando o parser do PowerShell 5.1;
+      `RandomNumberGenerator.Fill` não existe no .NET Framework do
+      Windows PowerShell 5.1, trocado por `RNGCryptoServiceProvider`;
+      `Start-Process` recusa o mesmo arquivo para
+      `RedirectStandardOutput`/`RedirectStandardError`).
+- [x] **Achado real crítico, corrigido**: depois do staging ficar no ar
+      por mais tempo que nas fases anteriores, login (e qualquer rota
+      que tocasse o banco) passou a travar indefinidamente. Investigação
+      real via `pg_stat_activity`: 3 conexões idle, última query
+      `pg_try_advisory_lock` — o mecanismo do scheduler
+      (`reserveDedicatedConnection`, `src/helpers/scheduledTaskLock.tsx`)
+      disputava o MESMO pool pequeno (`max: 3`, `src/helpers/db.tsx`)
+      usado por toda query comum da aplicação. Como as 5 tarefas
+      agendadas podem reservar conexão ao mesmo tempo sem conflito entre
+      si (cada uma com `objId` próprio), uma sobreposição real esgotava
+      o pool inteiro, travando para sempre qualquer query comum
+      (inclusive o corpo das próprias tarefas agendadas) — deadlock
+      total e permanente, só resolvido reiniciando o processo.
+      Reproduzido de propósito (5 tarefas disparadas em paralelo) antes
+      e depois da correção. **Corrigido**: pool separado e dedicado só
+      para o scheduler (`max: 5`), nunca compartilhado com o pool
+      principal — depois da correção, as mesmas 5 tarefas simultâneas
+      não afetam login (responde em 0,35s). Esse bug teria eventualmente
+      travado qualquer deploy real de longa duração desta arquitetura,
+      staging ou produção futura — só apareceu porque esta fase, ao
+      operacionalizar o staging para ficar no ar por mais tempo, deu
+      tempo real de execução suficiente para a condição ocorrer.
+- [x] Central Visual completo pela URL pública real (não `localhost`):
+      login, dashboard, mobile, sem erro de console numa aba nova —
+      confirmado antes e depois da correção do deadlock.
+- [x] `docs/STAGING_OPERATIONS.md` criado (17 seções);
+      `docs/STAGING_ZERO_COST.md`, `docs/PRODUCTION_READINESS.md` e
+      `docs/INFRASTRUCTURE_DECISION.md` atualizados com o achado do
+      deadlock e a operacionalização.
+- [x] Regressão completa depois da correção: `npx tsc --noEmit` (ambos
+      tsconfigs), 370/370 testes, `npm run build`/`build:server`,
+      `npm audit --audit-level=moderate` (0 vulnerabilidades) — todos
+      verdes.
+
+## Fase 63 — Auditoria de lifecycle, capacidade e concorrência dos pools PostgreSQL (CONCLUÍDA)
+
+Audita se a correção da Fase 62 (pool separado para o scheduler) estava
+completa: lifecycle, concorrência, exaustão, shutdown, restart, falhas
+de banco, transações, locks e connection leaks. Nenhum terceiro pool
+criado, nenhum limite aumentado por tentativa e erro.
+
+- [x] Matriz completa de pools construída por busca textual em todo
+      `src/`/`db/`: só existem 2 pools na aplicação (`pgClient` max 3,
+      `scheduledTaskLockClient` max 5, ambos em `src/helpers/db.tsx`) +
+      1 conexão `max:1` própria dos scripts de migration (CLI, curta
+      duração, sempre fechada com `sql.end()`). Nenhum outro ponto do
+      projeto cria pool ou conecta direto ao Postgres.
+- [x] Lifecycle confirmado, não presumido: os dois pools da aplicação
+      são singletons eager (criados uma vez na primeira importação de
+      `db.tsx`, garantido pelo cache de módulos do Node mesmo com vários
+      importadores); `closeDbPool()` fecha os dois em paralelo; restart
+      real confirmou exatamente uma instância de cada depois.
+- [x] Capacidade documentada: 8 conexões aplicacionais no total (3+5),
+      9 no pico contando a migration — `max_connections` real do
+      Postgres de staging é 100, folga ampla. Nenhum valor tornado
+      configurável por variável de ambiente (sem necessidade operacional
+      concreta demonstrada).
+- [x] Pressão controlada real: 5 tarefas agendadas reais (corpo real,
+      não mock) disparadas simultaneamente + login real simultâneo pela
+      URL pública — login em 0,64s, tarefas em 76ms totais; needs/
+      inventory-items/opportunities autenticados respondendo em ~0,25s
+      cada durante a sobreposição.
+- [x] Exaustão deliberada de cada pool (4 queries de 3s contra `max:3`;
+      6 reservas de 3s contra `max:5`): fila graciosa confirmada em
+      ambos — nunca erro, nunca trava permanente, recuperação completa
+      logo depois.
+- [x] Isolamento cruzado comprovado nas duas direções: pool do
+      scheduler saturado (7×4s) não afeta 5 logins reais consecutivos
+      (~0,3s cada); pool da API saturado (5×4s) não afeta uma reserva do
+      scheduler (21ms).
+- [x] Erro dentro de uma tarefa agendada: lock liberado corretamente
+      mesmo com exceção — tentativa seguinte da mesma tarefa teve
+      sucesso imediato.
+- [x] SIGTERM real com reservas do scheduler ativas no momento exato do
+      sinal: encerramento gracioso confirmado (~397ms), zero conexões
+      residuais no Postgres depois — prova de que `closeDbPool()`
+      realmente fecha os dois pools, não só um.
+- [x] Falha real de PostgreSQL: container parado com o app rodando —
+      `/_api/__health` (liveness pura) continuou 200; login falhou
+      graciosamente (400, ~3,5s, nunca travou nem derrubou o processo).
+      Depois do Postgres voltar, login funcionou de novo sozinho
+      (reconexão automática do driver), sem pool ou timer duplicado.
+- [x] Auditoria de transações (needs/stock/matching/audit log/background
+      tasks): nenhuma transação mantém conexão presa por tempo
+      indefinido, com uma exceção registrada como achado (não corrigida
+      — fora do escopo "não tocar Matching 1.4"): `opportunityMatching.tsx`
+      chama a IA (Anthropic, sem timeout configurado) dentro de um
+      `db.transaction()`, prendendo uma conexão do pool da API durante
+      toda a chamada externa — risco real de latência/pressão sob
+      volume, não o mesmo tipo de deadlock permanente da Fase 62.
+- [x] Auditoria de connection leak: único uso de `.reserve()` em todo o
+      projeto é `reserveDedicatedConnection()`, sempre dentro de um
+      try/finally que garante `.release()` — nenhum vazamento
+      encontrado.
+- [x] Achado registrado, não corrigido (fora do escopo "não tocar
+      autenticação"): `login_with_password_POST.ts` tem um catch
+      abrangente que devolve sempre "Falha na autenticação" (400),
+      inclusive quando o erro real é o banco estar indisponível — sem
+      nenhum log do erro real. Mascara problemas de infraestrutura como
+      senha errada.
+- [x] Central Visual real durante sobreposição ativa de scheduler: login
+      e dashboard funcionando normalmente pela URL pública do túnel.
+- [x] `test/dbPoolIsolation.test.ts` criado (2 testes, contra Postgres
+      real) — satura cada pool deliberadamente e confirma que o outro
+      responde rápido; fica no CI como proteção permanente contra a
+      reintrodução do bug da Fase 62.
+- [x] Requisito mínimo documentado para o PostgreSQL gerenciado futuro:
+      8 conexões aplicacionais (9 no pico), margem operacional a definir
+      no momento da contratação — nenhum fornecedor pesquisado de novo.
+- [x] Achado real de script corrigido durante o teste de restart:
+      `staging-up.ps1` tratava qualquer saída em stderr do `docker
+      compose` (progresso normal do buildkit) como erro terminante por
+      causa de `$ErrorActionPreference = "Stop"` no Windows PowerShell
+      5.1 — corrigido para `"Continue"`, mantendo os checks explícitos
+      de `$LASTEXITCODE` que já detectavam falhas de verdade.
+- [x] Regressão completa: `npx tsc --noEmit` (ambos tsconfigs), `npm run
+      build`/`build:server`, `npm audit --audit-level=moderate` (0
+      vulnerabilidades), suíte de testes (370 + 2 novos) — todos verdes.
+
+## Fase 64 — Hardening de timeout de IA, fronteira transacional e classificação de erros (CONCLUÍDA)
+
+Corrige os dois achados registrados-mas-não-corrigidos na Fase 63
+(estavam fora de escopo lá por proteção de domínio). Matching 1.4
+preservado integralmente — só fronteira de timeout e tratamento de erro
+alterados.
+
+- [x] Fluxo de matching mapeado linha a linha a partir do código real:
+      `BEGIN` → `SELECT ... FOR UPDATE` da oportunidade → leituras em
+      lote (candidatos, saldos, capacidade/logística/área) → chamada de
+      IA → loop de score/escrita → `COMMIT`. Confirmado que a chamada de
+      IA não usa `trx` nem precisa de nenhum dado só disponível dentro da
+      transação (recebe texto/candidatos já resolvidos em memória).
+- [x] Investigado se seria seguro mover a IA para fora da transação:
+      **não é, sem reestruturação maior** — o lock `FOR UPDATE` protege a
+      consistência de `remaining`/`existingOrgIds` contra execuções
+      concorrentes do mesmo matching, e esse lock só existe enquanto a
+      transação está aberta; encerrá-la e reabri-la ao redor da IA
+      reintroduziria uma corrida real sobre quanto da oportunidade já foi
+      alocado. Decisão registrada e justificada, não executada — a
+      reestruturação completa (revalidação de estado no ponto de
+      escrita) fica para uma fase futura, fora do escopo "não alterar
+      Matching 1.4".
+- [x] **Correção escolhida — timeout real**: `src/helpers/aiClient.tsx`
+      ganhou `AbortController` + limite de 8 segundos (justificado:
+      latência típica do modelo usado — Haiku, lote de até 20
+      candidatos, até 1024 tokens de saída — fica bem abaixo disso; o
+      fallback determinístico por palavra-chave já existia para qualquer
+      falha de IA, preservando o resultado funcional). O `fetch` é
+      cancelado de verdade (não só uma desistência local) via
+      `signal: controller.signal`.
+- [x] Fallback existente confirmado como já cobrindo timeout: o
+      try/catch amplo em `aiCategoryScores` (opportunityMatching.tsx)
+      já tratava qualquer erro de IA como "seguir sem IA" — só o log foi
+      melhorado para distinguir timeout de outras falhas
+      (`AiTimeoutError`), sem mudar o comportamento.
+- [x] Concorrência testada: duas execuções de matching em sequência após
+      um timeout funcionam normalmente (sem lock/conexão presos);
+      enquanto uma IA lenta segura uma conexão da transação de matching,
+      uma query comum via `db` continua respondendo rápido (pool da API
+      intacto, mesma categoria de proteção já provada para o scheduler
+      na Fase 63).
+- [x] Transação após timeout: nenhum registro parcial, nenhuma avaliação
+      incompleta, `matching.executado` gravado normalmente no audit log
+      mesmo quando a IA expira.
+- [x] Pipeline global de erros investigado: `buildErrorResponse`
+      (`src/helpers/errorResponse.tsx`, usado por ~40 endpoints) tem
+      default 400 para erro desconhecido — **não alterado** (risco alto
+      de quebrar validações de negócio legítimas que dependem desse
+      default em endpoints não auditados nesta fase; registrado como
+      achado mais amplo para investigação futura). `login_with_password_POST.ts`
+      tinha seu próprio catch bespoke (não usa `buildErrorResponse`),
+      corrigido isoladamente: `ZodError`/`SyntaxError` (entrada
+      malformada) → 400; qualquer outra exceção inesperada (ex.: banco
+      indisponível) → 500, logada no servidor, mensagem pública genérica
+      sem vazar stack/SQL/host/credenciais. Falhas de credencial reais
+      (e-mail/senha errados, rate limit) continuam exatamente como
+      antes, tratadas antes deste catch.
+- [x] `/_api/__health` confirmado inalterado — continua liveness-only,
+      nenhuma necessidade concreta de readiness separado identificada.
+- [x] Testado em staging real (não só unitário): PostgreSQL derrubado →
+      login agora 500 (antes 400) com erro logado no servidor →
+      religado → recuperação automática, sem pool/timer duplicado.
+      Reprodução da IA lenta dentro do container real de staging (mock
+      de `fetch`, nunca o provedor real): login respondeu em 0,36s
+      enquanto a transação de matching segurava uma conexão esperando a
+      IA, que abortou em ~8036ms exatamente como configurado.
+- [x] Central Visual confirmado pela URL pública real do staging: login
+      e dashboard normais, sem erro de console além dos 401 esperados
+      pré-login.
+- [x] `test/aiTimeoutAndPoolIsolation.test.ts` criado (3 testes, mock
+      de `fetch` que só resolve quando o `AbortController` real
+      dispara — nunca serviço externo real): timeout realmente abortado
+      (~8s, nunca pendurado), segunda execução depois do timeout funciona
+      sem resíduo, pool da API disponível durante a espera da IA.
+- [x] Não regressão do Matching: nenhum peso, critério, threshold,
+      renormalização, unidade, elegibilidade, desempate ou
+      `ALGORITHM_VERSION` alterado — confirmado pelos testes existentes
+      de matching (inalterados) continuando verdes.
+- [x] Regressão completa: `npx tsc --noEmit` (ambos tsconfigs), `npm
+      audit --audit-level=moderate` (0 vulnerabilidades), suíte de
+      testes (375 + 3 novos = 378) — todos verdes.
+
+## Fase 65 — Auditoria global da classificação de erros da API (CONCLUÍDA)
+
+Investiga e corrige o achado registrado-mas-não-corrigido na Fase 64:
+`buildErrorResponse` (49 dos 54 endpoints) tinha default 400 para erro
+desconhecido e repassava `error.message` bruto ao cliente.
+
+- [x] Helper mapeado por completo: assinatura, status default, tratamento
+      de tipos conhecidos (`NotAuthenticatedError`→401,
+      `OrganizationAccessError`/`PlatformAccessError`→403), ausência de
+      tratamento de `ZodError`/`SyntaxError` explícito (ambos caíam no
+      default), ausência total de uso do parâmetro `extraStatus` em
+      qualquer dos 49 consumidores.
+- [x] Todos os 49 consumidores mapeados (grep real, não inferência por
+      nome de arquivo); confirmado que só 1 endpoint
+      (`opportunities-status_POST.ts`) tinha um `throw new Error`
+      deliberado de negócio — usando a mesma comparação de texto frágil
+      (`msg.includes("recebida")`) que o comentário no topo do arquivo já
+      dizia ter sido eliminada do projeto, mas não tinha.
+- [x] **Achado real, reproduzido de verdade contra Postgres**:
+      `error.message` de um erro de conexão real expõe o hostname
+      interno (`getaddrinfo ENOTFOUND <host>`); de um erro de query real
+      expõe nome de tabela/schema (`relation "x" does not exist`) — os
+      49 endpoints repassavam isso direto ao cliente para QUALQUER
+      `Error`, não só os tipos conhecidos.
+- [x] **Correção central, um único ponto**: `src/helpers/errorResponse.tsx`
+      — nova classe `ConflictError` (409, substitui a comparação de texto
+      frágil no único caso real do projeto); default de erro desconhecido
+      passa de 400 para 500; mensagem pública de erro desconhecido nunca
+      mais é `error.message` — sempre `fallbackMessage`, já seguro e
+      específico por endpoint.
+- [x] **Dois achados reais de regressão, descobertos pela própria suíte
+      de testes durante a correção** (não hipotéticos — a suíte real
+      pegou os dois): `ZodError` precisava de classificação explícita
+      (400, mensagem preservada) para não cair no novo default 500;
+      `SyntaxError` nativo (corpo que nem chega a ser JSON válido, antes
+      mesmo do Zod rodar — ex.: o cenário de CSRF com corpo não-superjson
+      já coberto por `test/securityHardening.test.ts`) também precisava
+      (400, mensagem genérica fixa "Corpo da requisição inválido", nunca
+      o texto cru do parser nem o `fallbackMessage` do endpoint, que
+      descreveria uma ação que nem chegou a começar). Ambos corrigidos
+      antes de fechar a fase — a suíte completa (384 testes) confirma
+      zero regressão depois.
+- [x] Autorização (401/403) e Zod preservados integralmente — mesmo
+      comportamento de antes, agora com teste direto do helper.
+- [x] `executeTakeFirstOrThrow` (único uso no projeto,
+      `organization-invites_POST.ts`) investigado: representa
+      inconsistência real de dados (org que deveria existir, dado acesso
+      já verificado), não um "recurso não encontrado" legítimo de
+      usuário — 500 é a classificação correta, nenhuma mudança
+      necessária.
+- [x] Validado ao vivo em staging (não só teste automatizado): Postgres
+      indisponível → 500 com mensagem genérica, erro real (hostname,
+      errno) logado só no servidor; Zod inválido → 400; sem autenticação
+      → 401; conflito real (oportunidade já recebida) → 409 com a
+      mensagem preservada; corpo JSON malformado → 400 com "Corpo da
+      requisição inválido". Recuperação confirmada após religar o
+      Postgres.
+- [x] Central Visual: login inválido mostra mensagem limpa sem stack
+      trace nem tela branca; login válido funciona normalmente.
+- [x] `test/errorResponse.test.ts` (7 testes, direto no helper central —
+      "preferir testes do helper quando o comportamento for
+      centralizado") e `test/opportunitiesStatusConflict.test.ts` (1
+      teste de integração do único caso real de conflito) criados.
+- [x] Nenhuma alteração em Matching 1.4, rate limiter, scheduler, pool
+      architecture, security headers, Docker, Cloudflare ou backup.
+- [x] Regressão completa: `npx tsc --noEmit` (ambos tsconfigs), `npm run
+      build`/`build:server`, `npm audit --audit-level=moderate` (0
+      vulnerabilidades), suíte de testes (384, confirmado limpo numa
+      execução isolada depois de descartar falhas de duas execuções
+      anteriores que se mostraram ruído de ambiente — múltiplos `npm
+      test` concorrentes contra o mesmo Postgres de teste, não
+      regressão real).
+
+## Fase 66 — `build:server` como gate permanente do CI (CONCLUÍDA)
+
+Fecha a lacuna descrita desde a Fase 58: até esta fase, `npm test` +
+`npm run build` + `npm audit` verdes na CI nunca garantiam que o
+artefato real de produção do backend (`dist-server/`) sequer compilava.
+
+- [x] CI atual auditado linha a linha
+      (`.github/workflows/ci.yml`) antes de qualquer alteração: `npm ci`
+      → typecheck → testes → build (só frontend) → audit, com um
+      comentário explicitamente (e incorretamente, confirmado pela Fase
+      58) dizendo que `build:server` "já estava coberto pelo typecheck".
+- [x] `build:server` reexecutado do zero: exit 0, 148 arquivos,
+      entrypoint e `scheduled-jobs.json` presentes, 54 endpoints
+      descobertos.
+- [x] Determinismo confirmado: duas (e uma terceira) builds limpas em
+      sequência produzem a mesma lista de arquivos e os mesmos hashes
+      SHA-256 byte a byte (`scheduled-jobs.json`, `server/index.js`).
+- [x] Gate adicionado ao workflow existente (nenhum workflow novo):
+      `npm run build:server` depois do build do frontend, sem nenhum
+      `|| true` nem saída mascarada.
+- [x] Ordem final: `npm ci → typecheck → testes → build → build:server →
+      verificação do artefato → audit` — exatamente a ordem sugerida
+      pela fase, build:server antes do audit para falhar o mais cedo
+      possível num problema de compilação antes de gastar tempo com
+      dependências.
+- [x] Verificação de artefato adicionada (não frágil — sem contar
+      arquivos exatos): confere `dist-server/server/index.js`,
+      `dist-server/src/static/__dev/scheduled-jobs.json` e que pelo
+      menos 1 endpoint foi descoberto, falhando o job com mensagem clara
+      se qualquer um faltar.
+- [x] **Teste real de falha do gate (etapa obrigatória)**: import
+      inexistente introduzido de propósito em `db.tsx`, `build:server`
+      confirmado falhando com exit code 2 (não 0) — prova de que o gate
+      realmente quebra o job. **Achado real durante a reversão**: usar
+      `git checkout -- src/helpers/db.tsx` para desfazer a quebra
+      proposital reverteu o arquivo para o último COMMIT (não para o
+      estado anterior à quebra) — como nada tinha sido commitado nesta
+      sessão inteira, isso apagou também a correção real de pool
+      separado da Fase 62 (deadlock do scheduler). Detectado
+      imediatamente pelo diff mostrado antes do checkout, reconstruído à
+      mão a partir do conteúdo correto conhecido, e reconfirmado: 5
+      testes de isolamento de pool (`dbPoolIsolation.test.ts`,
+      `aiTimeoutAndPoolIsolation.test.ts`) voltaram a passar, e a suíte
+      completa (384 testes) confirmou zero dano colateral.
+- [x] Caso específico do `scheduled-jobs.json` (já causou um bug real na
+      Fase 58) coberto explicitamente na verificação de artefato — não
+      um teste artificial, um `test -f` simples e determinístico.
+- [x] `npm ci --omit=dev` confirmado como o mecanismo de instalação da
+      CI continua inalterado — nenhuma dependência movida de novo.
+- [x] Backend não é iniciado na CI (sem `npm start`) — só o artefato de
+      build é validado, exatamente como pedido.
+- [x] CI remoto: não executado nesta sessão (nenhum push feito — regra
+      mantida durante toda a sessão de nunca commitar/empurrar
+      automaticamente) — declarado explicitamente, não fingido. Os
+      mesmos comandos exatos do workflow foram validados localmente.
+- [x] `permissions: contents: read` preservado sem alteração.
+- [x] `docs/TESTING.md` e `docs/DEPLOYMENT_RUNBOOK.md` (uma nota pontual,
+      não reescrita) atualizados.
+- [x] Nenhuma alteração em Modelo B, Matching, needs, stock,
+      autenticação, errorResponse, rate limiting, pools, scheduler,
+      Docker, Cloudflare, Nginx, produção ou domínio.
+- [x] Regressão completa: `npx tsc --noEmit` (ambos tsconfigs), `npm run
+      build`/`build:server`, `npm audit --audit-level=moderate` (0
+      vulnerabilidades), suíte de testes (384) — todos verdes depois da
+      reconstrução de `db.tsx`.
+## Fase 67 — Consolidação do estado e checkpoint seguro (CONCLUÍDA)
+
+Motivação: as Fases 48–66 ficaram todas sem commit; o incidente da Fase 66
+(`git checkout -- src/helpers/db.tsx` voltando ao último commit e apagando a
+correção de pool da Fase 62) mostrou o risco. Sem funcionalidade nova.
+
+- Inventário Git, mapeamento por fase e confirmação das correções críticas.
+- Migration 0013 presente, ordem 0001–0013 intacta, `db/schema.sql` coerente.
+- Gates finais: typecheck (2 tsconfigs), 384/384 testes (43 arquivos),
+  `build`, `build:server` (54 endpoints), `npm audit` sem vulnerabilidades.
+- Smoke do staging: containers, Postgres, Express, Nginx, Tunnel; cadastro,
+  login, sessão, organização, necessidade e oportunidade.
+- Varredura de segredos nos arquivos candidatos ao commit.
+- `docs/DEVELOPMENT.md`: commitar antes de operações destrutivas e o risco
+  do `git checkout --`.
+- O commit de checkpoint só é criado com autorização explícita; sem push.
+
+## Fase 68 — Dataset sintético idempotente para staging e demonstração (CONCLUÍDA)
+
+Objetivo: depois de `staging-reset` + seed, abrir a Levora e demonstrar uma
+organização fictícia completa em poucos minutos, usando as mesmas regras do
+domínio (sem saldo artificial, sem matching falsificado, sem lifecycle
+forçado).
+
+- `db/seedStagingGuard.ts` — guarda pura e conservadora (declaração
+  explícita `LEVORA_ENVIRONMENT=staging`, banco `*_staging`/`*_demo`, host
+  em lista fechada); roda antes de qualquer conexão. `NODE_ENV` sozinho
+  não distingue staging de produção. Provada com testes que executam o CLI
+  real.
+- `db/seedStaging.ts` — chama o `handle()` dos endpoints reais; únicas
+  escritas SQL diretas: promover o admin sintético, redefinir senhas e
+  sessões internas. Idempotente por chaves naturais; um segundo run faz 0
+  escritas e não gera auditoria.
+- `db/seed-staging.ts` + `npm run seed:staging` +
+  `scripts/staging-seed.ps1`; o `db:seed` quebrado (`db/seed.ts` nunca
+  existiu) foi removido.
+- Matching 1.4 intocado: uma oportunidade foi atribuída automaticamente e
+  outra, fora de qualquer área de atendimento, permaneceu aguardando
+  destinação — ambas por avaliação real.
+- Testes permanentes: `test/seedStagingGuard.test.ts`,
+  `test/seedStaging.test.ts`. Documentação: `docs/STAGING_DEMO.md`.
+
+## Fase 69 — Qualificação final do staging público de demonstração (CONCLUÍDA)
+
+Fase operacional, sem mudança de domínio.
+
+- **`staging-up.ps1` preso quando encadeado:** causa raiz reproduzida
+  (24,4 s contra 0,2 s): `Start-Process` com `-RedirectStandard*` faz o
+  `cloudflared` herdar o handle do pipe de stdout do PowerShell pai.
+  Corrigido sem redirecionar nada e usando `cloudflared --logfile`.
+- **Sem túnel duplicado:** lock exclusivo de subida e detecção de túnel
+  órfão pela linha de comando exata (nunca por nome de processo).
+- **URL só anunciada quando funciona:** espera de propagação de DNS via DoH
+  e confirmação pela borda da Cloudflare (`curl --resolve`) antes de
+  imprimir "Verificada".
+- **Overflow mobile investigado, não presumido:** era real em 4 pontos
+  (faixa de abas de 4 páginas, textos longos na trilha de auditoria,
+  prestação de contas e o diálogo compartilhado); corrigido em CSS/markup
+  dos componentes afetados. Validado em 375, 390 e 768 px. O `Input`
+  (`content-box`) não foi alterado: mudaria a altura de todos os campos.
+- Validação pública pela URL do Quick Tunnel (HTTPS), reset → seed → down →
+  up (dados preservados, URL nova, scheduler com execução real do cron).
+- `docs/STAGING_DEMO.md` ganhou o procedimento de demonstração e as
+  limitações operacionais.
+
+## Fase 70 — Freeze do staging e checkpoint das Fases 68–69 (CONCLUÍDA)
+
+Fase de congelamento: nenhuma funcionalidade, nenhuma mudança de domínio,
+migrations, matching, autenticação, RBAC ou arquitetura do staging.
+
+- Auditoria do working tree (somente Fases 68–69; nada escondido),
+  verificação dos mecanismos dos scripts de staging, varredura de segredos
+  sobre o conteúdo exato do commit e do índice Git, e conferência de
+  coerência entre scripts, documentação e comportamento real.
+- Correção de documentação: duas frases da Fase 61 afirmavam acesso "de fora
+  da rede local", contradizendo a limitação honesta do próprio
+  `STAGING_ZERO_COST.md` §P (IP de origem na mesma faixa do host).
+- `graphify-out/` (saída gerada por ferramenta) passou a ser ignorado pelo Git.
+- **Pendência explícita, não é defeito conhecido:** a disponibilidade pública
+  foi validada pela própria máquina hospedeira através da borda Cloudflare,
+  mas ainda não houve validação independente por celular/outra rede
+  (`docs/STAGING_DEMO.md` §7.1).
+
+## Fase 71 — Retomada pós-freeze e auditoria do roadmap (CONCLUÍDA — só auditoria, read-only)
+
+Confirmou o baseline `dbc4fe3` (407/407), reconstruiu o estado real do
+produto cruzando roadmap e código e identificou a lacuna do ciclo de vida
+dos membros como próximo bloco. Relatório entregue no chat, não neste arquivo.
+
+## Fase 72 — Reconciliação do roadmap e especificação do ciclo de membros (CONCLUÍDA — só documentação)
+
+Fase de reconciliação e especificação; nenhum código, migration, tabela,
+endpoint, componente, permissão ou sessão foi alterado.
+
+- `docs/ROADMAP_ATUAL.md` (novo): estado atual verdadeiro, em
+  CONCLUÍDO / PARCIAL / PRÓXIMO / DECISÃO DE PRODUTO PENDENTE / PENDENTE /
+  ADIADO / BLOQUEADO, com o mapa linha a linha das divergências deste arquivo.
+  Os documentos históricos receberam apenas um aviso no topo.
+- `docs/MEMBROS_ESPECIFICACAO.md` (novo): especificação de alterar papel,
+  desativar membro e sair, com invariante "sempre ao menos um proprietário
+  ativo", protocolo de locks, cinco cenários de concorrência, auditoria,
+  RBAC, interface e plano de testes.
+- Dois achados novos que a especificação trata: a regra de "único
+  proprietário" da exclusão de conta roda fora da transação e sem lock, e o
+  aceite de convite sobrescreve papel/status sem olhar o estado atual.
+- Correção à Fase 71: `membership_status = inativo` já é escrito pela
+  exclusão de conta; o que falta é um fluxo de gestão.
+
 ## Limitação registrada: proximidade não é distância real
 
 O critério de localização usa cidade/estado (mesma cidade = melhor, mesmo
@@ -2130,6 +3578,10 @@ cálculo geográfico real.
 
 
 ## Fases seguintes (não iniciadas — dependem da fase 1 estar estável)
+
+> Nota (Fase 72): seção **histórica**, escrita no início do projeto. A maior
+> parte dos itens 2–8 foi implementada ao longo das Fases 2–70. O que resta,
+> com estado real e dependências, está em `docs/ROADMAP_ATUAL.md`.
 
 Cada uma será um domínio implementado e testado isoladamente, seguindo a
 ordem de prioridade do master prompt (segurança > automação; controle de
@@ -2161,7 +3613,9 @@ risco > automação total; isolamento > velocidade):
 ## Como cada fase deve ser entregue
 
 1. Ler o que já existe antes de mudar.
-2. Atualizar este arquivo e `status-implementacao.md`.
+2. Atualizar este arquivo e `status-implementacao.md` (a partir da Fase 72,
+   o estado atual vive em `docs/ROADMAP_ATUAL.md`; `status-implementacao.md`
+   é histórico).
 3. Implementar o domínio (banco → helpers de autorização/auditoria →
    endpoints → interface).
 4. Testar o fluxo real (não apenas checar tipos).

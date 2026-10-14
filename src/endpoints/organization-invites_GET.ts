@@ -1,10 +1,10 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePermissionToRead } from "../helpers/organizationAccess";
-import { expirePendingInvitesForOrganization } from "../helpers/organizationInvites";
-import { schema } from "./organization-invites_GET.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePermissionToRead } from "../helpers/organizationAccess.js";
+import { expirePendingInvitesForOrganization } from "../helpers/organizationInvites.js";
+import { schema } from "./organization-invites_GET.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
   try {

@@ -1,10 +1,12 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { hashInviteToken, expireInviteIfPast } from "../helpers/organizationInvites";
-import { schema } from "./organization-invites-accept_POST.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { hashInviteToken, expireInviteIfPast } from "../helpers/organizationInvites.js";
+import { lockOrganization } from "../helpers/membershipAdmin.js";
+import { ConflictError } from "../helpers/errorResponse.js";
+import { schema } from "./organization-invites-accept_POST.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
   try {
@@ -14,20 +16,42 @@ export async function handle(request: Request) {
     const tokenHash = hashInviteToken(input.token);
 
     const result = await db.transaction().execute(async (trx) => {
+      // Ordem global de locks: organização → membership → convite. A
+      // organização do convite só é conhecida pelo token, então ela é lida
+      // sem lock, travada, e só então o convite é relido FOR UPDATE.
+      const inviteOrganization = await trx
+        .selectFrom("organizationInvites")
+        .select("organizationId")
+        .where("tokenHash", "=", tokenHash)
+        .executeTakeFirst();
+      if (!inviteOrganization) return { type: "invalido" as const };
+      await lockOrganization(trx, inviteOrganization.organizationId);
+
+      // 2º da ordem global: a membership de quem aceita (se existir), travada
+      // ANTES da linha do convite. Só a linha do convite é travada abaixo —
+      // sem JOIN com `organizations`, que já está travada com NO KEY UPDATE e
+      // não deve ser promovida a FOR UPDATE.
+      const existingMembership = await trx
+        .selectFrom("memberships")
+        .select(["id", "role", "status"])
+        .where("organizationId", "=", inviteOrganization.organizationId)
+        .where("userId", "=", user.id)
+        .forUpdate()
+        .executeTakeFirst();
+
+      // 3º da ordem global: o convite.
       const invite = await trx
         .selectFrom("organizationInvites")
-        .innerJoin("organizations", "organizations.id", "organizationInvites.organizationId")
         .select([
-          "organizationInvites.id",
-          "organizationInvites.status",
-          "organizationInvites.email",
-          "organizationInvites.role",
-          "organizationInvites.expiresAt",
-          "organizationInvites.organizationId",
-          "organizationInvites.invitedByUserId",
-          "organizations.name as organizationName",
+          "id",
+          "status",
+          "email",
+          "role",
+          "expiresAt",
+          "organizationId",
+          "invitedByUserId",
         ])
-        .where("organizationInvites.tokenHash", "=", tokenHash)
+        .where("tokenHash", "=", tokenHash)
         .forUpdate()
         .executeTakeFirst();
 
@@ -40,19 +64,36 @@ export async function handle(request: Request) {
         return { type: "email_diferente" as const };
       }
 
-      await trx
-        .insertInto("memberships")
-        .values({
-          organizationId: invite.organizationId,
-          userId: user.id,
-          role: invite.role,
-          status: "ativo",
-          invitedByUserId: invite.invitedByUserId,
-        })
-        .onConflict((oc) =>
-          oc.columns(["organizationId", "userId"]).doUpdateSet({ role: invite.role, status: "ativo" })
-        )
-        .execute();
+      const organizationRow = await trx
+        .selectFrom("organizations")
+        .select("name")
+        .where("id", "=", invite.organizationId)
+        .executeTakeFirstOrThrow();
+
+      // Convite antigo nunca pode rebaixar/promover quem já é membro ativo.
+      if (existingMembership?.status === "ativo") {
+        throw new ConflictError("Você já é membro desta organização");
+      }
+
+      const reactivation = existingMembership !== undefined;
+      if (existingMembership) {
+        await trx
+          .updateTable("memberships")
+          .set({ role: invite.role, status: "ativo", invitedByUserId: invite.invitedByUserId, updatedAt: new Date() })
+          .where("id", "=", existingMembership.id)
+          .execute();
+      } else {
+        await trx
+          .insertInto("memberships")
+          .values({
+            organizationId: invite.organizationId,
+            userId: user.id,
+            role: invite.role,
+            status: "ativo",
+            invitedByUserId: invite.invitedByUserId,
+          })
+          .execute();
+      }
 
       await trx
         .updateTable("organizationInvites")
@@ -67,12 +108,17 @@ export async function handle(request: Request) {
           action: "organizacao.convite_aceito",
           entityType: "organization_invite",
           entityId: String(invite.id),
-          metadata: { email: invite.email, role: invite.role },
+          metadata: {
+            email: invite.email,
+            role: invite.role,
+            reativacao: reactivation,
+            ...(existingMembership ? { papelAnterior: existingMembership.role } : {}),
+          },
         },
         trx
       );
 
-      return { type: "sucesso" as const, organizationId: invite.organizationId, organizationName: invite.organizationName, role: invite.role };
+      return { type: "sucesso" as const, organizationId: invite.organizationId, organizationName: organizationRow.name, role: invite.role };
     });
 
     if (result.type === "invalido") {

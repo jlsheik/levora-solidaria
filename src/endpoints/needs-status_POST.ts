@@ -1,12 +1,12 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePermission, OrganizationAccessError } from "../helpers/organizationAccess";
-import { roleHasPermission } from "../helpers/permissions";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { getItemStockBalance } from "../helpers/stockBalance";
-import { schema } from "./needs-status_POST.schema";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePermission, OrganizationAccessError } from "../helpers/organizationAccess.js";
+import { roleHasPermission } from "../helpers/permissions.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { getItemStockBalance } from "../helpers/stockBalance.js";
+import { schema } from "./needs-status_POST.schema.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
   try {
@@ -46,7 +46,11 @@ export async function handle(request: Request) {
         .select(["id", "status", "title", "itemId", "quantityNeeded", "unit"])
         .where("id", "=", input.needId)
         .where("organizationId", "=", input.organizationId)
-        .forUpdate()
+        // FOR NO KEY UPDATE (Fase 81): continua serializando duas mudanças de status da MESMA need (conflita com ele mesmo, com
+        // FOR UPDATE e com qualquer UPDATE da linha — o que a Fase 35 exige), mas NÃO conflita com o FOR KEY SHARE que a FK de
+        // need_fulfillments toma ao registrar um recebimento. Com FOR UPDATE, este fluxo (need → item) e o recebimento
+        // (item → FK → need) fechavam um ciclo: deadlock real (40P01), reproduzido pelo endpoint real.
+        .forNoKeyUpdate()
         .executeTakeFirst();
 
       if (!existing) return { type: "not_found" as const };

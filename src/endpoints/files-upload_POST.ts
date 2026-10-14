@@ -1,12 +1,13 @@
-import { db } from "../helpers/db";
-import { getServerUserSession } from "../helpers/getServerUserSession";
-import { requirePermission } from "../helpers/organizationAccess";
-import { recordAuditLogEntry } from "../helpers/auditLog";
-import { storageAdapter } from "../helpers/storageAdapter";
-import { schema, FILE_MAX_SIZE_BYTES } from "./files-upload_POST.schema";
-import { checkRateLimit, rateLimitResponse } from "../helpers/rateLimit";
+import { db } from "../helpers/db.js";
+import { getServerUserSession } from "../helpers/getServerUserSession.js";
+import { requirePermission } from "../helpers/organizationAccess.js";
+import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { storageAdapter } from "../helpers/storageAdapter.js";
+import { schema, FILE_MAX_SIZE_BYTES } from "./files-upload_POST.schema.js";
+import { detectFileType, isStrictBase64 } from "../helpers/fileSignature.js";
+import { checkRateLimit, rateLimitResponse } from "../helpers/rateLimit.js";
 import superjson from "superjson";
-import { buildErrorResponse } from "../helpers/errorResponse";
+import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 // Por usuário: protege o storage de abuso (upload em massa) por uma conta
 // autenticada — o risco aqui é volume/custo de armazenamento, não bot
@@ -27,15 +28,14 @@ export async function handle(request: Request) {
 
     await requirePermission(user.id, input.organizationId, "arquivos.envie");
 
-    let buffer: Buffer;
-    try {
-      buffer = Buffer.from(input.fileBase64, "base64");
-    } catch {
+    // Base64 estrito: Buffer.from ignora caracteres inválidos em silêncio (o arquivo gravado seria outro).
+    if (!isStrictBase64(input.fileBase64)) {
       return new Response(superjson.stringify({ message: "Arquivo em base64 inválido" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
+    const buffer = Buffer.from(input.fileBase64, "base64");
 
     if (buffer.length === 0) {
       return new Response(superjson.stringify({ message: "Arquivo vazio" }), {
@@ -48,6 +48,15 @@ export async function handle(request: Request) {
         superjson.stringify({ message: `Arquivo maior que o limite permitido de ${Math.round(FILE_MAX_SIZE_BYTES / 1024 / 1024)}MB` }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
+    }
+
+    // O `contentType` vem do cliente: um SVG/HTML com script declarado como image/png seria aceito e guardado. Os primeiros bytes têm de
+    // corresponder ao tipo declarado ANTES de qualquer gravação (rejeitado = nada no storage nem no banco).
+    if (detectFileType(buffer) !== input.contentType) {
+      return new Response(superjson.stringify({ message: "O conteúdo do arquivo não corresponde ao tipo informado" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const stored = await storageAdapter.upload({ organizationId: input.organizationId, buffer, contentType: input.contentType });
@@ -85,8 +94,14 @@ export async function handle(request: Request) {
         return row;
       });
     } catch (dbError) {
-      // Não deixa um blob órfão no storage se o registro no banco falhar.
-      await storageAdapter.delete(stored.storageKey);
+      // Compensação: remove SÓ o objeto criado por ESTA tentativa (chave nova, uuid gerado agora), para não deixar blob órfão se o banco falhar.
+      // Se a remoção também falhar (armazenamento indisponível) o blob fica órfão: isso NÃO é escondido — vira uma linha de log com marcador fixo,
+      // provedor e chave (sem credenciais) para a limpeza manual (docs/UPLOAD_DE_ARQUIVOS.md) — e o erro original do banco continua sendo o devolvido.
+      try {
+        await storageAdapter.delete(stored.storageKey);
+      } catch (cleanupError) {
+        console.error(`ARQUIVO_ORFAO provider=${stored.storageProvider} key=${stored.storageKey} organizationId=${input.organizationId}: o registro no banco falhou e a remoção do objeto também (${cleanupError instanceof Error ? cleanupError.name : "erro"})`);
+      }
       throw dbError;
     }
 

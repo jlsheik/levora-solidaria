@@ -1,8 +1,8 @@
 import { randomBytes, createHash } from "node:crypto";
 import type { Transaction } from "kysely";
-import { db } from "./db";
-import { recordAuditLogEntry } from "./auditLog";
-import type { DB } from "./schema";
+import { db } from "./db.js";
+import { recordAuditLogEntry } from "./auditLog.js";
+import type { DB } from "./schema.js";
 
 export const INVITE_EXPIRATION_DAYS = 7;
 

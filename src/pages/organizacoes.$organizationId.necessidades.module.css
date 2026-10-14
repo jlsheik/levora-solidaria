@@ -26,6 +26,7 @@
   gap: var(--spacing-1);
   border-bottom: 1px solid var(--border);
   margin-bottom: var(--spacing-6);
+  flex-wrap: wrap;
 }
 
 .tabNavItem,
@@ -103,6 +104,8 @@
 .needBody {
   flex: 1;
   min-width: 0;
+  /* os indicadores se adaptam à largura REAL do corpo do cartão (que perde ~168px para as ações), não à da janela */
+  container-type: inline-size;
 }
 
 .needHeaderRow {
@@ -135,11 +138,16 @@
 
 .needActions {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .progressGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(5.5rem, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--spacing-3);
   margin-top: var(--spacing-3);
   padding-top: var(--spacing-3);
@@ -174,9 +182,46 @@
   width: fit-content;
 }
 
-@media (max-width: 30rem) {
+/* 4 colunas só quando o corpo comporta valores como "12345.5 unidades" sem quebrar; abaixo disso, 2 x 2 */
+@container (min-width: 36rem) {
   .progressGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Corpo muito estreito (< 20rem, i.e. celulares até ~460px; 231px em 375px): duas colunas IGUAIS de ~110px não comportam "12345.5 unidades"
+   (~118px) e o valor quebrava entre número e unidade. Aqui cada indicador vira uma linha rótulo à esquerda / valor à direita (mesma altura total
+   do 2x2); se rótulo + valor não couberem juntos, o valor desce para a linha de baixo, sem cortar nem truncar. */
+@container (max-width: 20rem) {
+  .progressGrid {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--spacing-2);
+  }
+
+  .progressStat {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    column-gap: var(--spacing-2);
+  }
+
+  .progressValue {
+    margin-left: auto;
+    text-align: right;
+  }
+}
+
+/* telas estreitas: ícone + corpo na 1ª linha e as ações na 2ª (a ordem do DOM e da leitura não muda) */
+@media (max-width: 40rem) {
+  .needCard {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .needActions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 }
 

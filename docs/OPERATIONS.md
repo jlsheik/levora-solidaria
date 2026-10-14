@@ -14,6 +14,7 @@ recuperação de desastre, filas/tarefas assíncronas).
 | `expireReservations` | a cada 10 min | libera atribuições propostas cuja reserva de 30 min venceu |
 | `expireOpportunities` | a cada hora | expira oportunidades vencidas |
 | `expireApprovalRequests` | a cada hora | expira pedidos de dupla autorização parados há mais de `APPROVAL_REQUEST_EXPIRATION_DAYS` dias |
+| `verifyAuditChain` | a cada 6 horas | verifica a integridade da hash-chain de `audit_log` (Fase 53, SEC-06) — reusa `verifyAuditLogChain`, o mesmo verificador do endpoint sob demanda. Ver `docs/AUDIT.md`. |
 
 Configuração em `src/static/__dev/scheduled-jobs.json`. Cada execução fica
 registrada em `background_task_runs` (status, tentativas, erro) —
@@ -128,7 +129,10 @@ quando isso for formalizado:
 
 - Revisar `background_task_runs` com `status = 'falhou'` periodicamente —
   não há alerta automático para isso ainda (ver
-  `docs/INCIDENT_RESPONSE.md`).
+  `docs/INCIDENT_RESPONSE.md`). Desde a Fase 53, uma linha de
+  `verifyAuditChain` com `status='falhou'` e `error.kind ==
+  "integrity_invalid"` é o sinal mais sério possível nesta lista — merece
+  prioridade sobre qualquer outra falha de tarefa agendada.
 - Revisar organizações com `status = 'em_analise'` pendentes de aprovação
   (`GET /_api/v1/platform-organizations`) — sem isso, uma organização pode
   ficar "em análise" indefinidamente enquanto já opera normalmente (ver

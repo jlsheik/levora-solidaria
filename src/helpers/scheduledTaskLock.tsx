@@ -1,4 +1,4 @@
-import { reserveDedicatedConnection } from "./db";
+import { reserveDedicatedConnection } from "./db.js";
 
 /**
  * Exclusão mútua real entre execuções da MESMA tarefa agendada (achado de
@@ -37,6 +37,8 @@ const SCHEDULED_TASK_LOCK_IDS: Record<string, number> = {
   expireOpportunities: 2,
   expireApprovalRequests: 3,
   runMatchingSweep: 4,
+  // Fase 53 — verificação periódica da audit hash-chain (SEC-06).
+  verifyAuditChain: 5,
 };
 
 export interface ScheduledTaskLockResult<T> {
