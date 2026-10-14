@@ -6,6 +6,7 @@ import { sql } from "kysely";
 import type { Transaction } from "kysely";
 import type { DB, Json, NeedPriority } from "./schema.js";
 import { roundQuantity } from "./quantityRules.js";
+import { createHash } from "node:crypto";
 
 /**
  * Motor de correspondência — determinístico + IA como apoio, nunca como
@@ -125,6 +126,22 @@ export interface MatchRunResult {
   reason?: string;
   allocationsCreated: Array<{ organizationId: number; quantity: number; status: string; score: number }>;
   discarded: Array<{ organizationId: number; needId: number; score: number }>;
+  /** Verdadeiro quando uma execução AUTOMÁTICA repetiu exatamente o resultado anterior (só descartes) e, por isso, não gravou avaliações nem auditoria de novo. */
+  unchanged?: boolean;
+}
+
+/**
+ * Assinatura do RESULTADO de uma avaliação: status e quantidade restante da oportunidade + (organização, necessidade, nota) de cada candidato avaliado. Gravada na
+ * auditoria `matching.executado` (`assinatura`). Uma execução automática que só descarta candidatos e produz a MESMA assinatura do último evento não tem nada novo a
+ * registrar. Muda se qualquer necessidade/organização candidata, a nota ou a quantidade mudar — inclusive por ação em outra parte do sistema.
+ */
+export function matchSignature(
+  status: string,
+  remaining: number | null,
+  evaluated: Array<{ organizationId: number; needId: number; finalScore: number }>
+): string {
+  const payload = JSON.stringify({ s: status, r: remaining, c: evaluated.map((c) => [c.organizationId, c.needId, c.finalScore]) });
+  return createHash("sha256").update(payload).digest("hex");
 }
 
 export async function runMatchingForOpportunity(
@@ -489,6 +506,32 @@ export async function runMatchingForOpportunity(
       return a.needId - b.needId;
     });
 
+    // Repetição sem efeito (Fase 95): o sweep reavalia as mesmas ofertas sem correspondência a cada ciclo. Se esta execução é AUTOMÁTICA (sem usuário), só
+    // descartaria candidatos e o resultado é idêntico ao do último `matching.executado` desta oportunidade, não há nada novo a registrar — nem linhas
+    // `descartado` em match_evaluations nem outro evento de auditoria (a cadeia de hash cresceria sem informação). A comparação usa o estado PERSISTIDO (a
+    // assinatura gravada no último evento), não memória do processo. Execução de um usuário, execução que cria atribuição e a primeira avaliação sempre gravam.
+    const signature = matchSignature(opportunity.status, remaining, evaluated);
+    if (triggeredByUserId === null && !evaluated.some((c) => c.finalScore >= MEDIUM_CONFIDENCE_THRESHOLD)) {
+      const previous = await trx
+        .selectFrom("auditLog")
+        .select("metadata")
+        .where("entityType", "=", "opportunity_registry")
+        .where("entityId", "=", String(opportunityRegistryId))
+        .where("action", "=", "matching.executado")
+        .orderBy("id", "desc")
+        .limit(1)
+        .executeTakeFirst();
+      const previousSignature = (previous?.metadata as { assinatura?: unknown } | null | undefined)?.assinatura;
+      if (previousSignature === signature) {
+        return {
+          skipped: false,
+          unchanged: true,
+          allocationsCreated: [],
+          discarded: evaluated.map((c) => ({ organizationId: c.organizationId, needId: c.needId, score: c.finalScore })),
+        };
+      }
+    }
+
     const allocationsCreated: MatchRunResult["allocationsCreated"] = [];
     const discarded: MatchRunResult["discarded"] = [];
     let unboundedProcessed = 0;
@@ -608,7 +651,7 @@ export async function runMatchingForOpportunity(
         action: "matching.executado",
         entityType: "opportunity_registry",
         entityId: String(opportunityRegistryId),
-        metadata: { candidatosAvaliados: evaluated.length, atribuicoesCriadas: allocationsCreated.length, descartados: discarded.length, algoritmo: ALGORITHM_VERSION },
+        metadata: { candidatosAvaliados: evaluated.length, atribuicoesCriadas: allocationsCreated.length, descartados: discarded.length, algoritmo: ALGORITHM_VERSION, assinatura: signature },
       },
       trx
     );
