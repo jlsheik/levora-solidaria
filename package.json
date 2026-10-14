@@ -17,6 +17,7 @@
     "qa:security": "node scripts/qa-visual/security.mjs",
     "db:migrate": "tsx db/migrate.ts",
     "db:migrate:incremental": "tsx db/run-migrations.ts",
+    "db:preflight": "tsx db/preflight.ts",
     "storage:audit": "tsx db/storage-audit.ts",
     "seed:staging": "node dist-server/db/seed-staging.js",
     "client:dev": "vite",

@@ -23,7 +23,8 @@ const BASELINE = readFileSync(path.join(ROOT, "test", "fixtures", "schema-baseli
 
 let admin: postgres.Sql;
 const open = (name: string) => postgres(urlFor(name), { max: 1, prepare: false, onnotice: () => {} });
-const runner = (dbName: string) => { const r = spawnSync(process.execPath, [path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs"), "db/run-migrations.ts"], { encoding: "utf8", env: { ...process.env, DATABASE_URL: urlFor(dbName) }, timeout: 120000 }); return { status: r.status, out: `${r.stdout}${r.stderr}` }; };
+// `skipPreflight`: o harness (passo a passo e falhas) precisa chegar à migração em si; a pré-verificação (db/legacyPreflight.ts) tem os próprios testes em test/legacyPreflight.test.ts
+const runner = (dbName: string, skipPreflight = false) => { const r = spawnSync(process.execPath, [path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs"), "db/run-migrations.ts"], { encoding: "utf8", env: { ...process.env, NODE_ENV: "test", DATABASE_URL: urlFor(dbName), ...(skipPreflight ? { LEVORA_SKIP_PREFLIGHT: "1" } : {}) }, timeout: 120000 }); return { status: r.status, out: `${r.stdout}${r.stderr}` }; };
 async function recreate(name: string) {
   if (!name.endsWith("_test") || !name.includes("_mig_")) throw new Error(`banco descartável fora do padrão: ${name}`); // só mexe em bancos que ESTE arquivo nomeia
   await admin.unsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`); await admin.unsafe(`CREATE DATABASE "${name}"`); created.add(name);
@@ -128,7 +129,7 @@ beforeAll(async () => {
   for (const f of MIGRATIONS) await MAIN`INSERT INTO schema_migrations (id) VALUES (${f})`;
   for (const f of MIGRATIONS) {
     await MAIN`DELETE FROM schema_migrations WHERE id = ${f}`;
-    const r = runner(NAMES.main);
+    const r = runner(NAMES.main, true);
     const applied = [...r.out.matchAll(/Aplicada com sucesso: (\S+)/g)].map((m) => m[1]);
     if (r.status !== 0 || applied.join() !== f) throw new Error(`o passo ${f} não aplicou exatamente essa migração (status ${r.status}): ${r.out.slice(-300)}`);
     stepLog.push({ file: f, diffs: diffSnapshots(before, await snapshot(MAIN, baselineColumns)), out: r.out });
@@ -271,7 +272,7 @@ async function failure(name: string, seedBad: string, expectFailAt: string, abse
   try {
     await sql.unsafe(BASELINE); await seed(sql); await sql.unsafe(seedBad);
     const cols = await columnsOf(sql); const snap = await snapshot(sql, cols);
-    const r = runner(name);
+    const r = runner(name, true); // sem a pré-verificação: prova que a PRÓPRIA migração continua falhando de forma atômica (defesa em profundidade)
     expect(r.status).toBe(1); expect(r.out).toContain("Falha ao aplicar migração");
     const attempted = [...r.out.matchAll(/Aplicando: (\S+)\.\.\./g)].map((m) => m[1]); const ok = [...r.out.matchAll(/Aplicada com sucesso: (\S+)/g)].map((m) => m[1]);
     expect(attempted.at(-1)).toBe(expectFailAt); expect(ok).toEqual(MIGRATIONS.slice(0, MIGRATIONS.indexOf(expectFailAt))); // as anteriores aplicadas; a que falhou, não

@@ -143,25 +143,48 @@ propositalmente "hostil a idempotência" (`CREATE TABLE` sem
 `IF NOT EXISTS`), para falhar alto em vez de mascarar um erro. Use
 `db:migrate:incremental` para bancos existentes.
 
-### Antes de atualizar um banco COM dados: três pré-condições (medidas na Fase 94)
+### Antes de atualizar um banco COM dados: pré-verificação automática (Fase 94)
 
 `test/schemaMigrationsData.test.ts` atualiza um banco que já tinha dados (baseline do commit 590ff60) migração por migração e prova que **nenhum registro é alterado, perdido, trocado ou duplicado**.
-Mas três migrações adicionam restrições que **dados antigos válidos no baseline podem violar**; nesse caso o runner falha de forma ruidosa e atômica (nada fica pela metade, a migração que falhou não é
-registrada em `schema_migrations`, os dados não mudam) e a atualização só conclui depois de corrigir o dado. Confira ANTES (cada consulta deve devolver 0 linhas):
+Três migrações, porém, criam restrições que **dados antigos válidos no baseline podem violar** — são condições preexistentes dos dados (restrições legítimas), não defeitos do runner:
 
-```sql
--- 0013: e-mails que diferem só em maiúsculas/minúsculas
-SELECT lower(email), count(*) FROM users GROUP BY 1 HAVING count(*) > 1;
--- 0005: oportunidades com quantidade zero ou negativa
-SELECT id, quantity FROM opportunity_registry WHERE quantity IS NOT NULL AND quantity <= 0;
--- 0007: avaliações de matching duplicadas para a mesma alocação
-SELECT allocation_id, count(*) FROM match_evaluations WHERE allocation_id IS NOT NULL GROUP BY 1 HAVING count(*) > 1;
+| Migração | Restrição criada | Dado antigo que a impede |
+|---|---|---|
+| `0005` | `CHECK (quantity IS NULL OR quantity > 0)` em `opportunity_registry` | oportunidade com quantidade **0 ou negativa** |
+| `0007` | índice único parcial `match_evaluations(allocation_id) WHERE allocation_id IS NOT NULL` | **duas ou mais avaliações** para a mesma alocação |
+| `0013` | índice único `users(LOWER(email))` | e-mails que **diferem só em maiúsculas/minúsculas** (a comparação é a do próprio índice: mesma expressão e mesma collation) |
+
+Sem proteção, o runner aplicaria as migrações anteriores e só então falharia (atômico, mas deixando a atualização pela metade). Por isso `npm run db:migrate:incremental` agora executa, **antes de qualquer escrita**
+(inclusive antes de criar `schema_migrations`), a pré-verificação de `db/legacyPreflight.ts`; o mesmo código roda sozinho, sem aplicar nada, com:
+
+```bash
+npm run db:preflight                      # a partir do repositório (como db:migrate:incremental; os .sql não vão para dist-server)
 ```
 
-O que a atualização **faz com os dados antigos** (verificado): linhas do `audit_log` ficam com `previous_event_hash`/`event_hash` NULL (início de uma nova cadeia, não corrupção — `docs/AUDIT.md`);
+**Códigos de saída** (os mesmos no `db:preflight` e no início do `db:migrate:incremental`): `0` autorizada (o runner segue o fluxo original, na mesma ordem e com a mesma transação por migração) ·
+`2` **bloqueada** (dados legados impeditivos, estrutura ausente ou estado inconsistente) · `3` **não verificada** (conexão, permissão ou consulta falhou: a atualização NÃO é autorizada por omissão) ·
+`1` continua sendo falha ao aplicar uma migração. Com código 2 ou 3 **nenhuma migração é aplicada ou registrada, nada é criado e nenhum dado muda**; reexecutar depois de corrigir funciona normalmente.
+
+**O que é verificado e quando.** Só as migrações **pendentes** (não registradas em `schema_migrations`): se a 0013 já foi aplicada, os dados atuais não são tratados como bloqueio. Estados: `ja-aplicada` (registrada e a restrição existe) ·
+`pendente-limpa` · `pendente-com-conflito` (lista os ids) · `estrutura-ausente` (a tabela/coluna não existe: banco fora do ponto histórico esperado — instalação nova usa `npm run db:migrate`) ·
+`inconsistente` (registrada mas a restrição não existe, ou a restrição existe mas não está registrada — p.ex. banco criado de `db/schema.sql` sem registrar as migrações; o runner falharia ao recriá-la). Estruturas ausentes e
+inconsistências **bloqueiam quando há alguma migração pendente**; sem pendências viram apenas aviso. Migrações registradas que esta versão do código não conhece também só geram aviso. A instalação nova por `db/schema.sql` (`db:migrate`)
+já registra tudo e passa como `ja-aplicada`. A verificação roda numa transação `READ ONLY` e as consultas são agregações feitas no PostgreSQL.
+
+**Privacidade.** O relatório mostra **ids** (e contagens), nunca e-mails nem outros dados pessoais, URL de conexão, host ou senha; na 0007/0013 cada grupo aparece como `id1,id2`, separados por ` | `; acima de 20 itens, mostra 20 e "… e mais N".
+
+**Como corrigir (manual, nunca automático) e repetir:**
+- `0013`: para cada grupo de contas listado, decida qual mantém o e-mail e altere ou consolide as outras (os ids identificam as contas em `users`).
+- `0005`: corrija a quantidade das oportunidades listadas em `opportunity_registry` (0 e negativos não são aceitos; `NULL` é aceito).
+- `0007`: em cada grupo de `match_evaluations`, decida qual avaliação vale e desvincule as demais (`allocation_id = NULL`).
+Depois rode `npm run db:preflight` até sair `0` e então `npm run db:migrate:incremental`. A ferramenta não oferece correção, remoção ou "ignorar".
+
+**Desvio de testes.** `LEVORA_SKIP_PREFLIGHT=1` só tem efeito com `NODE_ENV=test` (o harness que aplica migrações uma a uma precisa chegar à migração em si); com qualquer outro `NODE_ENV` é ignorado e o bloqueio vale (testado).
+
+**O que a atualização faz com os dados antigos** (verificado): linhas do `audit_log` ficam com `previous_event_hash`/`event_hash` NULL (início de uma nova cadeia, não corrupção — `docs/AUDIT.md`);
 `opportunity_allocations.need_id` fica NULL (sem backfill); as tabelas novas (convites, arquivos, capacidades, configurações e áreas de matching, ledger de atendimento e resoluções) nascem vazias — nenhuma
 migração fabrica dados a partir dos antigos. **Não coberto:** bancos criados antes do baseline 590ff60, volumes grandes (tempo e bloqueios das migrações em tabelas grandes), concorrência durante a
-atualização e as sequências de dados que só existem em produção.
+atualização, e condições de dados que **futuras** migrações venham a exigir (cada nova migração que crie uma restrição deve ganhar a sua verificação em `CHECKS`).
 
 ## Múltiplas instâncias (escala horizontal)
 
