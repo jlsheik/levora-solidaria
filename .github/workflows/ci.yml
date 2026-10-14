@@ -111,7 +111,7 @@ jobs:
 
   # Fase 94 — QA de NAVEGADOR em modo reduzido (camada ADICIONAL: não substitui nem enfraquece o job `test`; os dois são independentes e ambos
   # precisam passar para o workflow ficar verde). Ver docs/QA_VISUAL.md ("Execução reduzida no CI"). Comparado com a matriz completa local:
-  # um navegador só (o Chrome do runner, nunca o Edge), `qa:visual` com o perfil `ci` (18 de 27 cenários × 4 viewports × 2 temas) e `qa:security` com
+  # um navegador só (o Chrome do runner, nunca o Edge), `qa:visual` com o perfil `ci` (28 de 37 cenários × 4 viewports × 2 temas) e `qa:security` com
   # as 5 partes (calibração, CSRF, XSS, uploads e cabeçalhos do nginx REAL em Docker).
   qa-browser:
     runs-on: ubuntu-latest
