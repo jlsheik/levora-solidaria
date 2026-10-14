@@ -29,6 +29,7 @@ import { Input } from "../components/Input";
 import { Textarea } from "../components/Textarea";
 import { Button } from "../components/Button";
 import { Switch } from "../components/Switch";
+import { UnitSelect } from "../components/UnitSelect";
 import { Skeleton } from "../components/Skeleton";
 import { z } from "zod";
 import { ArrowLeft, Plus, Warehouse, Truck, MapPin, Pencil, Trash2, Info } from "lucide-react";
@@ -113,6 +114,11 @@ export default function OrganizationMatchingSettingsPage() {
         {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
           <Link to={`/organizacoes/${organizationId}/unidades`} className={styles.tabNavItem}>
             Unidades
+          </Link>
+        )}
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador" || org?.myRole === "operador") && (
+          <Link to={`/organizacoes/${organizationId}/regularizacao`} className={styles.tabNavItem}>
+            Pendências de unidade
           </Link>
         )}
       </nav>
@@ -258,12 +264,7 @@ function CapacitySection({
                     <FormItem name="unit" className={styles.formRowItem}>
                       <FormLabel>Unidade</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="kg, litros, unidade..."
-                          disabled={isEditing}
-                          value={form.values.unit || ""}
-                          onChange={(e) => form.setValues((p: any) => ({ ...p, unit: e.target.value }))}
-                        />
+                        <UnitSelect disabled={isEditing} value={form.values.unit || ""} onChange={(v) => form.setValues((p: any) => ({ ...p, unit: v }))} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

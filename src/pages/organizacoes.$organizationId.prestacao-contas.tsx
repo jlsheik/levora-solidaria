@@ -175,6 +175,11 @@ export default function ImpactReportPage() {
             Unidades
           </Link>
         )}
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador" || org?.myRole === "operador") && (
+          <Link to={`/organizacoes/${organizationId}/regularizacao`} className={styles.tabNavItem}>
+            Pendências de unidade
+          </Link>
+        )}
       </nav>
 
       <div className={styles.titleRow}>

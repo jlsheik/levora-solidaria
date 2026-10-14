@@ -31,6 +31,7 @@ import { Textarea } from "../components/Textarea";
 import { Button } from "../components/Button";
 import { Badge } from "../components/Badge";
 import { UnitText } from "../components/UnitText";
+import { UnitSelect } from "../components/UnitSelect";
 import { Skeleton } from "../components/Skeleton";
 import {
   Select,
@@ -163,7 +164,9 @@ export default function OpportunitiesPage() {
       queryClient.invalidateQueries({ queryKey: ["opportunities", organizationId] });
       queryClient.invalidateQueries({ queryKey: ["inventory-items", organizationId] });
       queryClient.invalidateQueries({ queryKey: ["stock-transactions", organizationId] });
-      toast.success(`Recebimento registrado. Novo saldo do item: ${result.newStock}`);
+      queryClient.invalidateQueries({ queryKey: ["unit-regularization-cases", organizationId] });
+      if (result.pendingRegularization) toast.warning(result.pendingRegularization.message, { duration: 12000 });
+      else toast.success(`Recebimento registrado. Novo saldo do item: ${result.newStock}`);
       setReceiveTarget(null);
       receiveForm.setValues({ quantityReceived: 0, notes: "" } as any);
     },
@@ -199,6 +202,11 @@ export default function OpportunitiesPage() {
         {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
           <Link to={`/organizacoes/${organizationId}/unidades`} className={styles.tabNavItem}>
             Unidades
+          </Link>
+        )}
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador" || org?.myRole === "operador") && (
+          <Link to={`/organizacoes/${organizationId}/regularizacao`} className={styles.tabNavItem}>
+            Pendências de unidade
           </Link>
         )}
       </nav>
@@ -284,11 +292,7 @@ export default function OpportunitiesPage() {
                     <FormItem name="unit" className={styles.formRowItem}>
                       <FormLabel>Unidade</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="cestas, kg..."
-                          value={form.values.unit || ""}
-                          onChange={(e) => form.setValues((p: any) => ({ ...p, unit: e.target.value }))}
-                        />
+                        <UnitSelect allowEmpty value={form.values.unit || ""} onChange={(v) => form.setValues((p: any) => ({ ...p, unit: v }))} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

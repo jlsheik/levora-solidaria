@@ -73,6 +73,7 @@ export default function OrganizationUnitsPage() {
         <Link to={`/organizacoes/${organizationId}/prestacao-contas`} className={styles.tabNavItem}>Prestação de contas</Link>
         <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>Configurações de Matching</Link>
         <span className={styles.tabNavItemActive} aria-current="page">Unidades</span>
+        <Link to={`/organizacoes/${organizationId}/regularizacao`} className={styles.tabNavItem}>Pendências de unidade</Link>
       </nav>
 
       <div className={styles.titleRow}>

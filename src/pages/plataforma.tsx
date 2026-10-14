@@ -23,6 +23,8 @@ import {
 } from "../components/Dialog";
 import { Form, FormControl, FormItem, FormLabel, FormMessage, useForm } from "../components/Form";
 import { Input } from "../components/Input";
+import { UnitSelect } from "../components/UnitSelect";
+import { PlatformUnitRegularizationSection } from "../components/PlatformUnitRegularization";
 import { Textarea } from "../components/Textarea";
 import { Button } from "../components/Button";
 import { Badge } from "../components/Badge";
@@ -372,7 +374,7 @@ export default function PlatformPage() {
                       </FormItem>
                       <FormItem name="unit" className={styles.formRowItem}>
                         <FormLabel>Unidade</FormLabel>
-                        <FormControl><Input value={discoveryForm.values.unit || ""} onChange={(e) => discoveryForm.setValues((p: any) => ({ ...p, unit: e.target.value }))} /></FormControl>
+                        <FormControl><UnitSelect allowEmpty value={discoveryForm.values.unit || ""} onChange={(v) => discoveryForm.setValues((p: any) => ({ ...p, unit: v }))} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     </div>
@@ -513,6 +515,8 @@ export default function PlatformPage() {
             </>
           )}
         </section>
+
+        <PlatformUnitRegularizationSection />
 
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}><RefreshCw size={18} /> Tarefas de fundo</h2>
