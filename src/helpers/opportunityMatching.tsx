@@ -7,6 +7,7 @@ import type { Transaction } from "kysely";
 import type { DB, Json, NeedPriority } from "./schema.js";
 import { roundQuantity } from "./quantityRules.js";
 import { createHash } from "node:crypto";
+import { getRefusingOrganizationIds } from "./allocationRefusals.js";
 
 /**
  * Motor de correspondência — determinístico + IA como apoio, nunca como
@@ -186,6 +187,12 @@ export async function runMatchingForOpportunity(
           .execute()
       ).map((r) => r.organizationId)
     );
+    // Fase 97 — recusa/cancelamento EXPLÍCITO pela própria organização (ver allocationRefusals.tsx): o par (oportunidade, organização) fica fora do matching
+    // automático para sempre. Antes só as atribuições ativas excluíam a organização, então depois de recusar/cancelar ela era escolhida de novo (até na mesma
+    // requisição, pela reabertura). Lido sob a trava da oportunidade, na mesma transação, com o estado confirmado das atribuições; vale para TODO chamador desta
+    // função (sweep, mudança de status, matching manual do admin, reabertura após decisão/logística/expiração, recuperação). Expiração automática NÃO entra aqui.
+    const refusingOrgIds = await getRefusingOrganizationIds(trx, opportunityRegistryId);
+    for (const orgId of refusingOrgIds) existingOrgIds.add(orgId);
 
     const candidates = await trx
       .selectFrom("needs")
@@ -651,7 +658,7 @@ export async function runMatchingForOpportunity(
         action: "matching.executado",
         entityType: "opportunity_registry",
         entityId: String(opportunityRegistryId),
-        metadata: { candidatosAvaliados: evaluated.length, atribuicoesCriadas: allocationsCreated.length, descartados: discarded.length, algoritmo: ALGORITHM_VERSION, assinatura: signature },
+        metadata: { candidatosAvaliados: evaluated.length, atribuicoesCriadas: allocationsCreated.length, descartados: discarded.length, algoritmo: ALGORITHM_VERSION, assinatura: signature, ...(refusingOrgIds.size > 0 ? { organizacoesExcluidasPorRecusa: [...refusingOrgIds].sort((a, b) => a - b) } : {}) },
       },
       trx
     );

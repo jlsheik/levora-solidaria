@@ -8,6 +8,7 @@ import { sql } from "kysely";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
 import { roundQuantity } from "../helpers/quantityRules.js";
+import { getExplicitRefusals } from "../helpers/allocationRefusals.js";
 
 const ALLOCATABLE_STATUSES = ["validada", "aguardando_destinacao", "reservada"];
 
@@ -87,6 +88,10 @@ export async function handle(request: Request) {
         }
       }
 
+      // Fase 97: a atribuição MANUAL do admin da plataforma é uma exceção explícita (ele escolhe a organização) e continua permitida, com as mesmas permissões e
+      // auditoria. Mas não é silenciosa: se a organização já recusou/cancelou ESTA oportunidade, isso fica registrado na auditoria da atribuição.
+      const priorRefusals = await getExplicitRefusals(trx, input.opportunityId, input.organizationId);
+
       const [allocation] = await trx
         .insertInto("opportunityAllocations")
         .values({
@@ -123,6 +128,7 @@ export async function handle(request: Request) {
             organizationName: org.name,
             quantityAllocated: input.quantityAllocated,
             needId: input.needId ?? null,
+            ...(priorRefusals.length > 0 ? { reatribuicaoAposRecusaExplicita: true, atribuicoesRecusadasAnteriores: priorRefusals.map((r) => ({ id: r.allocationId, status: r.status })) } : {}),
           },
         },
         trx
