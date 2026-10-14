@@ -1,41 +1,63 @@
-# Especificação — Destinação de recursos, atendimento de necessidades e prestação de contas (Fase 99A)
+# Especificação — Destinação de recursos, atendimento de necessidades e prestação de contas (Fase 99A, revisão 99A.1)
 
-**Especificação, não implementação.** Nenhum código, schema, migration, endpoint, helper, tela, teste ou configuração foi alterado por este documento. Ele foi escrito sobre a `master` no commit `d2c955d` (merge da Fase 98, CI do run `38621942694` verde em `test` e `qa-browser`). Tudo que está descrito como "hoje" foi lido no código desse commit; o que ainda não existe no banco está marcado como tal.
+**Especificação, não implementação.** Nenhum código, schema, migration, endpoint, helper, tela, teste ou configuração foi alterado por este documento. Escrito sobre a `master` no commit `d2c955d` (merge da Fase 98; CI do run `38621942694`, `test` e `qa-browser` verdes). O que está descrito como "hoje" foi lido no código desse commit; o que não existe no banco está marcado como tal.
 
-Convenção: **[E1]–[E6]** são as decisões de produto já tomadas pelo dono e consolidadas aqui. **[D-n]** é uma decisão que o código ou a evidência disponível não permite fechar: fica explicitamente pendente, com alternativas e efeitos (seção 19). **[T-n]** é decisão técnica resolvível na implementação.
+**Revisão 99A.1:** incorpora as decisões definitivas de produto (seção 2) — procedimento auditável para divergência de unidades (D-6), as oito finalidades de destinação, encerramento de necessidade sem entrega total, datas retroativas, fora de escopo de lotes/FIFO, separação entre correção documental, estorno e devolução física — e remove as pendências de produto correspondentes. O que resta é **trabalho técnico futuro** (descrito) e **requisitos legais a validar** (seção 21).
 
-Documentos relacionados: `docs/LEDGER_CORRECOES_ESPECIFICACAO.md` (semântica do ledger de recebimentos e estorno físico), `docs/PRESTACAO_CONTAS_ESPECIFICACAO.md` (relatório de impacto atual), `docs/RBAC_PERMISSOES.md`, `docs/PRIVACY.md`, `docs/ROADMAP_ATUAL.md`.
+Convenção: **[R-n]** = regra de negócio aprovada. **[T-n]** = decisão técnica resolvível na implementação. Nomes de tabelas/colunas/permissões "propostos" são o contrato conceitual; a numeração de migrations **não** é definitiva (seção 16).
+
+Documentos relacionados: `docs/LEDGER_CORRECOES_ESPECIFICACAO.md` (ledger de recebimentos e estorno físico), `docs/PRESTACAO_CONTAS_ESPECIFICACAO.md` (relatório de impacto atual), `docs/RBAC_PERMISSOES.md`, `docs/PRIVACY.md`, `docs/ROADMAP_ATUAL.md`, `docs/VERSIONAMENTO_API.md`.
 
 ---
 
-## 1. Objetivo e limites da fase
+## 1. Objetivo e limites
 
 Fechar conceitualmente o percurso:
 
 > Oferta → atribuição → logística → recebimento → estoque → **destinação** → **atendimento da necessidade** → prestação de contas.
 
-Cada etapa tem significado próprio e nenhuma é tratada como sinônimo de outra:
+Cada etapa tem significado próprio; nenhuma é tratada como sinônimo de outra:
 
 | Etapa | O que prova | O que NÃO prova |
 |---|---|---|
 | Atribuição | A rede designou a oferta a uma organização | Que o recurso chegou |
-| Recebimento (`stock_transactions` entrada + `need_fulfillments`) | Que o recurso chegou à organização | Que foi usado ou distribuído |
-| Estoque (saldo) | Quanto está fisicamente guardado | Origem de cada unidade (o estoque é fungível, sem lotes) |
-| Saída de estoque | Que a quantidade deixou o estoque | Para quê, para quem ou se atendeu uma necessidade |
-| **Destinação** (nova) | A finalidade declarada de uma saída, com quantidade, unidade, data e, quando há, a necessidade e um comprovante opcional | A identidade de quem recebeu (não se coleta) |
+| Recebimento (`stock_transactions` entrada + `need_fulfillments`) | Que o recurso chegou à organização, em quantidade na unidade do item | Que foi usado ou distribuído |
+| Estoque (saldo) | Quanto está fisicamente guardado | A origem de cada unidade (estoque agregado, sem lotes) |
+| Saída de estoque | Que a quantidade deixou o estoque | Para quê, para quem, se atendeu uma necessidade |
+| **Destinação** (nova) | A finalidade declarada de uma saída, com quantidade, unidade, data efetiva e, quando há, a necessidade e comprovante opcional | A identidade de quem recebeu (não se coleta) |
 | **Atendimento** (novo significado) | Quantidade líquida contabilizável destinada a uma necessidade | — |
 
-**Dentro desta especificação:** modelo de dados, regras de negócio, fluxos, reversões, unidades, privacidade, RBAC, telas, compatibilidade histórica, migrações, testes e critérios de aceite, para uma implementação posterior em subfases.
+**Dentro:** modelo de dados, regras, fluxos, reversões, regularização de unidades, privacidade, RBAC, telas, compatibilidade histórica, migrações, testes e critérios de aceite, para implementação posterior em subfases.
+**Fora:** qualquer implementação; cadastro nominal de beneficiários; conversão automática de unidades; rastreabilidade por lote/FIFO; transferência entre locais de estoque; notificação por e-mail (SMTP).
 
-**Fora:** qualquer implementação; cadastro nominal de beneficiários [E5]; tabela de conversão de unidades [E4]; edição de necessidades e de itens de inventário (decisão de produto separada, ver [D-6]); notificação por e-mail (SMTP).
-
-O sistema deve conseguir responder, com dados auditáveis: o que foi doado; quanto foi recebido e em qual unidade; quanto resta em estoque; quanto saiu; com qual finalidade; qual necessidade recebeu; quantas pessoas foram atendidas **em termos agregados declarados**; quais saídas ainda não têm destinação estruturada; o que foi corrigido ou estornado; e como isso aparece nos relatórios.
+O sistema deverá responder, com dados auditáveis: o que foi doado; quanto foi recebido e em qual unidade; quanto resta; quanto saiu; com qual finalidade; qual necessidade recebeu; quantas pessoas foram atendidas (**agregado declarado**); quais saídas ainda não têm destinação estruturada; o que foi corrigido ou estornado; e como isso aparece nos relatórios.
 
 ---
 
-## 2. Mapa atual do código e da cadeia de dados (verificado)
+## 2. Decisões de produto aprovadas
 
-### 2.1 Cadeia real
+Todas as decisões abaixo estão **fechadas**; o que ainda precisa ser construído está na seção 19 (subfases) e o que depende de avaliação jurídica está na seção 21.
+
+| Tema | Decisão aprovada | Onde está detalhada |
+|---|---|---|
+| **D-6 Unidades e dados** | Procedimento auditável de regularização: correção cadastral comprovada, conferência física (não é conversão), divergência dependente de conversão não suportada e caso sem informação permanecem **pendentes**; nenhuma conversão automática; nenhum lançamento de quantidade sem unidade confiável; nenhuma perda de rastreabilidade; vocabulário controlado de unidades | seção 10 |
+| **Finalidades** | Oito finalidades fechadas: `atendimento_coletivo`, `distribuicao_familias`, `entrega_instituicao_parceira`, `uso_operacional_instituicao`, `doacao_a_terceiro`, `devolucao_ao_doador`, `perda`, `descarte`. Ajuste de estoque **não** é finalidade | seção 6 |
+| **Encerramento de necessidade sem entrega total** | Estado `cancelada` com **motivo estruturado**; sem saída de estoque; parciais continuam contabilizados; preserva solicitado, atendido, saldo não atendido e motivo | seção 8.5 |
+| **Data da destinação** | `delivered_on` (efetiva, informada) separada de `created_at` (registro, servidor); retroação de até 7 dias corridos pela organização; além disso exige autorização administrativa, justificativa e auditoria; nunca futura; relógio e fuso do servidor | seção 8.6 |
+| **Lotes e FIFO** | Fora do escopo. A destinação liga-se à saída e ao item; o sistema não afirma de qual oferta saiu uma unidade | seção 7.4 |
+| **Correção, estorno e devolução** | Quatro situações distintas: correção documental, correção de quantidade com movimento compensatório, devolução física, estorno documental sem retorno físico | seção 9 |
+| **Métricas** | Recebido, suprimento recebido, em estoque, destinado, atendido, atendida e "sem destinação estruturada" são medidas distintas e nunca se somam entre si | seção 5 |
+| **Registros históricos** | Preservados; nenhum backfill; nenhuma reclassificação silenciosa; correções por eventos | seção 15 |
+| **Privacidade** | Sem cadastro nominal; só dados agregados e operacionais; comprovante opcional autorizado por finalidade | seção 12 |
+| **Revisão jurídica** | Retenção, base legal e tratamento de comprovantes dependem de validação | seção 21 |
+| **Ledger** | `need_fulfillments` continua sendo **suprimento recebido da rede** e não muda; o atendimento é derivado das destinações | seções 5 e 11 |
+| **`atendida`** | Estado do sistema, derivado das destinações; nunca gera saída automática; `needs-status_POST` deixa de baixar estoque | seção 8.4 |
+
+---
+
+## 3. Mapa atual do código e da cadeia de dados (verificado)
+
+### 3.1 Cadeia real
 
 | Etapa | Ponto de entrada | Tabelas | Observações verificadas |
 |---|---|---|---|
@@ -43,486 +65,514 @@ O sistema deve conseguir responder, com dados auditáveis: o que foi doado; quan
 | Oferta local | `src/endpoints/opportunities_POST.ts` | `donation_opportunities` (`unit`, `quantity_offered`, `linked_need_id`) | módulo separado do matching e do ledger |
 | Atribuição | matching (`src/helpers/opportunityMatching.tsx`) ou `opportunity-allocations_POST.ts` | `opportunity_allocations` | Fase 98: prazo, expiração, pausa |
 | Logística | `allocations-logistics_POST.ts` | `logistics_events` (imutável) | |
-| Recebimento da rede | `allocations-receive_POST.ts` | `stock_transactions` (`entrada`), `need_fulfillments` (`original`), `logistics_events`, `files` (comprovante) | a unidade gravada é a do **item** (`item.unit`); a unidade da oferta **não é lida** |
+| Recebimento da rede | `allocations-receive_POST.ts` | `stock_transactions` (`entrada`), `need_fulfillments` (`original`), `logistics_events`, `files` | unidade gravada = a do **item**; a da oferta **não é lida** |
 | Recebimento local | `opportunities-receive_POST.ts` | `stock_transactions` (`entrada`) | **não** cria linha no ledger; `donation_opportunities.unit` **não é lida** |
-| Saldo de estoque | `src/helpers/stockBalance.tsx` | soma de `stock_transactions.delta` | |
-| Saída de estoque | `stock-transactions_POST.ts` (tipo `saida`) e `needs-status_POST.ts` | `stock_transactions` (`saida`) | `reason` é texto livre (mínimo 2 caracteres); **dois** escritores de `saida` |
-| Ajuste de estoque | `stock-transactions_POST.ts` (tipo `ajuste`) e `src/helpers/needFulfillmentCorrections.tsx` | `stock_transactions` (`ajuste`) | ajuste negativo ≥ 20 ou ≥ 30 % do saldo exige dupla aprovação (`approval_requests`, tipo `ajuste_estoque_alto_risco`) |
-| Progresso da necessidade | `src/helpers/needFulfillment.tsx` (`getNeedFulfillmentBalance`, `computeNeedProgress`) | `need_fulfillments` | mede **suprimento recebido** pela rede, não entrega (ver 2.3) |
-| Resolução administrativa | `needs-status_POST.ts` | `need_resolutions` (UNIQUE `need_id`) | ver 2.2 |
+| Saldo | `src/helpers/stockBalance.tsx` | soma de `stock_transactions.delta` | |
+| Saída | `stock-transactions_POST.ts` (`saida`) e `needs-status_POST.ts` | `stock_transactions` (`saida`) | `reason` livre (mín. 2 caracteres); **dois** escritores de `saida` |
+| Ajuste | `stock-transactions_POST.ts` (`ajuste`) e `src/helpers/needFulfillmentCorrections.tsx` | `stock_transactions` (`ajuste`) | ajuste **negativo** ≥ 20 ou ≥ 30 % do saldo exige dupla aprovação (`approval_requests`, tipo `ajuste_estoque_alto_risco`); ajuste positivo não tem aprovação |
+| Progresso da necessidade | `src/helpers/needFulfillment.tsx` | `need_fulfillments` | mede **suprimento recebido** (ver 3.3) |
+| Resolução administrativa | `needs-status_POST.ts` | `need_resolutions` (UNIQUE `need_id`) | ver 3.2 |
 | Correção/estorno de recebimento | `allocations-receipt-correct_POST.ts`, `allocations-receipt-reverse_POST.ts` | `need_fulfillments` (`correction`/`reversal`), `stock_transactions` (`ajuste`) | efeito físico é sempre **um** `ajuste` |
-| Prestação de contas | `impact-report_GET.ts` + `src/helpers/impactReport.tsx` | leitura | `saidas` é um total por item, sem finalidade |
+| Prestação de contas | `impact-report_GET.ts` + `src/helpers/impactReport.tsx` | leitura | `saidas` é total por item, sem finalidade |
 | Comprovantes | `files-upload_POST.ts`, `files-download_GET.ts` | `files` (`purpose` só aceita `comprovante_entrega`) | download exige **associação à organização**, não a permissão `arquivos.leia` |
 
-### 2.2 `needs-status_POST` hoje (comportamento que a Fase 99 muda)
+### 3.2 `needs-status_POST` hoje (comportamento que a Fase 99 substitui)
 
-Ao mudar uma necessidade para `atendida` (exige `necessidades.gerencie` **e** `inventario.lance`):
+Ao mudar para `atendida` (exige `necessidades.gerencie` e `inventario.lance`): se a necessidade tem `item_id`, não há `need_resolutions` e o status anterior não era `atendida`, insere **saída automática da `quantity_needed` inteira** (sem comparar unidades; 409 se saldo insuficiente) e grava `need_resolutions.stock_transaction_id`; sem item, grava resolução **declarativa** (`stock_transaction_id = NULL`). O status é livre entre `aberta`, `atendida` e `cancelada`; reverter não desfaz a saída. "Atendida" significa hoje "a quantidade total saiu do estoque, ou alguém declarou que sim".
 
-- se a necessidade tem `item_id`, ainda não tem linha em `need_resolutions` e o status anterior não era `atendida`, o endpoint insere uma **saída automática de toda a `quantity_needed`** (`reason = "Baixa automática: necessidade … marcada como atendida"`), sem comparar unidades, e grava `need_resolutions.stock_transaction_id`; se o saldo é insuficiente, responde 409;
-- se não tem item vinculado, grava uma resolução **declarativa** (`stock_transaction_id = NULL`);
-- o status é livre entre `aberta`, `atendida` e `cancelada`; reverter o status não desfaz a saída nem a resolução; uma segunda passagem por `atendida` não gera segunda baixa (UNIQUE `need_id`).
+### 3.3 O ledger `need_fulfillments` mede suprimento, não atendimento
 
-Consequência: "atendida" hoje significa "a quantidade total necessária saiu do estoque, ou alguém declarou que sim", independentemente do que foi de fato entregue, em que unidade, ou se houve entrega parcial.
+`allocation_id` é **NOT NULL** (só recebimentos da rede entram). A interface já o chama de "Recebido pela rede" (`src/pages/organizacoes.$organizationId.necessidades.tsx`). Seu `requiredRemaining` é usado pelo **matching** e por `opportunity-allocations_POST.ts` para não destinar à necessidade mais do que ela precisa; esse uso precisa continuar sendo a medida de **suprimento** — se passasse a usar a quantidade destinada, a rede reenviaria recursos a quem já os tem parados em estoque. `impactReport.tsx` calcula `statusWarning = (status === "atendida" && requiredRemaining > 0)`.
 
-### 2.3 O ledger `need_fulfillments` mede suprimento, não atendimento
-
-- `allocation_id` é **NOT NULL** e referencia `opportunity_allocations`: só recebimentos da rede entram no ledger.
-- A interface já o chama de "Recebido pela rede" (`src/pages/organizacoes.$organizationId.necessidades.tsx`) e de "Parcialmente atendida pela rede".
-- `requiredRemaining` desse ledger é usado pelo **matching** e por `opportunity-allocations_POST.ts` para não destinar à necessidade mais do que ela precisa. Esse uso é correto e **precisa continuar sendo a medida de suprimento**: se o matching passasse a usar a quantidade destinada, a rede enviaria recursos de novo a quem já os tem parados em estoque.
-- `src/helpers/impactReport.tsx` calcula `statusWarning = (status === "atendida" && requiredRemaining > 0)`.
-
-### 2.4 Unidades: três conceitos, uma comparação
+### 3.4 Unidades: três conceitos, uma comparação
 
 | Unidade | Onde mora | Comparada com quê hoje |
 |---|---|---|
-| da oferta | `opportunity_registry.unit`, `donation_opportunities.unit` (anuláveis) | **com nada** no recebimento |
-| do item | `inventory_items.unit` (NOT NULL) | é a unidade do saldo e do `quantity` gravado no ledger |
-| da necessidade | `needs.unit` (NOT NULL) | com a do item, só em `createNeedFulfillment`, via `normalize()` (texto: acentos e caixa); divergência grava `is_countable = false` + `unit_mismatch_note`; o estoque recebe a quantidade bruta |
+| da oferta | `opportunity_registry.unit`, `donation_opportunities.unit` (anuláveis; texto livre) | **com nada** no recebimento |
+| do item | `inventory_items.unit` (NOT NULL; texto livre digitado no formulário) | é a unidade do saldo e do `quantity` do ledger |
+| da necessidade | `needs.unit` (NOT NULL; texto livre) | com a do item, só em `createNeedFulfillment`, via `normalize()`; divergência grava `is_countable = false` + `unit_mismatch_note` |
 
-`normalize()` não é conversão: "caixa" e "caixas" são tratadas como diferentes.
+`normalize()` (acentos e caixa) **não é conversão**: "caixa" ≠ "caixas" e "un" ≠ "unidade". Valores observados nas sementes e testes do repositório: `kg`, `un`, `unidade` — **não** são um inventário dos dados reais (ver 10.5).
 
-### 2.5 O que o histórico consegue e não consegue provar
-
-- **Prova com confiança:** origem da oferta, decisão, ator e prazo da atribuição, eventos de logística, recebimento (quantidade, item, data, ator, comprovante), correções e estornos do recebimento, saldo e cada movimento de estoque, auditoria encadeada por hash.
-- **Deixa de explicar o destino:** qualquer `saida` (livre) e a baixa automática. Não há vínculo estruturado com finalidade, necessidade, comprovante ou quantidade de pessoas.
-- **Não é provável sem lotes:** qual doação específica foi entregue. O estoque é um saldo fungível por item; uma saída de arroz não identifica de qual entrada veio.
+### 3.5 O que o histórico prova e não prova
+Prova: origem da oferta, decisão, ator e prazo da atribuição, logística, recebimento (quantidade, item, data, ator, comprovante), correções e estornos do recebimento, saldo e cada movimento, auditoria encadeada por hash. **Deixa de explicar o destino:** qualquer `saida` (livre) e a baixa automática. **Não é provável sem lotes:** qual doação específica foi entregue.
 
 ---
 
-## 3. Problemas comprovados pelo código
+## 4. Problemas comprovados pelo código
 
 | # | Problema | Evidência |
 |---|---|---|
-| P1 | Saída de estoque é quantidade com motivo livre, sem finalidade estruturada | `stock-transactions_POST.schema.ts`: `reason: z.string().min(2)`; `stock_transactions.reason TEXT` |
-| P2 | "Atendida" gera saída automática da quantidade **total** necessária | `needs-status_POST.ts` (bloco `willConsumeStock`) |
-| P3 | Resolução declarativa permite "atendida" sem lastro físico algum | `needs-status_POST.ts` (`willCreateDeclarativeResolution`) |
-| P4 | Dois conceitos com nome parecido: ledger de suprimento ("fulfillments") e "atendida" administrativa; relatório chama o ledger de "atendimento" | `prestacao-contas.tsx` ("Líquido do atendimento desta atribuição"); `necessidades.tsx` |
-| P5 | Doação local vinculada a necessidade (`linked_need_id`) não tem efeito algum na necessidade; o ledger não consegue representá-la | `opportunities-receive_POST.ts` não toca o ledger; `need_fulfillments.allocation_id NOT NULL` |
-| P6 | Unidade da oferta nunca é comparada com a do item; saldo recebe quantidade bruta | `allocations-receive_POST.ts` seleciona só `item.unit`; `opportunities-receive_POST.ts` não lê `unit` |
-| P7 | `statusWarning` só enxerga o suprimento (ledger), não entrega | `impactReport.tsx` |
-| P8 | Comprovantes: só `comprovante_entrega` (recebimento); download por associação, não por permissão/finalidade | `files-upload_POST.schema.ts`, `files-download_GET.ts` |
-| P9 | `saidas` do relatório é um total por item, sem separar finalidade nem saídas sem destinação | `impact-report_GET.schema.ts` (`itemMovements`) |
-| P10 | Edição de unidade/quantidade/item de necessidades e itens de inventário não existe (decisão de produto pendente), então "exigir a correção dos dados" só tem os caminhos "escolher/criar outro item" ou corrigir a oferta | `docs/ROADMAP_ATUAL.md` §2 |
+| P1 | Saída é quantidade com motivo livre, sem finalidade estruturada | `stock-transactions_POST.schema.ts` (`reason: z.string().min(2)`) |
+| P2 | "Atendida" gera saída automática da quantidade **total** | `needs-status_POST.ts` (`willConsumeStock`) |
+| P3 | Resolução declarativa permite "atendida" sem lastro físico | `needs-status_POST.ts` (`willCreateDeclarativeResolution`) |
+| P4 | Dois conceitos com nome parecido: ledger de suprimento e "atendida" administrativa; o relatório chama o ledger de "atendimento" | `prestacao-contas.tsx`, `necessidades.tsx` |
+| P5 | Doação local com `linked_need_id` não tem efeito na necessidade; o ledger não a comporta | `opportunities-receive_POST.ts`; `need_fulfillments.allocation_id NOT NULL` |
+| P6 | Unidade da oferta nunca é comparada com a do item; saldo recebe quantidade bruta | `allocations-receive_POST.ts`, `opportunities-receive_POST.ts` |
+| P7 | `statusWarning` só enxerga suprimento | `impactReport.tsx` |
+| P8 | Comprovantes: só `comprovante_entrega`; download por associação, não por finalidade | `files-upload_POST.schema.ts`, `files-download_GET.ts` |
+| P9 | `saidas` do relatório é total por item, sem finalidade nem separação das sem destinação | `impact-report_GET.schema.ts` |
+| P10 | Unidades são texto livre sem registro de aliases; não há edição de item/necessidade/oferta nem trilha de correção | formulários, `docs/ROADMAP_ATUAL.md` §2 |
+| P11 | O fuso horário é o do navegador; não há fuso de negócio no servidor | `src/helpers/reportDates.tsx` |
 
 ---
 
-## 4. Decisões E1 a E6 consolidadas
+## 5. Vocabulário e métricas (um significado por palavra)
 
-### E1 — Toda saída física nova tem destinação estruturada
-- Saída (`type = saida`) nova **exige** um registro de destinação criado **na mesma transação**. A finalidade vem de uma lista fechada (nada de texto livre como categoria).
-- `ajuste` continua no fluxo atual (permissões, dupla aprovação, motivo) e **nunca** é tratado como entrega a beneficiários. `entrada` não muda.
-- Categorias iniciais (revisáveis na implementação, ver [D-3]): `atendimento_coletivo`, `distribuicao_familias`, `instituicao_parceira`, `doacao_terceiros`, `perda_descarte`.
-- `doacao_terceiros` e `perda_descarte` **não** podem apontar para necessidade (sem forçar necessidade artificial); as três primeiras podem, e só elas podem contar para o atendimento.
-- Não há backfill: saídas antigas ficam "sem destinação estruturada" (seção 13).
-- O endpoint `needs-status_POST` deixa de criar saídas (E2).
+| Termo | Definição | Fonte |
+|---|---|---|
+| **Recebido** | Recurso que chegou à organização (entrada de estoque da rede ou doação local) | `stock_transactions` entrada |
+| **Suprimento recebido** | Entrada elegível de uma necessidade pelo ledger da rede, descontadas correções e estornos | `need_fulfillments` (inalterado) |
+| **Em estoque** | Quantidade física disponível | soma de `stock_transactions.delta` |
+| **Destinado** | Quantidade que saiu do estoque com finalidade estruturada | `stock_destinations` |
+| **Atendido** | Quantidade de uma necessidade efetivamente destinada e contabilizável, líquida de reversões | derivado de `stock_destinations` |
+| **Atendida** | Estado do sistema quando o atendido alcança o necessário (ou estado histórico, ver 15) | `needs.status` |
+| **Sem destinação estruturada** | Saída histórica cuja finalidade não pode ser reconstruída com segurança | saída sem linha de destinação |
 
-### E2 — "Necessidade atendida" = quantidade efetivamente destinada e contabilizável
-Regras (todas verificáveis):
-
-1. Entregas parciais podem ser registradas; cada destinação informa quantidade e unidade.
-2. Atendimento líquido = Σ destinações contabilizáveis − Σ estornos das mesmas.
-3. Destinação com unidade incompatível com a da necessidade **não** aumenta o atendimento (E4).
-4. A necessidade só está completamente atendida quando o líquido contabilizável ≥ `quantity_needed`.
-5. Mudar o status para `atendida` **nunca** cria saída de estoque (P2 deixa de existir). Quem aplica `atendida` é o sistema, quando o líquido contabilizável alcança a quantidade (6.4); o `needs-status_POST` passa a **recusar** `atendida` manual (409, informando quanto falta).
-6. Quando há entrega parcial, a interface mostra o atendido e o que falta.
-7. Atendimento contabilizável acima do solicitado exige autorização explícita e auditada (6.3).
-8. Encerrar sem entrega total usa o estado já existente `cancelada` com motivo auditado (ver [D-2] para a alternativa de um novo estado); **nunca** `atendida`.
-9. Necessidades antigas e suas `need_resolutions` continuam legíveis e não são reabertas nem reclassificadas.
-10. O significado vale para endpoints, telas e relatórios: onde hoje se lê "atendida/atendimento" para o ledger, passa a ler-se "recebido/suprimento".
-
-### E3 — Doação local com `linked_need_id`
-- O recebimento local **não** é atendimento. Só uma destinação física válida contribui.
-- Como o estoque é fungível (sem lotes), a destinação se liga à **necessidade** diretamente (campo `need_id` da destinação), e não à doação de origem. Assim a mesma quantidade nunca conta por duas fontes: o atendimento tem **uma só fonte, a destinação**.
-- `linked_need_id` da doação local passa a ser apenas uma **sugestão de pré-seleção** no formulário de destinação do mesmo item (não é vínculo contábil).
-- O ledger `need_fulfillments` **não muda** na Fase 99: continua significando suprimento recebido por atribuição da rede. Ver comparação de modelos na seção 5.2 e a alternativa de ledger unificado.
-
-### E4 — Unidades
-Seção 9. Em resumo: sem conversão automática; saldo na unidade do item; recebimento com unidade da oferta incompatível é bloqueado por padrão; destinação física pode existir sem ser contabilizável; relatórios separam quantidade física e contabilizável; nunca se somam grandezas incompatíveis.
-
-### E5 — Privacidade
-Sem cadastro nominal. Registra-se só o mínimo (seção 10).
-
-### E6 — Imutabilidade e reversão
-Destinação é imutável e se corrige por **novos eventos** que referenciam o original, como o ledger. Três cenários distintos de reversão, cada um com sua movimentação compensatória (seção 7).
+**Suprimento recebido e atendimento final são métricas distintas e nunca se somam como se fossem a mesma coisa.** O suprimento orienta a decisão de enviar recursos; o atendimento demonstra o uso final. A interface e os relatórios usam esses nomes e nunca "atendido" para o que é só recebido.
 
 ---
 
-## 5. Modelo de dados recomendado
+## 6. Finalidades de destinação (enumeração fechada)
 
-### 5.1 Tabela `stock_destinations` (recomendada)
+Chaves técnicas estáveis (não mudam; rótulos podem mudar). Todas **exigem saída física** do estoque (a destinação é criada junto com a saída, ver 8.1). Ajuste de estoque **não** é finalidade.
 
-Uma tabela de eventos, imutável, com duas espécies de linha:
+| Chave / rótulo | Uso | Necessidade | Motivo exigido | Comprovante | Pessoas atendidas | Contabiliza atendimento | Indicadores |
+|---|---|---|---|---|---|---|---|
+| `atendimento_coletivo` — "Atendimento coletivo" | Uso ou distribuição para um grupo, sem identificar participantes | **pode** vincular (necessidade compatível) | não (observação opcional) | opcional | opcional (nº de pessoas do grupo, agregado) | **sim**, se vinculada e unidade compatível | "Destinado ao atendimento" |
+| `distribuicao_familias` — "Distribuição a famílias" | Entrega direta de itens a famílias; sem nomes, contatos ou documentos | **pode** vincular | não | opcional | opcional; **significado fixo:** nº de famílias **ou** de pessoas, indicado por um campo `people_unit` (`familias`/`pessoas`) — nunca somados entre si | **sim**, se vinculada e unidade compatível | "Destinado ao atendimento" |
+| `entrega_instituicao_parceira` — "Entrega a instituição parceira" | Entrega física a instituição parceira para a atuação social dela | **pode** vincular (registrado quando houver) | não | opcional | opcional | **sim**, se vinculada e unidade compatível (a entrega à instituição é a destinação; não afirma beneficiário final) | "Destinado ao atendimento (via instituição)" |
+| `uso_operacional_instituicao` — "Uso operacional da organização" | Consumo interno necessário à operação | **não** | **sim** (descrição ≥ 10 caracteres) | opcional | não | **não** | "Destinado à operação" (separado do atendimento) |
+| `doacao_a_terceiro` — "Doação a terceiro" | Transferência a entidade/destinatário externo fora do fluxo de instituição parceira | **não** | **sim** (≥ 10 caracteres) | opcional | não | **não** | "Doado a terceiros" |
+| `devolucao_ao_doador` — "Devolução ao doador" | Devolução física ao doador ou fornecedor | **não** | **sim** (≥ 10 caracteres); referência opcional à oferta/doação de origem quando conhecida | opcional | não | **não** | "Devolvido ao doador" |
+| `perda` — "Perda" | Perda física involuntária (avaria, deterioração) | **não** | **sim** (motivo + descrição ≥ 10 caracteres) | opcional | não | **não** | "Perdas" |
+| `descarte` — "Descarte" | Eliminação intencional de recurso inutilizável ou impróprio | **não** | **sim** (motivo + descrição ≥ 10 caracteres) | opcional | não | **não** | "Descartes" |
+
+Regras comuns:
+1. **Necessidade vinculada** só nas três categorias de atendimento; as demais exigem `need_id IS NULL` (CHECK no banco).
+2. **Contabilizável** (`is_countable`) = categoria de atendimento **e** `need_id` informado **e** unidade compatível (seção 10); nunca é contabilizável o que não serve a uma necessidade.
+3. **Permissões:** `atendimento_coletivo`, `distribuicao_familias`, `entrega_instituicao_parceira`, `uso_operacional_instituicao` e `perda` exigem `inventario.lance` + `destinacoes.registre` (proprietário, administrador, operador). `doacao_a_terceiro`, `devolucao_ao_doador` e `descarte` (saídas de maior risco e sem finalidade de atendimento) exigem `destinacoes.corrija` (proprietário, administrador).
+4. **Risco proporcional:** `perda`, `descarte`, `doacao_a_terceiro` e `devolucao_ao_doador` aplicam as **mesmas faixas da dupla aprovação de ajuste negativo** (quantidade ≥ 20 ou ≥ 30 % do saldo): a saída fica pendente num pedido de aprovação (novo tipo de ação) e, ao aprovar, a saída **e** a destinação são criadas numa única transação, revalidando saldo e estado. [T-1: reaproveitar `approval_requests`.]
+5. **Reversão sem saldo fictício:** ver seção 9; só há entrada compensatória quando o recurso voltou fisicamente.
+6. **Ajuste × perda:** um ajuste negativo continua sendo um ajuste. Para não haver duas baixas do mesmo fato, a interface passa a oferecer **"registrar perda/descarte"** (destinação) no lugar de "ajuste negativo" quando o motivo é perda; um ajuste negativo **antigo** que representava uma perda pode ser **classificado** por uma linha de destinação `perda`/`descarte` que **referencia o ajuste existente** (classificação documental, sem novo movimento), apenas por quem tem `destinacoes.corrija`. [T-2: o gatilho aceita `ajuste` negativo como movimento vinculado **somente** nestas duas categorias e só uma vez por movimento.]
+7. **Limite documentado:** não há categoria de transferência entre locais de estoque, porque o modelo atual (saldo agregado por item e organização) não tem localizações internas.
+8. Nenhuma categoria é acrescentada sem justificativa concreta e nova decisão de produto.
+
+---
+
+## 7. Modelo de dados recomendado
+
+### 7.1 Tabela `stock_destinations` (eventos imutáveis)
+
+Três espécies de linha, todas append-only (gatilhos de bloqueio como no ledger):
 
 ```
 stock_destinations
   id                       BIGSERIAL PK
-  organization_id          INTEGER NOT NULL  -> organizations(id) ON DELETE RESTRICT
-  entry_type               TEXT NOT NULL     CHECK IN ('original', 'reversal')
-  item_id                  INTEGER NOT NULL  -> inventory_items(id) ON DELETE RESTRICT
-  stock_transaction_id     BIGINT            -- movimento físico: saída (original); entrada/ajuste compensatório (reversal); NULL só em reversal documental
-  need_id                  INTEGER           -- NULL = destinação sem necessidade
-  destination_type         TEXT NOT NULL     CHECK IN ('atendimento_coletivo','distribuicao_familias','instituicao_parceira','doacao_terceiros','perda_descarte')
-  quantity                 NUMERIC(12,3) NOT NULL CHECK (> 0)
-  unit                     TEXT NOT NULL     -- unidade do item no momento (canônica)
-  is_countable             BOOLEAN NOT NULL  -- contabilizável para a necessidade (regras 6.2)
-  delivered_on             DATE NOT NULL     -- data efetiva da destinação (não futura)
-  people_served            INTEGER           CHECK (>= 0) -- agregado declarado; NULL = não informado
+  organization_id          INTEGER NOT NULL -> organizations(id) ON DELETE RESTRICT
+  entry_type               TEXT NOT NULL CHECK IN ('original','correction','reversal')
+  item_id                  INTEGER NOT NULL -> inventory_items(id) ON DELETE RESTRICT
+  stock_transaction_id     BIGINT            -- movimento físico: saída (original); ajuste negativo já existente (classificação, 6.6);
+                                             -- entrada/ajuste compensatório (reversal); NULL em correction e em estorno documental
+  need_id                  INTEGER           -- só categorias de atendimento
+  destination_type        TEXT NOT NULL      CHECK IN (as oito chaves da seção 6)
+  quantity                 NUMERIC(12,3)     CHECK (> 0)   -- original: quantidade da saída; reversal: quantidade afetada; correction: NULL
+  unit                     TEXT              -- unidade canônica do item no momento (copiada)
+  is_countable             BOOLEAN           -- original: decidido pelas regras; reversal: herdado da original
+  delivered_on             DATE              -- data EFETIVA informada (original; correction pode corrigi-la)
+  people_served            INTEGER           CHECK (>= 0)
+  people_unit              TEXT              CHECK IN ('familias','pessoas')  -- obrigatório se people_served informado
   notes                    TEXT              -- observações operacionais não sensíveis (limite de tamanho)
-  proof_file_id            INTEGER           -- comprovante opcional
-  surplus_reason           TEXT              -- preenchido só quando excede a necessidade (6.3)
-  reverses_destination_id  BIGINT            -> stock_destinations(id) ON DELETE RESTRICT
-  reversal_kind            TEXT              CHECK IN ('correcao_registro','devolucao_fisica','estorno_documental')
-  reason                   TEXT              -- obrigatório em reversal
-  created_by_user_id       INTEGER NOT NULL  -> users(id)
-  created_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+  proof_file_id            INTEGER
+  surplus_reason           TEXT              -- excedente autorizado (8.3)
+  late_registration_reason TEXT              -- retroação > 7 dias (8.6)
+  authorized_by_user_id    INTEGER           -- quem autorizou excedente/retroação, quando exigido
+  reverses_destination_id  BIGINT            -> stock_destinations(id) ON DELETE RESTRICT   -- reversal e correction
+  reversal_kind            TEXT              CHECK IN ('correcao_quantidade','devolucao_fisica','estorno_documental')
+  reason                   TEXT              -- obrigatório em correction e reversal
+  created_by_user_id       INTEGER NOT NULL -> users(id)
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT now()  -- data de REGISTRO (servidor)
 ```
 
-**Integridade que o banco garante (não só o TypeScript):**
+**Distinção das situações exigidas:** destinação original = `original`; correção documental = `correction` (só campos não contábeis, ver 9.1); estorno documental = `reversal` com `reversal_kind = 'estorno_documental'`; devolução física = `reversal` com `devolucao_fisica` ligada a **entrada** compensatória; correção de quantidade = `reversal` com `correcao_quantidade` ligada a **ajuste positivo** compensatório. Cada evento carrega motivo e ator; a quantidade original fica na linha original e a afetada na linha do evento; **data efetiva** (`delivered_on`) e **data de registro** (`created_at`) são colunas distintas; estado contabilizável e vínculo com a necessidade estão na original e são herdados.
 
-- FK composta `(stock_transaction_id, organization_id)` → `stock_transactions(id, organization_id)` (o UNIQUE já existe, criado para o ledger): um movimento de outra organização é rejeitado.
-- FK composta `(need_id, organization_id)` → `needs(id, organization_id)` (UNIQUE já existe): necessidade de outra organização é rejeitada.
-- FK composta `(proof_file_id, organization_id)` → `files(id, organization_id)`: exige adicionar `UNIQUE (id, organization_id)` em `files`, trivialmente verdadeiro por ser `id` a chave primária (migration própria, classificação "satisfeita por construção").
-- CHECKs por espécie: `original` ⇒ `stock_transaction_id NOT NULL`, `reverses_destination_id IS NULL`, `reversal_kind IS NULL`, `reason IS NULL`; `reversal` ⇒ `reverses_destination_id NOT NULL`, `reversal_kind NOT NULL`, `reason NOT NULL`; `reversal_kind = 'estorno_documental'` ⇔ `stock_transaction_id IS NULL`.
-- CHECK de finalidade: `destination_type IN ('doacao_terceiros','perda_descarte')` ⇒ `need_id IS NULL` e `is_countable = false`.
-- `UNIQUE (stock_transaction_id) WHERE stock_transaction_id IS NOT NULL`: cada movimento físico pertence a no máximo uma linha de destinação.
-- Gatilho de validação (padrão de `need_fulfillments_validate_entry`): para `original`, a movimentação é `saida`, do mesmo item e organização, com `quantity = -delta` e `unit = inventory_items.unit`; para reversão, a original existe, é da mesma organização, `Σ reversões ≤ quantidade da original` (travando a linha da original), e o movimento compensatório tem o tipo coerente com `reversal_kind` (seção 7); `is_countable` e `need_id` da reversão herdam os da original.
-- No máximo **uma destinação original não totalmente revertida por movimento** (gatilho que trava a linha de `stock_transactions`): uma saída não recebe duas destinações normais; só depois de um estorno documental total o mesmo movimento pode ser re-destinado (seção 7.3).
-- Gatilhos `BEFORE UPDATE`/`BEFORE DELETE` reutilizando a função de bloqueio já usada em `stock_transactions` e `need_fulfillments` (`audit_log_block_mutation`): imutável.
-- Regra anterior do projeto: **nenhuma FK nova usa `ON DELETE CASCADE/SET NULL` contra tabelas imutáveis** (todas `RESTRICT`).
+**Integridade no banco (não só no TypeScript):**
+- FK composta `(stock_transaction_id, organization_id)` → `stock_transactions(id, organization_id)` (UNIQUE já existe): movimento de outra organização é rejeitado.
+- FK composta `(need_id, organization_id)` → `needs(id, organization_id)` (UNIQUE já existe).
+- FK composta `(proof_file_id, organization_id)` → `files(id, organization_id)`: exige `UNIQUE (id, organization_id)` em `files` (verdadeiro por construção; migration própria).
+- CHECKs por espécie: `original` ⇒ `stock_transaction_id` e `delivered_on` não nulos, `reversal_kind IS NULL`, `reverses_destination_id IS NULL`; `correction` ⇒ `reverses_destination_id` e `reason` não nulos, `quantity IS NULL`, `stock_transaction_id IS NULL`, e **nenhum** dos campos contábeis (`need_id`, `destination_type`, `is_countable`, `unit`); `reversal` ⇒ `reverses_destination_id`, `reversal_kind`, `reason` e `quantity` não nulos; `reversal_kind = 'estorno_documental'` ⇔ `stock_transaction_id IS NULL`.
+- `destination_type` fora das três de atendimento ⇒ `need_id IS NULL` e `is_countable = false`; `people_served` só nas três de atendimento.
+- `UNIQUE (stock_transaction_id) WHERE stock_transaction_id IS NOT NULL`: cada movimento físico pertence a no máximo uma linha.
+- **Gatilho de validação** (padrão de `need_fulfillment_validate_entry`, com trava na linha de `stock_transactions` e na original): para `original`, o movimento é `saida` (ou `ajuste` negativo nos casos de 6.6) do mesmo item e organização, `quantity = -delta`, `unit = inventory_items.unit`; para reversão, a original existe, é da mesma organização, **Σ reversões ≤ quantidade da original** e o tipo do movimento compensatório é coerente (`devolucao_fisica` → entrada; `correcao_quantidade` → ajuste positivo; `estorno_documental` → nenhum); no máximo **uma destinação original ativa** (não totalmente revertida) por movimento; `is_countable`, `need_id`, `unit` e item herdados da original.
+- Gatilhos `BEFORE UPDATE`/`BEFORE DELETE` com a função de bloqueio já usada (`audit_log_block_mutation`). Regra do projeto: nenhuma FK nova usa `CASCADE`/`SET NULL` contra tabelas imutáveis (todas `RESTRICT`).
 
-### 5.2 Alternativas comparadas
+**Como cada risco é evitado:**
 
-| Modelo | Descrição | Prós | Contras | Veredicto |
-|---|---|---|---|---|
-| **M1** | Tabela de eventos `stock_destinations` (acima) | Separa suprimento e atendimento; não toca ledger nem estoque; reversões como eventos; constraints fortes | Tabela nova; relatórios novos | **Recomendado** |
-| M2 | Colunas extras em `stock_transactions` (`destination_type`, `need_id`...) | Menos tabelas | Tabela imutável e central misturaria conceitos; reversão exigiria outra estrutura de qualquer forma; colunas anuláveis para entrada/ajuste | Rejeitado |
-| M3 | Estender `need_fulfillments` com origem genérica (`allocation_id` NULL + `destination_id`, `CHECK num_nonnulls(allocation_id, destination_id) = 1`) | Um só ledger | Mistura suprimento e atendimento no mesmo total (reintroduz o P4); exige relaxar um NOT NULL que protege o ledger; mexe em fórmula consumida por matching e relatório | Só se o produto exigir ledger único (ver abaixo) |
-| M4 | Guardar a finalidade em JSON/metadata de auditoria | Zero schema | Não consultável, sem integridade, sem constraints | Rejeitado |
+| Risco | Garantia |
+|---|---|
+| Destinações duplicadas para a mesma saída | `UNIQUE (stock_transaction_id)` + gatilho de "uma original ativa" com trava no movimento |
+| Reversões acima da original | gatilho Σ reversões ≤ original, serializado por trava na original |
+| Reversões concorrentes incompatíveis | trava na original; a segunda lê o estado confirmado |
+| Atendimento acima do permitido sem autorização | trava na necessidade + regra 8.3 + `surplus_reason` obrigatório |
+| Referências entre organizações | FKs compostas por organização (stock, necessidade, arquivo) |
+| Saldo físico criado por estorno documental | estorno documental exige `stock_transaction_id IS NULL`; só `devolucao_fisica`/`correcao_quantidade` geram movimento, e movimento compensatório exige o tipo coerente |
+| Dupla contagem suprimento × destinado | ledger intocado; atendido derivado só de `stock_destinations` (seção 5) |
+| Soma de unidades incompatíveis | `is_countable` só com unidade compatível; relatórios agregam por item/unidade |
 
-**Origem do atendimento (pergunta de E3):** com estoque fungível, a origem do atendimento é a **destinação** (uma fonte). "Atribuição da rede" e "doação local" são origens do **suprimento** (entradas), não do atendimento. Se mais adiante o produto quiser atribuir cada destinação a uma entrada específica, as opções são (a) leitura derivada FIFO (relatório, sem gravar), ou (b) lotes explícitos de estoque ([D-1]); nenhuma é necessária para provar o atendimento e **nenhuma** deve ser adotada silenciosamente.
+### 7.2 Tabelas de apoio
 
-**Se o dono preferir ledger único (M3):** exige `allocation_id` anulável **com** `destination_id` e `CHECK (num_nonnulls(allocation_id, destination_id) = 1)`, FK composta para a organização em ambos, `entry_type` do ledger ganhando semântica de espécie de linha, e a fórmula de saldo passando a separar por origem; o matching continuaria precisando só das linhas de suprimento. É mais invasivo e fica fora da recomendação.
+- **`need_closures`** (eventos imutáveis; seção 8.5): `need_id` (FK composta com organização), `reason_code`, `reason_text`, `quantity_needed_snapshot`, `attended_snapshot`, `remaining_snapshot`, ator, `created_at`.
+- **`unit_regularization_cases` + `unit_regularization_events`** (seção 10.4): caso (fatos de origem imutáveis) + eventos append-only (estado derivado).
+- **Registro de unidades** (`unit_registry`, `unit_aliases`; seção 10.5).
 
-### 5.3 Relações de leitura (sem colunas redundantes)
+### 7.3 Alternativas comparadas
 
-- **Atendido(need)** = Σ `quantity` de `original` com `is_countable` − Σ `quantity` de `reversal` com a original contabilizável (todas as espécies de reversão reduzem).
-- **Recebido(need)** = fórmula do ledger atual (`getNeedFulfillmentBalance`), sem alteração.
-- **Saídas sem destinação estruturada** = `stock_transactions.type = 'saida'` sem linha em `stock_destinations`, subclassificadas: *baixa automática histórica* (`need_resolutions.stock_transaction_id` aponta para ela) e *saída manual anterior* (as demais).
-- Nenhum saldo é persistido; tudo é calculado no SQL sobre o conjunto completo (o limite de exibição vale só para listas), como em `impactReport.tsx`.
+| Modelo | Descrição | Veredicto |
+|---|---|---|
+| **M1** | Tabela de eventos `stock_destinations` (acima) | **Recomendado**: separa suprimento e atendimento; não toca estoque nem ledger; correções e reversões como eventos; constraints fortes |
+| M2 | Colunas extras em `stock_transactions` | Rejeitado: tabela imutável e central misturaria conceitos; reversão exigiria outra estrutura |
+| M3 | Estender `need_fulfillments` (origem genérica: `allocation_id` NULL + `destination_id`, `CHECK num_nonnulls(allocation_id, destination_id) = 1`) | Rejeitado: mistura suprimento e atendimento no mesmo total (reintroduz P4) e relaxa um NOT NULL que protege o ledger usado pelo matching. Só se o produto vier a exigir ledger único; exigiria FK composta por organização em ambas as origens e fórmula de saldo separada por origem |
+| M4 | Finalidade em JSON/metadata de auditoria | Rejeitado: sem integridade nem consulta |
 
----
+### 7.4 Lotes e FIFO — fora do escopo
+Nesta fase não há rastreabilidade por lote, número de série ou FIFO. A destinação liga-se à **movimentação de saída** e ao **item** da mesma organização. O sistema **não afirma** que determinada saída veio de uma oferta específica: o estoque é agregado e isso não é sustentável pelos dados. A origem da doação e o percurso até o recebimento continuam rastreáveis no fluxo existente; a identidade física de cada unidade entregue **não** pode ser inferida. Lotes/FIFO ficam documentados como **evolução futura**, só se surgir necessidade operacional demonstrada (por exemplo, validade de alimentos).
 
-## 6. Regras de negócio completas
-
-### 6.1 Registrar destinação (fluxo normal)
-Em **uma transação**, na ordem de travas da seção 15.3:
-1. autoriza (`inventario.lance` **e** `destinacoes.registre`, isolamento por organização);
-2. trava o item (`FOR UPDATE`), confere saldo (nunca negativo, como hoje);
-3. se há `need_id`: trava a necessidade (`FOR NO KEY UPDATE`), confere que é da organização e que `status ≠ cancelada`; se a necessidade tem `item_id`, o item da saída **deve ser o mesmo** (409 caso contrário); decide `is_countable` (6.2);
-4. se contabilizável: confere o excesso (6.3);
-5. insere a saída (`stock_transactions`, `reason` gerado a partir da finalidade e da necessidade — o texto deixa de ser a fonte da verdade) e a linha de destinação ligada a ela;
-6. se o líquido alcançou a quantidade, aplica a transição automática (6.4);
-7. audita (`destinacao.registrada`) por último; qualquer falha reverte tudo.
-Idempotência: a unicidade do movimento impede a segunda destinação; reenviar a mesma requisição depois de sucesso devolve 409 (não duplica saída).
-
-### 6.2 Contabilizável
-`is_countable = true` somente se **todas**: finalidade ∈ {`atendimento_coletivo`, `distribuicao_familias`, `instituicao_parceira`}; `need_id` informado; `normalize(item.unit) === normalize(need.unit)`. Caso contrário a destinação existe como fato físico, `is_countable = false`, e a interface avisa **antes** de confirmar ("esta destinação não contará para o atendimento da necessidade: unidades diferentes").
-
-### 6.3 Excedente
-Se `atendido + quantidade > quantity_needed`, a destinação contabilizável é recusada (409) a menos que **proprietário ou administrador** informe um motivo (`surplus_reason`); a linha guarda o motivo e a auditoria registra `destinacao.excedente_autorizado`. Sem motivo não há atendimento acima do solicitado. O relatório já distingue `surplus` no ledger; aqui passa a distinguir também o excedente de atendimento.
-
-### 6.4 Estado da necessidade (consistente)
-- `atendida` passa a ser **estado do sistema**: aplicado, na mesma transação, quando o líquido contabilizável alcança `quantity_needed` (auditoria `necessidade.atendida_automaticamente`).
-- Se uma reversão derruba o líquido abaixo da quantidade e a necessidade está `atendida` **e não tem linha em `need_resolutions`** (ou seja, foi atendida pelo novo modelo), o sistema volta a `aberta` (auditoria `necessidade.reaberta_automaticamente`). Necessidades `atendida` por resolução antiga **nunca** são reabertas pelo sistema (preserva o histórico). A regra P-L8 de `docs/LEDGER_CORRECOES_ESPECIFICACAO.md` continua valendo para as **correções do ledger de recebimentos**: elas não alteram `needs.status`; a reabertura automática descrita aqui vale só para a queda do **atendido por destinação**.
-- `needs-status_POST` com `atendida` manual: **recusado** (409, explicando que o atendimento vem das destinações). `cancelada` com atendimento parcial exige motivo e fica visível como "cancelada com atendimento parcial de X".
-- `aberta` (reabertura manual) segue permitida como hoje.
-
-### 6.5 Quem pode o quê
-Seção 11.
-
-### 6.6 Datas
-`delivered_on` não pode ser futura. Retroagir é permitido; destinações com data anterior a 30 dias do registro ficam marcadas na auditoria (limite sujeito a [D-4]).
-
-### 6.7 O que continua intocado
-Recebimento da rede (inclusive ledger, correções e estorno físico), matching, atribuições (Fases 95 a 98), idempotência do recebimento local (Fase 96), exclusão por recusa (Fase 97), dupla aprovação de ajustes negativos.
+### 7.5 Relações de leitura (sem colunas redundantes)
+- **Atendido(necessidade)** = Σ `quantity` das `original` contabilizáveis − Σ `quantity` das `reversal` cuja original é contabilizável. `correction` não altera quantidade.
+- **Suprimento(necessidade)** = fórmula atual do ledger.
+- **Saídas sem destinação estruturada** = `stock_transactions.type = 'saida'` sem linha em `stock_destinations`, em duas subclasses: *baixa automática histórica* (referenciada por `need_resolutions.stock_transaction_id`) e *saída manual anterior*.
+- Tudo é calculado no SQL sobre o conjunto completo; os limites de exibição valem só para listas (como em `impactReport.tsx`).
 
 ---
 
-## 7. Fluxos de reversão e correção (E6)
+## 8. Regras de negócio
 
-Princípio: nunca editar nem apagar; nunca criar saldo físico fictício; **a movimentação compensatória existe só quando o fato físico a justifica**. Reverter pode ser parcial (quantidade ≤ saldo não revertido da original).
+### 8.1 Registrar destinação (fluxo normal)
+Em **uma transação**, na ordem de travas da seção 17.3:
+1. autoriza (permissões da seção 13; isolamento por organização);
+2. trava o item (`FOR UPDATE`) e confere o saldo (nunca negativo);
+3. se há `need_id`: trava a necessidade (`FOR NO KEY UPDATE`), confere organização, `status ≠ cancelada`, e que o item é o mesmo se a necessidade tem `item_id` (409 caso contrário); decide `is_countable` (seção 10);
+4. se contabilizável: confere o excesso (8.3);
+5. confere a data efetiva (8.6);
+6. insere a saída (`stock_transactions`; o `reason` é **gerado** a partir da finalidade e da necessidade — o texto deixa de ser a fonte da verdade) e a destinação ligada a ela;
+7. se o atendido alcançou o necessário, aplica a transição automática (8.4);
+8. audita por último (`destinacao.registrada`). Qualquer falha reverte tudo.
+Reenviar uma requisição já efetivada devolve 409 (sem nova saída).
 
-| Cenário | O que realmente aconteceu | Movimento compensatório | Linha em `stock_destinations` | Quem | Auditoria |
+### 8.2 O que não muda
+Recebimento da rede (ledger, correções, estorno físico), matching, atribuições (Fases 95 a 98), idempotência do recebimento local (Fase 96), exclusão por recusa (Fase 97), dupla aprovação de ajustes.
+
+### 8.3 Excedente
+Se `atendido + quantidade > quantity_needed`, a destinação contabilizável é recusada (409) a menos que proprietário ou administrador informe `surplus_reason` (guardado na linha, com `authorized_by_user_id`; auditoria `destinacao.excedente_autorizado`). Sem motivo, não há atendimento acima do solicitado.
+
+### 8.4 Estado da necessidade (consistente)
+- `atendida` passa a ser **estado do sistema**: aplicado, na mesma transação, quando o atendido líquido alcança `quantity_needed` (auditoria `necessidade.atendida_automaticamente`).
+- Se uma reversão derruba o atendido abaixo da quantidade e a necessidade está `atendida` **sem linha em `need_resolutions`** (isto é, atendida pelo modelo novo), o sistema volta a `aberta` (auditoria `necessidade.reaberta_automaticamente`). Necessidades `atendida` por resolução antiga **nunca** são reabertas pelo sistema. A regra P-L8 de `docs/LEDGER_CORRECOES_ESPECIFICACAO.md` continua valendo para as correções do ledger de recebimentos (elas não alteram `needs.status`); a reabertura automática vale só para a queda do **atendido por destinação**.
+- `needs-status_POST` com `atendida` manual: **recusado** (409, informando quanto falta). **Nenhum** caminho de `needs-status_POST` insere em `stock_transactions` ou `need_resolutions` depois da implantação. Entrega parcial **nunca** gera baixa automática.
+- `aberta` (reabertura manual) segue como hoje.
+
+### 8.5 Encerramento de necessidade sem entrega total
+Usa o estado **existente** `cancelada` (não se cria estado duplicado) com **motivo estruturado**: `reason_code` ∈ {`recursos_insuficientes`, `necessidade_superada`, `duplicidade`, `desistencia_da_organizacao`, `outro`} + `reason_text` (obrigatório em `outro` e sempre que houver atendimento parcial). Grava um evento em `need_closures` com os instantâneos de solicitado, atendido e saldo não atendido. O cancelamento **não cria saída**. As entregas parciais já registradas continuam contabilizadas e visíveis ("cancelada com atendimento parcial de X"), sujeitas às regras de unidade e reversão. Nunca se muda para `atendida` sem atendimento contabilizável ≥ necessário. A quantidade solicitada original nunca é alterada.
+
+### 8.6 Data efetiva da destinação
+- `created_at` é a **data de registro**, do relógio do servidor/banco; `delivered_on` é a **data efetiva** informada.
+- Não pode ser **futura** (destinação registrada como realizada).
+- A organização pode registrar retroativamente até **7 dias corridos**; além disso exige **autorização administrativa** (`destinacoes.corrija`), `late_registration_reason` e auditoria.
+- **Fuso e referência:** o servidor decide "hoje" no **fuso de negócio configurado no servidor** (padrão proposto `America/Sao_Paulo`, [T-3]: hoje não existe fuso de negócio no servidor, ver P11) e compara **datas de calendário**; o navegador só envia a data escolhida e **nunca** é a autoridade para aceitar datas retroativas ou futuras.
+- Relatórios distinguem **data efetiva** e **data de registro** (filtros e colunas separados).
+- Corrigir a data é uma `correction` (9.1): o valor anterior permanece na linha original.
+
+### 8.7 Quem pode o quê
+Seção 13.
+
+---
+
+## 9. Correções, reversões e devoluções (E6)
+
+Princípios: nunca editar nem apagar; nunca criar saldo físico fictício; movimento compensatório **só** quando o fato físico o justifica; a correção documental **nunca** serve para contornar os controles de estoque.
+
+| Situação | Quando | Movimento físico | Linha | Quem | Auditoria |
 |---|---|---|---|---|---|
-| **7.1 Correção de registro** (`correcao_registro`) | A saída foi registrada em quantidade/dados **maiores do que ocorreu**: parte do recurso nunca saiu | `ajuste` **positivo** de igual quantidade (o recurso continua fisicamente lá), vinculado à linha de reversão | `reversal`, `stock_transaction_id` = ajuste | proprietário/administrador (`destinacoes.corrija`) | `destinacao.revertida` + motivo; ajuste positivo não passa por aprovação hoje ([D-5]) |
-| **7.2 Devolução física** (`devolucao_fisica`) | O recurso foi entregue e **voltou** ao estoque | `entrada` positiva (devolução) | `reversal`, `stock_transaction_id` = entrada | proprietário/administrador | idem; a entrada exige `inventario.lance` |
-| **7.3 Estorno documental** (`estorno_documental`) | A entrega ocorreu fisicamente; **o registro** (necessidade, finalidade, quantidade atribuída) estava errado | **nenhum** | `reversal`, `stock_transaction_id` NULL | proprietário/administrador | idem; libera o movimento para uma nova destinação correta, com a mesma saída |
+| **9.1 Correção documental** | campo **descritivo/administrativo** errado: `notes`, `people_served`/`people_unit`, `proof_file_id`, `delivered_on` (com 8.6) | **nenhum** | `correction` (campos novos; original intacta) | quem registrou ou `destinacoes.corrija`; data retroativa > 7 dias exige autorização | `destinacao.corrigida` com valor anterior e novo |
+| **9.2 Correção de quantidade** (`correcao_quantidade`) | a saída foi registrada em quantidade **maior** do que ocorreu: parte do recurso nunca saiu | `ajuste` **positivo** compensatório vinculado à reversão | `reversal` | `destinacoes.corrija` | `destinacao.revertida` + motivo; o ajuste passa **pelo mesmo caminho e controles de ajuste de estoque**: se a regra de risco aplicável exigir aprovação (positiva ou negativa), ela se aplica; hoje só há aprovação para negativos |
+| **9.3 Devolução física** (`devolucao_fisica`) | o recurso foi entregue e **voltou** ao estoque | `entrada` positiva (devolução) referenciando a saída/destinação | `reversal` | `destinacoes.corrija` + `inventario.lance` | idem |
+| **9.4 Estorno documental** (`estorno_documental`) | a entrega ocorreu fisicamente, mas o **registro** estava errado (necessidade, finalidade, quantidade atribuída) | **nenhum** (sem entrada fictícia) | `reversal` sem movimento | `destinacoes.corrija` | idem; o atendimento contabilizável é compensado; **a mesma saída** pode receber nova destinação correta só depois de estorno total |
 
 Regras comuns:
-1. Cada reversão referencia a original, informa autor, data, motivo e quantidade.
-2. `Σ reversões ≤ quantidade da original` (gatilho com trava na original); a mesma quantidade não é revertida duas vezes; reversões concorrentes se serializam e a segunda lê o estado confirmado.
-3. O atendimento líquido da necessidade cai pela quantidade contabilizável revertida; a original nunca é alterada.
-4. O movimento compensatório e a linha de reversão nascem na **mesma transação**; falha reverte os dois.
-5. Se o `ajuste` compensatório fosse **negativo** (não ocorre nos três cenários acima), valem as regras e a dupla aprovação existentes.
-6. Reversão de destinação **não** desfaz recebimentos nem o ledger da rede.
-7. "Corrigir quantidade" = reversão parcial/total + (se necessário) nova saída com destinação correta; não existe edição.
+1. Campos que afetam o **atendimento** (`need_id`, `destination_type`, `quantity`, `unit`, `is_countable`) **não** podem ser alterados por correção documental: a correção é estorno (9.4) + nova destinação. Isso impede usar a "correção documental" para mudar atendimento ou estoque.
+2. Cada evento referencia a original e informa autor, data, motivo e quantidade afetada.
+3. `Σ reversões ≤ quantidade da original`; a mesma quantidade não é revertida duas vezes; reversões concorrentes se serializam.
+4. O atendido cai pela quantidade contabilizável revertida; a original nunca é alterada.
+5. O movimento compensatório e a linha de reversão nascem **na mesma transação**.
+6. Um ajuste compensatório **negativo** (não ocorre nestes quatro casos) seguiria as regras e a dupla aprovação existentes.
+7. Reverter uma destinação **não** desfaz recebimentos nem o ledger da rede.
+8. A "devolução ao doador" é uma **finalidade** (saída para fora); a "devolução física" é a **reversão** de uma saída (o recurso volta ao estoque). Não se confundem.
 
 ---
 
-## 8. Impacto sobre estoque e ledger
+## 10. Unidades e dados: procedimento auditável (D-6)
+
+### 10.1 Regra de negócio fechada
+1. **Nenhuma conversão automática de unidade.**
+2. **Nenhum lançamento** (`stock_transactions`, `need_fulfillments`, `stock_destinations`) com quantidade cuja unidade não esteja estabelecida e confiável.
+3. **Nenhuma perda de rastreabilidade:** o fato de que o recurso foi apresentado ou recebido fica registrado mesmo quando o recebimento precisa ser regularizado.
+4. Uma nota explicativa **não** converte unidades e não substitui uma quantidade verificada.
+5. O saldo é expresso na **unidade canônica do item**.
+
+### 10.2 Erro de cadastro anterior ao recebimento (correção cadastral)
+Quando a unidade da **oferta** (`opportunity_registry.unit`, `donation_opportunities.unit`), da **necessidade** ou de outro dado de origem está incorreta:
+- **Se não há dependentes** (oferta/necessidade sem atribuição aceita, sem recebimento, sem movimentação de estoque e sem linha de ledger ou destinação), um ator autorizado pode corrigir por operação controlada e auditada: registro e campo identificados, **valor anterior e novo**, **motivo obrigatório**, ator e instante do servidor (`cadastro.correcao_registrada`), na mesma transação do UPDATE. Atores: oferta da rede → admin da plataforma; oferta local e necessidade → proprietário/administrador da própria organização (nova permissão `cadastro.corrija`; nunca troca genérica).
+- **Se há dependentes**, o cadastro **não é alterado no lugar**: o histórico não é reinterpretado. Os valores históricos usados pelas operações anteriores permanecem (o ledger e as destinações copiam a unidade no momento). O caminho é um **evento corretivo** ligado ao original: para ofertas, nova oferta/recebimento regularizado por conferência física (10.4) preservando a original; para necessidades, `cancelada` (8.5) e nova necessidade com a unidade correta, com os parciais já feitos mantidos.
+
+### 10.3 Item de estoque e unidade canônica
+- Cada item tem **uma unidade canônica confiável**. A unidade de um item **já usado em movimentações não pode ser alterada** no lugar (os números históricos passariam a representar outra grandeza).
+- Item sem movimentações pode ter a unidade corrigida pelo procedimento de 10.2 (auditado, `cadastro.correcao_registrada`).
+- **Item com movimentações e unidade cadastrada errada** — procedimento de regularização documentado (sem conversão automática): (a) criar um **item substituto** com a unidade correta; (b) para o saldo remanescente, usa-se um par de lançamentos compensatórios **auditado** (nunca uma destinação fictícia): `ajuste` negativo no item antigo (zerando o saldo, com a dupla aprovação existente) e `ajuste` positivo no item novo, **apenas** com a quantidade **verificada por conferência física na unidade correta**; (c) o item antigo permanece, inativo na prática, com todo o histórico; (d) novas operações usam o substituto. Cada passo referencia o caso de regularização e a auditoria. É uma **reclassificação controlada**, não uma conversão.
+
+### 10.4 Divergência no recebimento: pendência de regularização
+Aplica-se ao recebimento da rede e ao local quando a unidade da oferta (`unit` preenchida) **não é a unidade canônica do item** e **não existe equivalência aprovada** no registro de unidades (10.5) — comparação por **identificador canônico**, não por texto. Se a oferta não informa unidade, a unidade é **"não informada"** e segue o mesmo procedimento (a quantidade não é presumida na unidade do item).
+
+**Comportamento:**
+1. **Nada é lançado** como se fosse a quantidade do item: não há `stock_transactions`, ledger nem atendimento.
+2. O evento **não é descartado**: cria-se (de forma idempotente e atômica, com auditoria) um **caso de regularização de unidade** com os fatos imutáveis: origem (atribuição ou doação local), item, organização, quantidade e unidade **ofertadas**, quem informou o recebimento e quando, etapa bloqueada ("recebimento"). A atribuição ou a doação **não** passa a `recebida`; mostra "recebimento pendente de regularização" (sem expirar por prazo da Fase 98 enquanto houver caso aberto).
+3. O caso é classificado em **uma** das quatro categorias:
+
+| Categoria | Significado | Saída possível |
+|---|---|---|
+| `erro_cadastral` | a unidade da oferta/necessidade está comprovadamente errada | correção (10.2) e retomada do fluxo |
+| `conferencia_fisica` | a quantidade pode ser estabelecida por contagem/medição verificável na unidade canônica do item | conferência (abaixo) e retomada |
+| `conversao_nao_suportada` | só resolveria com conversão ainda não suportada | **permanece pendente** até existir conferência física ou a funcionalidade aprovada |
+| `informacao_insuficiente` | não há dados para decidir | **permanece pendente** |
+
+**Conferência física (não é conversão):** um responsável autorizado informa a **quantidade efetivamente conferida na unidade canônica do item**, por contagem ou medição verificável. Registra-se: quantidade e unidade **originalmente ofertadas**; **quantidade conferida**; unidade canônica; **motivo da divergência**; ator que conferiu; **responsável pela validação** quando exigida; instante do servidor; evidência ou observação apropriada, **sem dados pessoais desnecessários**. Se a quantidade real não puder ser estabelecida com segurança, o caso **permanece pendente**; texto livre nunca substitui uma quantidade verificada.
+
+**Validação:** a conferência por operador exige validação de proprietário/administrador **diferente** do autor; proprietário/administrador que conferiu exige validação de outra pessoa com essa função, **a menos que seja o único elegível**, caso em que a conferência é aceita e **marcada** "sem segunda validação" na auditoria e nos relatórios. [T-4: definir a regra exata no desenho da subfase.]
+
+**Retomada:** só depois de a regularização produzir **quantidade e unidade válidas e auditadas**: numa única transação o sistema conclui o recebimento — `entrada` na unidade canônica com a **quantidade conferida**, linha de ledger (quando é recebimento da rede), mudança de estado da atribuição/doação, vínculo com o caso e auditoria — preservando no caso os valores ofertados.
+
+### 10.5 Fila de pendências de unidade
+Tela e consulta para os responsáveis autorizados, por organização, com: recurso (oferta/atribuição/doação), divergência (unidade ofertada × canônica), organização responsável, etapa bloqueada, categoria, idade do caso e **ações possíveis**.
+
+| Ação | Quem | Permissão proposta |
+|---|---|---|
+| Ver os casos da própria organização | proprietário, administrador, operador | `regularizacao.leia` |
+| Propor conferência física (informar quantidade conferida) | proprietário, administrador, operador | `regularizacao.confira` |
+| Validar/aplicar a conferência (conclui o recebimento) | proprietário, administrador (≠ autor) | `regularizacao.valide` |
+| Corrigir cadastro da oferta/necessidade/item **sem dependentes** | admin da plataforma (oferta da rede); proprietário/administrador (próprios) | `cadastro.corrija` |
+| Classificar/reclassificar caso (`conversao_nao_suportada`, `informacao_insuficiente`) e acompanhar todas as organizações | admin da plataforma | — (papel de plataforma) |
+
+Não existe permissão genérica para trocar unidade nem para alterar saldo: cada ação tem permissão própria, auditoria e escopo da organização.
+
+### 10.6 Vocabulário controlado de unidades
+- **Registro** `unit_registry` (identificador canônico estável, ex.: `kg`; **rótulo de interface** separado, ex.: "kg"; dimensão/classe: contagem, massa, volume, **embalagem**) e **aliases aprovados** `unit_aliases` (texto normalizado → identificador canônico, com aprovador e data).
+- **Aliases só quando representam exatamente a mesma unidade** (singular/plural, abreviação inequívoca como `un` ≡ `unidade` **se revisado e aprovado**). **Não** se infere fator de conversão por semelhança textual; **não** se converte unidade de embalagem (caixa, pacote, saco, cesta, fardo) em unidade de conteúdo (kg, L, unidade).
+- **Valores históricos ambíguos** (ex.: `un`, `pc`, `cx`, texto livre) **permanecem como estão** e são marcados "a revisar" até aprovação; nada é remapeado automaticamente.
+- `normalize()` textual **não é conversão metrológica** e não pode ser tratada como tal; passa a ser, no máximo, uma etapa de **busca de alias candidato** para revisão humana, e a comparação de unidades usa o **identificador canônico**. Enquanto o registro não existir, a comparação conservadora é **igualdade exata do texto normalizado**; qualquer diferença vira divergência (por isso o inventário vem antes da regularização).
+- **Início da implementação:** um **inventário** dos valores de unidade realmente existentes — consulta de contagem por valor distinto em `inventory_items.unit`, `needs.unit`, `opportunity_registry.unit`, `donation_opportunities.unit` e `need_fulfillments.unit` no banco **real** de cada ambiente —, classificação dos significados e **mapeamento revisado** por pessoas. Não se inventa uma lista universal de unidades sem examinar os dados atuais (os valores `kg`, `un`, `unidade` das sementes são só exemplos).
+- Migração futura do vocabulário: colunas de referência **anuláveis** (`unit_id`) preenchidas **somente** onde há alias aprovado; as demais ficam nulas até revisão; os textos originais são preservados.
+
+### 10.7 Destinação e necessidade
+Conforme 8.1 e a seção 6: a destinação usa a unidade canônica do item; só conta para a necessidade se a unidade do item e a da necessidade forem **a mesma unidade canônica** (ou alias aprovado). Destinação física com unidade incompatível **existe**, com `is_countable = false` e **aviso antes de confirmar**; nunca aumenta o atendido; os relatórios separam **quantidade física** e **quantidade contabilizável** e agregam por item/unidade (nunca somam unidades diferentes). O ledger de suprimento mantém o comportamento atual (`is_countable = false` + nota) para a relação necessidade × item; isso **não** bloqueia estoque (a unidade do lançamento é a canônica).
+
+---
+
+## 11. Impacto sobre estoque e ledger
 
 | Item | Efeito |
 |---|---|
-| `stock_transactions` | Estrutura **inalterada**. `saida` nova só nasce junto de uma destinação. Aparecem `ajuste`/`entrada` compensatórios vinculados a reversões. |
-| `need_fulfillments` | **Inalterado** (suprimento). Matching, `opportunity-allocations_POST` e correções do recebimento continuam usando-o. |
-| `need_resolutions` | Sem novas linhas após a implantação (sem baixa automática nem resolução declarativa). Permanece para o histórico. |
-| `needs` | Estrutura inalterada; `status` passa a ter regras de 6.4. |
-| Saldos | Nenhum saldo muda por causa desta fase; só a **classificação** das saídas novas. |
-| Relatório | Ganha medida "atendido (destinação)" ao lado de "recebido (suprimento)" (seção 12). |
+| `stock_transactions` | Estrutura **inalterada**. `saida` nova só nasce junto de uma destinação; aparecem `ajuste`/`entrada` compensatórios vinculados a reversões; recebimento em divergência de unidade **não** gera linha até a regularização. |
+| `need_fulfillments` | **Inalterado**: suprimento recebido da rede. Matching, `opportunity-allocations_POST` e correções do recebimento continuam usando-o. |
+| `need_resolutions` | Sem novas linhas após a implantação. Permanece para o histórico. |
+| `needs` | Estrutura inalterada; `status` segue 8.4; encerramento por 8.5. |
+| Saldos | Nenhum saldo muda por esta fase; muda a classificação das saídas novas. |
+| Relatório | Ganha "atendido (destinação)" ao lado de "suprimento recebido" (seção 14). |
 
-Vocabulário obrigatório (um significado por palavra): **Recebido** = entrada da rede ou doação no estoque; **Suprimento** = recebido contabilizável de uma necessidade pelo ledger; **Em estoque** = saldo; **Saiu** = saída física; **Destinado** = saída com destinação estruturada; **Atendido** = destinado contabilizável líquido; **Atendida** = estado do sistema quando o atendido alcança o necessário (ou estado histórico).
-
----
-
-## 9. Política de unidades [E4]
-
-1. O saldo e as saídas são na **unidade canônica do item** (`inventory_items.unit`).
-2. **Recebimento da rede:** se `opportunity_registry.unit` está preenchida e `normalize(unit da oferta) ≠ normalize(item.unit)`, o recebimento é **bloqueado** (409) com mensagem que orienta escolher outro item ou criar o item com a unidade correta. Se a oferta não informa unidade, o recebimento é permitido e registrado como "unidade da oferta não informada" (auditoria e relatório) — nunca se presume compatibilidade.
-3. **Recebimento local:** mesma regra com `donation_opportunities.unit`.
-4. Uma nota explicativa **não** converte unidades e não libera um recebimento bloqueado.
-5. **Necessidade × item no suprimento (ledger):** comportamento atual preservado (`is_countable = false` + `unit_mismatch_note` quando divergem); não muda.
-6. **Destinação:** conforme 6.2 — fisicamente válida, contabilizável só com unidades compatíveis, avisada antes da confirmação.
-7. **Relatórios** separam "quantidade física" (todas as destinações) de "quantidade contabilizável" (só as que contam) e **nunca somam unidades diferentes**: totais são por item/unidade.
-8. **Conversões futuras** exigem tabela explícita (par de unidades, fator, ator autorizado, vigência, auditoria) e decisão própria. **Não implementada.**
-9. Limitação conhecida: `normalize()` é textual (caixa/acentos); "caixa" ≠ "caixas". Um vocabulário controlado de unidades é melhoria futura ([D-7]).
-10. Histórico: recebimentos antigos com unidade divergente permanecem como estão.
-11. **Caminho de correção (dependência real):** como não existe edição de item/necessidade/oferta ([D-6]), o caminho imediato para um bloqueio é criar/escolher um item com a unidade certa; corrigir a unidade da oferta exigiria uma operação administrativa nova (não especificada aqui). Sem esse caminho a regra de bloqueio pode travar um recebimento legítimo — por isso a subfase de unidades vem **depois** de confirmar o caminho de correção ([D-6]).
+Doação local com `linked_need_id`: o recebimento **não** é atendimento; o vínculo vira **sugestão de pré-seleção** no formulário de destinação do mesmo item; o atendimento tem **uma única fonte**, a destinação, de modo que a mesma quantidade nunca conta por duas fontes (recebimento local não cria linha de ledger).
 
 ---
 
-## 10. Privacidade e LGPD [E5]
+## 12. Privacidade e comprovantes [E5]
 
-- **Sem cadastro nominal** nesta fase. Campos de destinação: finalidade, quantidade, unidade, data, necessidade (se houver), `people_served` agregado (inteiro), observações não sensíveis, comprovante opcional, autor e data, histórico de reversão.
-- `people_served` **não** é número de pessoas distintas: somas de registros podem contar a mesma pessoa mais de uma vez. Relatórios o rotulam como "soma das quantidades de pessoas declaradas nos registros".
-- Não se pedem nomes, contatos, documentos nem dados sensíveis. A interface orienta a **não** colocar dados pessoais em observações e a **não** enviar comprovantes com documentos ou rostos desnecessários.
-- Comprovantes: arquivos já privados (nunca URL pública), com propósito próprio `comprovante_destinacao`. **Requisito novo:** o download deve ser autorizado **pela finalidade** (leitura de destinações) e não só pela associação à organização, como hoje (P8).
-- Acesso por função e organização: seção 11.
-- Retenção e revisão: não há política de retenção configurável hoje; a Fase 99 **não** a cria. A decisão de prazo de retenção de destinações e comprovantes e a base legal aplicável exigem **revisão jurídica** ([D-8]); este documento não é parecer legal.
-- Correção sem apagar: toda correção é um evento novo; nada é removido (a trilha é de auditoria).
-- O texto de `docs/PRIVACY.md` recebe uma seção separando **diretrizes aprovadas** (planejadas) de **controles já existentes**.
+**Requisitos aprovados (ainda NÃO implementados; ver `docs/PRIVACY.md`):**
+- **Sem cadastro nominal** de beneficiários. Registra-se: finalidade, quantidade, unidade, data efetiva e de registro, necessidade (se houver), número agregado de pessoas/famílias com `people_unit`, observações operacionais **não sensíveis**, comprovante opcional, autor, histórico de correção e reversão.
+- `people_served` **não** é número de pessoas distintas: relatórios o rotulam "soma das quantidades declaradas nos registros".
+- Não se pedem nomes, contatos, documentos ou dados sensíveis. A interface orienta a **não** colocar dados pessoais em observações e a **não** anexar documentos identificáveis sem necessidade; não há detecção automática (a mitigação é orientação e acesso restrito).
+- **Comprovantes** com propósito próprio `comprovante_destinacao`; privados, sem URL pública. **Autorização por finalidade do arquivo:** pertencer à mesma organização **não basta** (hoje basta, P8). A leitura considera a **finalidade** (`purpose`), o **recurso ao qual o arquivo está ligado** (a destinação), a **função** do usuário e a permissão `destinacoes.leia`; arquivos de finalidades antigas mantêm as regras atuais. Isolamento por organização na consulta e na integridade referencial (FK composta).
+- **Auditoria de acesso e alteração, quando aplicável:** alterações (anexar, trocar, remover referência por `correction`) sempre auditadas; registro de **acesso/leitura** de comprovante é requisito a avaliar por custo e finalidade [T-5] (a auditoria atual registra ações; leitura de arquivo já registra `arquivo.baixado`).
+- **Retenção e revisão:** não há política de retenção configurável; a Fase 99 não a cria. Prazos, base legal e tratamento dependem de **avaliação jurídica** (seção 21).
+- Correção sem apagar: toda correção é evento novo; nada é removido.
 
 ---
 
-## 11. RBAC e isolamento multi-organização
+## 13. RBAC e isolamento multi-organização
 
-Permissões novas (catálogo em `src/helpers/permissions.tsx`, só quando um endpoint real as exigir, como a política do projeto):
+Permissões **propostas** (só entram no catálogo `src/helpers/permissions.tsx` quando um endpoint real as exigir):
 
 | Permissão | Proprietário | Administrador | Operador | Voluntário |
 |---|---|---|---|---|
-| `destinacoes.leia` (ver destinações e comprovantes) | sim | sim | sim | não |
-| `destinacoes.registre` (+ `inventario.lance`) | sim | sim | sim | não |
-| `destinacoes.corrija` (reversões, autorizar excedente) | sim | sim | não | não |
+| `destinacoes.leia` (destinações, comprovantes, necessidades fechadas) | sim | sim | sim | não |
+| `destinacoes.registre` (+ `inventario.lance`) — categorias comuns e `perda` | sim | sim | sim | não |
+| `destinacoes.corrija` (reversões, correção de data retroativa, excedente, `doacao_a_terceiro`, `devolucao_ao_doador`, `descarte`, classificação de ajuste como perda) | sim | sim | não | não |
+| `regularizacao.leia` / `regularizacao.confira` | sim | sim | sim | não |
+| `regularizacao.valide` | sim | sim | não | não |
+| `cadastro.corrija` (10.2, sem dependentes) | sim | sim | não | não |
 
-- Isolamento: toda consulta filtra por `organization_id`; FKs compostas impedem referência cruzada; endpoints seguem o padrão `requirePermission(user.id, organizationId, …)`.
-- Download de comprovante: exige `destinacoes.leia` para `purpose = comprovante_destinacao` (e mantém as regras atuais para `comprovante_entrega`).
-- A leitura de destinações não é concedida a voluntário (minimização), ao contrário de `inventario.leia`.
-- Dupla aprovação: inalterada; só se aplica a `ajuste` negativo de alto risco.
-
----
-
-## 12. Experiência e interfaces
-
-**Princípio de linguagem:** os nomes refletem o que os dados provam. "Destinação registrada" (declarada pela organização) — **nunca** "entregue ao beneficiário" como afirmação, e nunca "atendida" para o que é só recebido.
-
-1. **Estoque (`inventario`)**: "Saída" vira **"Registrar destinação"** (diálogo): item, quantidade (unidade do item exibida), finalidade (lista fechada), necessidade (opcional; sugere a necessidade vinculada à doação local e filtra por item/unidade), data, pessoas atendidas (opcional), observações (com aviso de não sensível), comprovante (opcional, `FileDropzone`). Avisos antes de confirmar: unidade incompatível (não contará), excesso sobre o necessário (exige motivo, só proprietário/administrador), saldo insuficiente. Movimento "ajuste" permanece separado.
-2. **Nova aba "Destinação"** (nav da organização): histórico com filtros (período, item, necessidade, finalidade, situação: ativa/revertida/corrigida), estados de carregamento, vazio, erro e sem permissão; ação "Corrigir/estornar" (proprietário/administrador) com os três cenários explicados em linguagem simples.
-3. **Necessidades**: três números lado a lado — Necessário, **Recebido pela rede** (suprimento, como hoje) e **Atendido (destinado)** — com a faixa "faltam X"; o rótulo "Parcialmente atendida pela rede" deixa de existir (vira "Recebido parcialmente"); `atendida` aparece como estado do sistema; necessidades antigas `atendida` mostram "histórico, sem destinação estruturada".
-4. **Prestação de contas**: bloco "Destinação" (por finalidade, por item/unidade, por necessidade), colunas Recebido × Em estoque × Destinado × Saldo, "saídas sem destinação estruturada" (com as duas subclasses descritas em 5.3), registros corrigidos/revertidos marcados, comprovantes com acesso protegido, quantidade **física** e **contabilizável** separadas. `statusWarning` passa a comparar `atendida` com o **atendido**.
-5. **Administração da plataforma**: leitura agregada (sem comprovantes) para acompanhar o percurso; sem edição.
-6. Responsivo em 375/390/768/1280, navegação por teclado, rótulos e `aria-live` nos avisos, sem expor IDs internos nem dados pessoais; reaproveita o design system e os componentes existentes.
+- Toda consulta filtra por `organization_id`; FKs compostas impedem referência cruzada; endpoints seguem `requirePermission(user.id, organizationId, …)`.
+- Papéis de **plataforma** (admin da plataforma): correção de oferta da rede, classificação de casos de regularização, leitura agregada **sem** comprovantes.
+- Dupla aprovação: inalterada nos ajustes; estendida (T-1) às saídas de maior risco de 6, reutilizando o mecanismo.
 
 ---
 
-## 13. Compatibilidade histórica
+## 14. Experiência e interfaces
 
-- **Sem backfill.** Nenhuma destinação é criada a partir de saída + texto livre.
-- Saídas antigas permanecem, listadas como "histórico sem destinação estruturada"; as geradas pela baixa automática ficam marcadas "baixa automática histórica (resolução da necessidade)".
-- `need_resolutions` existentes continuam legíveis; necessidades `atendida` antigas não são reabertas e seu atendimento (destinação) é 0 e indicado como histórico — nunca recalculado a partir da saída automática.
-- Ledger e recebimentos antigos: inalterados.
-- O relatório distingue "registros herdados" de "novos registros" por existência (ou não) da linha de destinação, sem reclassificar.
+**Linguagem:** os nomes refletem o que os dados provam. "Destinação registrada" (declarada pela organização) — **nunca** "entregue ao beneficiário" como afirmação, e nunca "atendida" para o que é só recebido.
+
+1. **Estoque:** "Saída" vira **"Registrar destinação"** (diálogo): item, quantidade (unidade canônica visível), finalidade (as oito, com descrição), necessidade (somente nas três categorias de atendimento; sugere a vinculada à doação local e filtra por item/unidade), data efetiva (com aviso e exigência de justificativa/autorização além de 7 dias), pessoas/famílias (opcional, com `people_unit`), observações (aviso de não sensível), comprovante (opcional, `FileDropzone`). Avisos **antes** de confirmar: unidade incompatível (não contará), excesso (exige motivo), saldo insuficiente, necessidade de aprovação por risco. Ajuste continua separado (e oferece "registrar perda/descarte" quando o motivo é perda).
+2. **Aba "Destinação":** histórico com filtros (período por data **efetiva** e por data de **registro**, item, necessidade, finalidade, situação ativa/corrigida/revertida), estados de carregamento, vazio, erro e sem permissão; ações "Corrigir" (9.1) e "Estornar/devolver" (9.2–9.4) com os cenários explicados em linguagem simples.
+3. **Fila de pendências de unidade** (10.5): lista por organização, categoria, etapa bloqueada, idade, ações permitidas ao papel; fluxo de conferência física e de validação; indicador de pendências na área da organização (mesmo padrão da Fase 98: fonte única, sem contagem paralela).
+4. **Necessidades:** três números — Necessário, **Suprimento recebido** (ledger, como hoje) e **Atendido (destinado)** — com o que falta; `atendida` como estado do sistema; "histórico, sem destinação estruturada" para as antigas; encerramento por `cancelada` com motivo estruturado ("cancelada com atendimento parcial de X").
+5. **Prestação de contas:** bloco "Destinação" (por finalidade, item/unidade, necessidade); colunas Recebido × Em estoque × Destinado × Saldo; "saídas sem destinação estruturada" (duas subclasses); registros corrigidos/revertidos marcados; comprovantes com acesso protegido; **física** × **contabilizável** separadas; indicadores distintos de operação, terceiros, devoluções, perdas e descartes; `statusWarning` compara `atendida` com o **atendido**.
+6. **Administração da plataforma:** leitura agregada e fila de regularização (todas as organizações), sem edição de saldos.
+7. Responsivo em 375/390/768/1280, teclado, rótulos e `aria-live` nos avisos, sem expor IDs internos nem dados pessoais; reaproveita o design system.
+
+---
+
+## 15. Compatibilidade histórica
+
+- **Sem backfill.** Nenhuma destinação, caso de regularização ou alias é criado automaticamente a partir de saída + texto livre ou de unidades existentes.
+- Saídas antigas permanecem, como "histórico sem destinação estruturada"; as da baixa automática ficam marcadas "baixa automática histórica (resolução da necessidade)". Nenhuma é reclassificada silenciosamente.
+- `need_resolutions` existentes continuam legíveis; necessidades `atendida` antigas não são reabertas e têm atendido por destinação = 0, indicado como histórico — nunca recalculado a partir da saída automática.
+- Recebimentos antigos com unidade divergente permanecem como estão (ledger com `is_countable = false` e nota).
+- Correções posteriores **nunca reinterpretam** movimentos históricos: valem para o futuro ou por evento corretivo ligado ao original (10.2, 10.3).
+- O relatório distingue "registros herdados" de "novos registros" pela existência da linha de destinação.
 - Comprovantes `comprovante_entrega` seguem como estão.
 
 ---
 
-## 14. Sequenciamento de migrations
+## 16. Sequenciamento de migrations
 
-**Estado verificado em `origin/master` (`d2c955d`):** `0001` a `0015` contíguas (`0014_allocation_response_deadline`, `0015_platform_assignment_settings` são da Fase 98). O teste `test/schemaMigrations.test.ts` exige numeração `0001..000N` sem lacunas nem duplicatas; `test/migrationCompat.test.ts` exige uma classificação em `db/migrationCompat.ts` por arquivo. Não se criam exceções.
+**Estado verificado (`origin/master`, `d2c955d`):** `0001` a `0015` contíguas (`0014_allocation_response_deadline` e `0015_platform_assignment_settings` são da Fase 98). `test/schemaMigrations.test.ts` exige numeração `0001..000N` sem lacunas nem duplicatas e `test/migrationCompat.test.ts` exige classificação em `db/migrationCompat.ts`. **Não se criam exceções.**
 
-**Trabalhos concorrentes (apenas locais, fora do histórico remoto):** `0014_agent_platform.sql` como arquivo não versionado no checkout principal (base `a628bd4`); `0015_identity_foundation` a `0019_social_reauth` nas branches locais `fase-89` a `fase-94-login-integrado-preview` (também sobre `a628bd4`, já pulando o `0014` reservado). Nada disso está na `master` nem tem PR.
+**Trabalhos concorrentes (apenas locais, fora do histórico remoto):** `0014_agent_platform.sql` (arquivo não versionado no checkout principal, base `a628bd4`) e `0015_identity_foundation` a `0019_social_reauth` (branches locais de identidade). Esta especificação **não** os toca, não renumera e não altera bancos que os tenham aplicado.
 
-**Previsão para a Fase 99 (a confirmar no momento de implementar):**
-- `0016_files_id_organization_unique.sql` — `UNIQUE (id, organization_id)` em `files` (classe "restrição satisfeita por construção").
-- `0017_stock_destinations.sql` — tabela nova, índices, função/gatilhos (classe "tabela nova vazia"; sem `ALTER TABLE`).
-- Regra de decisão: no dia da implementação, `git fetch`, listar `db/migrations` na `master`, usar os **próximos números contíguos livres**. Se agentes/identidade tiverem entrado antes, recalcular **antes** de criar arquivos.
-
-**Plano para as migrations concorrentes (documentado, não executado aqui):**
-1. Cada trabalho entra por rebase/merge sobre a `master` vigente e é renumerado **na entrada**, na ordem em que for integrado, mantendo a ordem relativa interna (identidade `0015→…→0019` continua em bloco).
-2. A renumeração atualiza, no próprio trabalho: nomes dos arquivos, chaves de `MIGRATION_COMPAT` e de `CHECKS`, `db/schema.sql`, referências em documentos (por exemplo, o documento de identidade cita `0014_agent_platform.sql`) e fixtures de teste.
-3. O teste de sequência e o de classificação passam sem exceção; a cadeia completa é validada em banco descartável (instalação nova × atualização, como em `schemaMigrations`).
-4. **Risco local:** `schema_migrations` registra o nome do arquivo; um banco que já aplicou o nome antigo verá o renomeado como pendente e falhará com "já existe". Esses bancos são descartáveis (desenvolvimento/teste dos worktrees) e devem ser **recriados**; nenhum banco preservado está envolvido. Qualquer banco que precise ser preservado exige plano específico e validado antes de renomear.
-5. Nenhum dos trabalhos é tocado por esta especificação.
+**Estratégia (os números abaixo são previsões, não definitivos):**
+- A implementação da destinação pede **migrations aditivas separadas** por classe: restrição única em `files` (satisfeita por construção); tabelas novas (`stock_destinations`, `need_closures`, casos/eventos de regularização, registro de unidades); colunas de referência anuláveis para o vocabulário. A **quantidade e a ordem** dessas migrations serão definidas na subfase correspondente.
+- **No dia em que cada subfase com migration começar**: `git fetch`, listar `db/migrations` na `master` **daquele momento**, usar os **próximos números contíguos livres** e reconfirmar antes de criar arquivos. Se agentes ou identidade tiverem sido integrados antes, os números mudam. **Nenhum número atual é definitivo.**
+- Agentes e identidade serão integrados depois, **renumerados na entrada** na ordem de integração (mantendo a ordem relativa interna de cada bloco), atualizando nomes, chaves de `MIGRATION_COMPAT`/`CHECKS`, `db/schema.sql`, referências em documentos e fixtures; testes de sequência e classificação passam sem exceção; cadeia completa validada em banco descartável (instalação nova × atualização).
+- **Risco local:** `schema_migrations` guarda o nome do arquivo; um banco que aplicou o nome antigo verá o renomeado como pendente e falhará com "já existe". Bancos de desenvolvimento/teste descartáveis devem ser **recriados**; qualquer banco que precise ser **preservado** exige plano específico e validado antes de renomear.
 
 ---
 
-## 15. Estratégia de implantação, concorrência e rollback
+## 17. Implantação, concorrência e rollback
 
-### 15.1 Implantação
-Aditiva e gradual (seção 17): as primeiras subfases não mudam nenhum contrato existente; a mudança de contrato (saída exige destinação; `atendida` deixa de baixar estoque) acontece numa subfase própria, junto com a interface correspondente. Não há consumidores externos da API v1 hoje (só a SPA, publicada junto com o servidor), mas a mudança é de contrato e deve ser registrada em `docs/VERSIONAMENTO_API.md`.
+### 17.1 Implantação
+Aditiva e gradual (seção 19): as primeiras subfases não mudam contratos existentes; a mudança de contrato (saída exige destinação; `atendida` deixa de baixar estoque; recebimento com divergência vira pendência) ocorre em subfases próprias, junto com a interface correspondente. Não há consumidores externos conhecidos da API v1 (só a SPA, publicada com o servidor), mas as mudanças devem ser registradas em `docs/VERSIONAMENTO_API.md`.
 
-### 15.2 Rollback
-- Migrations aditivas, sem backfill: reverter o schema é opcional e só é seguro **antes** de existir qualquer destinação real; depois, a correção é "para frente".
-- Reverter só o código **depois** de destinações existirem é perigoso (o código antigo voltaria a baixar estoque ao marcar `atendida`): exige remover o caminho de baixa antes de qualquer retorno, ou manter o contrato novo.
-- Cada subfase precisa de `git revert` do commit de merge e de um teste que prove o comportamento anterior preservado.
+### 17.2 Rollback
+Migrations aditivas e sem backfill: reverter o schema só é seguro **antes** de existir dado real; depois, a correção é "para frente". Reverter só o código depois de destinações existirem é perigoso (o código antigo voltaria a baixar estoque ao marcar `atendida`). Cada subfase exige reverter o commit de merge e um teste que prove o comportamento anterior preservado quando aplicável.
 
-### 15.3 Ordem de travas (única para toda a Fase 99)
-`atribuição → oportunidade → **item → necessidade** → auditoria (por último)`. Justificativa verificada: `allocations-receive_POST` trava atribuição → item; a Fase 81 já resolveu o ciclo necessidade↔item usando `FOR NO KEY UPDATE` na necessidade; `needs-status_POST` deixa de travar item (não baixa mais estoque), eliminando o ciclo; a destinação trava o item primeiro e a necessidade depois.
+### 17.3 Ordem de travas (única para toda a Fase 99)
+`atribuição → oportunidade → item → necessidade → caso de regularização → auditoria (por último)`. Verificado: `allocations-receive_POST` trava atribuição → item; a Fase 81 resolveu o ciclo necessidade↔item com `FOR NO KEY UPDATE`; `needs-status_POST` deixa de travar item (não baixa mais estoque), eliminando o ciclo; a destinação trava item e depois necessidade.
 
-### 15.4 Cenários de concorrência e falha
-1. Duas destinações simultâneas da mesma saída → uma vence, a outra 409 (unicidade do movimento).
-2. Duas destinações simultâneas para a mesma necessidade perto do limite → serializadas pela trava da necessidade; a segunda vê o líquido atualizado e é recusada ou exige motivo de excedente.
-3. Destinação × `cancelada` da necessidade → quem travar primeiro vence; a outra lê o estado confirmado.
-4. Duas reversões simultâneas da mesma original → serializadas; a soma nunca passa da original.
-5. Reversão × nova destinação do mesmo movimento (após estorno documental) → serializadas pela trava do movimento.
-6. Falha de auditoria no meio → rollback total (saída, destinação, compensatório, transição de status).
-7. Falha ao gravar o comprovante → a destinação não nasce com referência inexistente (FK composta).
+### 17.4 Cenários de concorrência e falha
+1. Duas destinações da mesma saída → uma vence, a outra 409.
+2. Duas destinações perto do limite da necessidade → serializadas pela trava; a segunda vê o líquido atualizado.
+3. Destinação × cancelamento da necessidade → quem travar primeiro vence.
+4. Duas reversões da mesma original → Σ nunca passa da original.
+5. Reversão × nova destinação do mesmo movimento (após estorno total) → serializadas pela trava do movimento.
+6. Falha de auditoria → rollback total (saída, destinação, compensatório, transição de status, caso).
+7. Falha ao gravar o comprovante → FK composta impede referência inexistente.
 8. Saída com saldo insuficiente concorrente → a segunda recebe 409 sem efeito.
 9. Transição automática `atendida` × reabertura manual → serializadas pela trava da necessidade.
-10. Fase 98: o scheduler e as atribuições não participam dessa cadeia; nenhuma trava nova entre elas.
+10. Duas conferências do mesmo caso → serializadas pela trava do caso; a segunda lê o estado confirmado; o recebimento é concluído **uma vez**.
+11. Conferência × correção cadastral do mesmo recurso → serializadas; correção só sem dependentes.
+12. Recebimento (Fase 96) idempotente concorrente com abertura de caso → um só caso aberto por origem.
 
 ---
 
-## 16. Matriz de testes e critérios de aceite
+## 18. Matriz de testes e critérios de aceite
 
-Todos com PostgreSQL real, banco `_test`, travas seguradas e falhas injetadas no banco (padrão das Fases 95 a 98). Cada item é objetivo e verificável.
+Todos com PostgreSQL real em banco `_test`, travas seguradas, falhas injetadas no banco (padrão das Fases 95 a 98).
 
-**Destinação e atomicidade**
-- A-01 Uma saída de atendimento gera exatamente uma destinação válida.
-- A-02 Saída e destinação são atômicas (falha em qualquer ponto não deixa uma sem a outra).
-- A-03 Falha de auditoria não deixa saída sem destinação.
-- A-04 A mesma saída não recebe duas destinações normais (concorrente e sequencial).
-- A-05 `saida` sem destinação é recusada para novas saídas; `ajuste` e `entrada` seguem como antes.
-- A-06 `doacao_terceiros` e `perda_descarte` com necessidade são rejeitadas no banco.
-- A-07 Referência a necessidade, movimento ou comprovante de outra organização é rejeitada pelo banco (FK composta), além da API.
+**Destinação e atomicidade** — A-01 uma saída de atendimento gera exatamente uma destinação válida; A-02 saída e destinação atômicas; A-03 falha de auditoria não deixa saída sem destinação; A-04 a mesma saída não recebe duas destinações normais (concorrente e sequencial); A-05 saída nova sem destinação é recusada, `ajuste`/`entrada` seguem como antes; A-06 categorias sem atendimento com necessidade são rejeitadas **no banco**; A-07 referência a necessidade, movimento ou comprovante de outra organização rejeitada pelo banco; A-08 cada uma das oito categorias com seus campos obrigatórios, permissões e efeitos (tabela da seção 6); A-09 perda/descarte/terceiro/devolução acima das faixas de risco ficam pendentes de aprovação e criam saída + destinação atomicamente ao aprovar; A-10 classificar um ajuste negativo antigo como perda não cria segunda baixa.
 
-**Atendimento**
-- B-01 Atendimento parcial somado corretamente; mostra atendido e o que falta.
-- B-02 Mudar o status não cria saída (nenhum caminho de `needs-status_POST` insere em `stock_transactions`).
-- B-03 `atendida` manual sem líquido suficiente é recusada; automática no limite, com auditoria.
-- B-04 Excedente recusado sem motivo; com motivo (proprietário/administrador) é aceito e marcado.
-- B-05 Unidade incompatível não aumenta o atendimento; registra `is_countable = false`.
-- B-06 Necessidade com `item_id` só aceita destinação do mesmo item.
-- B-07 Reversão reduz o líquido; `atendida` do novo modelo reabre; `atendida` histórica (com `need_resolutions`) não reabre.
-- B-08 `cancelada` com atendimento parcial exige motivo e fica identificável.
-- B-09 Matching e `opportunity-allocations_POST` continuam usando o suprimento (ledger) — destinações não alteram `requiredRemaining`.
+**Atendimento** — B-01 parcial somado e "o que falta" corretos; B-02 mudar status não cria saída (nenhum caminho de `needs-status_POST` insere em `stock_transactions`); B-03 `atendida` manual recusada, automática no limite; B-04 excedente sem motivo recusado, com motivo (proprietário/administrador) aceito e marcado; B-05 unidade incompatível não aumenta o atendimento; B-06 necessidade com `item_id` só aceita o mesmo item; B-07 reversão reduz o atendido; `atendida` do modelo novo reabre, a histórica não; B-08 `cancelada` exige motivo estruturado, não cria saída, preserva solicitado/atendido/saldo; B-09 matching e `opportunity-allocations_POST` seguem usando suprimento.
 
-**Reversão**
-- C-01 O registro original nunca é alterado nem apagado (gatilhos).
-- C-02 Soma das reversões ≤ original; reversões concorrentes serializadas.
-- C-03 `correcao_registro` gera ajuste positivo; `devolucao_fisica` gera entrada; `estorno_documental` não gera movimento.
-- C-04 Devolução ao estoque só existe com retorno físico correspondente (nunca saldo fictício).
-- C-05 Estorno documental total libera o movimento para nova destinação; parcial não.
-- C-06 Permissões: operador não corrige; voluntário não lê.
+**Datas** — H-01 data futura recusada; H-02 retroação ≤ 7 dias aceita; H-03 > 7 dias exige autorização, justificativa e auditoria; H-04 relógio/fuso do servidor decidem (o navegador não autoriza); H-05 `delivered_on` e `created_at` distintos e filtráveis separadamente; H-06 correção de data preserva o valor anterior.
 
-**Ledger, doação local e unidades**
-- D-01 Doação local não conta duas vezes: o recebimento não cria linha em `need_fulfillments`; a destinação conta uma vez.
-- D-02 `linked_need_id` só pré-seleciona; não altera atendimento.
-- D-03 Recebimento (rede e local) com unidade da oferta incompatível é bloqueado; com unidade não informada, permitido e sinalizado.
-- D-04 Quantidade física e contabilizável aparecem separadas; nunca se somam unidades diferentes.
-- D-05 Nenhuma conversão automática existe.
+**Correções e reversões** — C-01 original nunca alterada nem apagada; C-02 Σ reversões ≤ original, concorrentes serializadas; C-03 `correcao_quantidade` → ajuste positivo pelo caminho de ajustes; `devolucao_fisica` → entrada; `estorno_documental` → nenhum movimento; C-04 nenhum saldo fictício; C-05 estorno total libera nova destinação do mesmo movimento, parcial não; C-06 permissões; C-07 correção documental **não** altera campos de atendimento (rejeitada no banco); C-08 correção documental não contorna aprovação de estoque.
 
-**Histórico e relatórios**
-- E-01 Saídas antigas continuam intactas e aparecem como "sem destinação estruturada" (com as duas subclasses).
-- E-02 `need_resolutions` antigas legíveis; nenhuma necessidade antiga reaberta.
-- E-03 Migração sem backfill: contagem de linhas de `stock_destinations` = 0 após aplicar.
-- E-04 Reconciliação por item e período: saldo inicial + entradas + ajustes − saídas = saldo final, e saídas = com destinação + sem destinação.
-- E-05 `statusWarning` compara `atendida` com o atendido.
-- E-06 `people_served` rotulado como soma declarada.
+**Unidades** — U-01 divergência no recebimento **não** cria `stock_transactions`, ledger nem atendimento e **não** perde o evento (caso aberto, idempotente); U-02 oferta sem unidade segue o mesmo procedimento; U-03 conferência física conclui o recebimento uma vez, na unidade canônica, preservando ofertado × conferido; U-04 validação por segunda pessoa; "sem segunda validação" marcada; U-05 caso `conversao_nao_suportada`/`informacao_insuficiente` permanece pendente; U-06 correção cadastral sem dependentes audita anterior/novo/motivo; com dependentes é recusada no lugar; U-07 unidade de item com movimentos não muda; U-08 nenhuma conversão automática existe; U-09 aliases só se aprovados; embalagem ≠ conteúdo; U-10 quantidade física e contabilizável separadas; nunca se somam unidades diferentes.
 
-**Segurança, privacidade e interface**
-- F-01 Comprovante só é lido por quem tem `destinacoes.leia` da organização dona; outra organização, voluntário e anônimo recebem 403/401.
-- F-02 Upload do novo propósito segue as validações atuais (tipo real, tamanho, nome seguro).
-- F-03 Isolamento: nenhuma consulta de destinação vaza dados entre organizações.
-- F-04 Nenhum campo pede nome, contato ou documento; limites de tamanho nas observações.
-- F-05 Cadeia de auditoria íntegra (`verifyAuditLogChain`).
-- F-06 Interface em 375/390/768/1280, claro e escuro, teclado e leitor de tela; estados vazio, erro, carregando, sem permissão; avisos de unidade e de excedente.
-- F-07 `qa:visual` com cenários novos (diálogo, aba, estados vazio/erro); `qa:security` sem regressão.
+**Ledger e doação local** — D-01 doação local não conta duas vezes (recebimento não cria ledger; destinação conta uma vez); D-02 `linked_need_id` só pré-seleciona; D-03 `need_fulfillments` inalterado.
 
-**Regressões**
-- G-01 Todas as proteções das Fases 94 a 98 continuam passando (suíte completa, `qa:security`, `qa:visual`).
-- G-02 Idempotência do recebimento local (Fase 96) e exclusão por recusa (Fase 97) intactas.
+**Histórico e relatórios** — E-01 saídas antigas intactas e aparecem como "sem destinação estruturada" (duas subclasses); E-02 `need_resolutions` antigas legíveis, nenhuma necessidade reaberta; E-03 migração sem backfill (0 linhas novas); E-04 reconciliação por item/período: saldo inicial + entradas + ajustes − saídas = saldo final, e saídas = com destinação + sem destinação; E-05 `statusWarning` compara com o atendido; E-06 `people_served` rotulado; E-07 indicadores de operação, terceiros, devoluções, perdas e descartes separados do atendimento.
+
+**Segurança, privacidade e interface** — F-01 comprovante só por quem tem `destinacoes.leia` da organização dona e finalidade compatível; outra organização, voluntário e anônimo recebem 403/401; F-02 upload do novo propósito segue as validações atuais; F-03 isolamento total; F-04 nenhum campo pede nome, contato ou documento; limites de tamanho; F-05 cadeia de auditoria íntegra; F-06 interface em 375/390/768/1280, claro/escuro, teclado, leitor de tela, estados vazio/erro/carregando/sem permissão; F-07 `qa:visual` com cenários novos (diálogo, aba, fila de pendências) e `qa:security` sem regressão.
+
+**Regressões** — G-01 Fases 94 a 98 sem regressão (suíte completa, `qa:security`, `qa:visual`); G-02 idempotência do recebimento local (Fase 96) e exclusão por recusa (Fase 97) intactas; G-03 prazo e expiração de atribuições (Fase 98) não expiram atribuição com recebimento pendente de regularização.
 
 ---
 
-## 17. Sequência de implementação por subfase
+## 19. Sequência de implementação por subfase
 
-A ordem proposta foi ajustada pelo código real: **unidades antes**, porque impedem que novos dados incoerentes sejam gravados enquanto se constrói o resto; e **o corte de `needs-status_POST` só depois** de existir o registro de destinação.
+Ordem revisada pelas dependências reais: **unidades antes** de qualquer destinação contabilizável; o **modelo de destinação** antes de mudar o significado de `atendida`. As migrations de cada subfase têm números definidos só no dia (seção 16).
 
-| Subfase | Problema resolvido | Mudanças previstas | Dependências | Migrations | Riscos | Testes | Critério de aceite / evidência |
-|---|---|---|---|---|---|---|---|
-| **99B Unidades no recebimento** | P6 | Bloquear recebimento (rede e local) com unidade da oferta incompatível; sinalizar unidade não informada | Confirmar caminho de correção [D-6]; revisão da mensagem | — | travar recebimento legítimo sem caminho de correção | D-03, D-05 | Recebimentos incompatíveis 409; compatíveis e não informados passam; regressões |
-| **99C Modelo e migrações** | base de dados | `0016` (files UNIQUE), `0017` (`stock_destinations` + gatilhos), tipos em `schema.tsx`, classificação em `migrationCompat` | número livre confirmado (seção 14) | 2 | gatilhos errados | A-06, A-07, C-01, E-03 + `schemaMigrations` | schema novo = schema atualizado; tabela vazia |
-| **99D Registro atômico** | P1 | Endpoint de destinação (saída + destinação + auditoria + comprovante), permissões `destinacoes.*`, restrição de `saida` em `stock-transactions_POST` | 99C | — | quebra de contrato (seção 15.1) | A-01 a A-05, F-01 a F-04 | critérios A e F |
-| **99E Significado de "atendida"** | P2, P3, P4, P7 | Cálculo do atendido; transição automática; `needs-status_POST` sem baixa e sem `atendida` manual; excedente com motivo; `cancelada` com motivo; doação local como pré-seleção (E3) | 99D | — | números do relatório mudam de rótulo | B-01 a B-09, D-01, D-02 | critérios B e D |
-| **99F Reversões e correções** | E6 | Três cenários (7.1 a 7.3), gatilho de soma, ajuste/entrada compensatórios | 99D, 99E | — | concorrência | C-01 a C-06 | critérios C |
-| **99G Relatórios** | P9 | Bloco Destinação; medidas recebido × atendido; saídas sem destinação; `statusWarning` novo; reconciliação | 99D a 99F | — | alterar contrato de `impact-report_GET` | E-01 a E-06 | critérios E |
-| **99H Interfaces** | experiência | Diálogo, aba Destinação, necessidades, prestação de contas, administração | 99D a 99G | — | regressão visual | F-06, F-07 | QA visual e acessibilidade |
-| **99I Comprovantes e privacidade** | P8 | Propósito `comprovante_destinacao`, autorização por finalidade, textos de orientação, seção ativa de `PRIVACY.md` | 99D | — | vazamento de comprovante | F-01, F-02, F-04 | critérios F |
-| **99J Validação final** | integração | Ponta a ponta, concorrência, `qa:security`, CI, atualização do roadmap | todas | — | — | G-01, G-02 + todas | seção 20 |
+| Subfase | Objetivo | Dependências | Escopo | Riscos | Testes | Critérios de conclusão (evidência) |
+|---|---|---|---|---|---|---|
+| **99B Inventário e vocabulário de unidades** | base confiável de unidades | — | consulta de inventário nos bancos reais; classificação; mapeamento revisado; `unit_registry`/`unit_aliases` (migration aditiva); colunas `unit_id` anuláveis preenchidas só com alias aprovado; comparação por identificador canônico | mapear errado; pressa em remapear ambíguos | U-08, U-09 | inventário documentado e revisado; mapeamento aprovado; nenhum valor ambíguo alterado |
+| **99C Regularização auditável de unidades e dados** | P6, P10 | 99B | casos/eventos de regularização; recebimento (rede e local) vira pendência em divergência; conferência física e validação; correção cadastral sem dependentes; procedimento de item substituto; fila e permissões | travar fluxo legítimo; compatibilidade com Fase 96 e Fase 98 | U-01 a U-07, G-02, G-03 | divergência nunca lança estoque; conferência conclui o recebimento uma vez; fila funcional |
+| **99D Modelo de destinação e migration aditiva** | base de dados | 99B | `stock_destinations`, `need_closures`, `UNIQUE` em `files`; gatilhos; tipos; classificação em `migrationCompat` | gatilhos errados | A-06, A-07, C-01, C-07, E-03 + `schemaMigrations` | schema novo = schema atualizado; tabelas vazias |
+| **99E Registro atômico de saída e destinação** | P1 | 99D | endpoint de destinação; oito categorias; permissões `destinacoes.*`; aprovação por risco; restrição de saída livre; datas (8.6) | quebra de contrato | A-01 a A-10, H-01 a H-06, F-01 a F-04 | critérios A e H |
+| **99F Progresso parcial e regra definitiva de `atendida`** | P2, P3, P4, P7 | 99E | atendido derivado; transição automática; `needs-status_POST` sem baixa nem `atendida` manual; excedente; `cancelada` com motivo; doação local como pré-seleção | números mudam de rótulo | B-01 a B-09, D-01 a D-03 | critérios B e D |
+| **99G Correções, reversões e devoluções físicas** | E6 | 99E, 99F | quatro situações da seção 9 | concorrência | C-01 a C-08 | critérios C |
+| **99H Relatórios de impacto** | P9 | 99E a 99G | bloco Destinação; recebido × atendido; sem destinação; indicadores separados; reconciliação | contrato de `impact-report_GET` | E-01 a E-07, U-10 | critérios E |
+| **99I Interface de destinação e prestação de contas** | experiência | 99C a 99H | diálogo, aba, fila de pendências, necessidades, prestação de contas, administração | regressão visual | F-06, F-07 | QA visual e acessibilidade |
+| **99J Comprovantes, privacidade e permissões** | P8 | 99E | propósito `comprovante_destinacao`; autorização por finalidade; textos de orientação; `PRIVACY.md` ativo | vazamento de comprovante | F-01, F-02, F-04 | critérios F |
+| **99K Validação de ponta a ponta** | integração | todas | ponta a ponta, concorrência, `qa:security`, CI, atualização do roadmap | — | G-01 a G-03 + todas | seção 22 |
 
-Observação: o ledger de recebimentos **não** muda em nenhuma subfase (seção 5.2). Se o dono escolher M3, haverá uma subfase própria **depois** de 99J, com migration e testes de contabilidade novos.
+O ledger de recebimentos **não** muda em nenhuma subfase. Se um dia o produto exigir ledger único (M3), será uma subfase própria **depois** de 99K, com migration e testes de contabilidade novos.
 
 ---
 
-## 18. Limitações e riscos conhecidos
+## 20. Limitações e riscos conhecidos
 
-- **Estoque fungível:** não se prova qual doação foi entregue; o relatório prova entradas por origem, saídas por finalidade e a reconciliação por item.
+- **Estoque agregado:** não se prova qual doação foi entregue; o relatório prova entradas por origem, saídas por finalidade e a reconciliação por item.
 - **`people_served`** é declarado e não deduplica pessoas.
-- **Rótulos de relatório e telas** mudam de significado ("atendimento" → "recebido/suprimento" para o ledger): risco de confusão na transição e testes que fixam textos.
-- **Mudança de contrato** em `stock-transactions_POST` e `needs-status_POST` (sem consumidores externos conhecidos).
-- **Bloqueio por unidade** pode travar um recebimento legítimo enquanto não houver edição/correção de dados ([D-6]).
-- **Comprovantes** podem conter dados pessoais enviados por engano: mitigação por orientação e por acesso restrito, não por detecção.
-- **Positivo sem aprovação:** o ajuste positivo da correção de registro não passa por dupla aprovação hoje ([D-5]).
-- **Numeração de migrations** pode mudar antes da implementação (seção 14).
+- **Rótulos** mudam de significado ("atendimento" → "suprimento recebido" para o ledger): risco de confusão e testes que fixam textos.
+- **Mudança de contrato** em `stock-transactions_POST`, `needs-status_POST` e nos recebimentos (sem consumidores externos conhecidos).
+- **Carga operacional:** casos de regularização e validação por segunda pessoa podem sobrecarregar organizações pequenas; mitigação: regra do único elegível (T-4) e fila clara.
+- **Comprovantes** podem conter dados pessoais enviados por engano: orientação e acesso restrito, sem detecção.
+- **Unidades históricas ambíguas** só serão resolvidas por revisão humana (99B).
+- **Numeração de migrations** pode mudar antes da implementação (seção 16).
 - A cobertura visual do CI continua reduzida (18 de 27 cenários, só Chrome); a Fase 99 precisa adicionar cenários próprios.
 
 ---
 
-## 19. Decisões que continuam dependendo de evidência ou revisão
+## 21. Requisitos legais a validar (dependem de avaliação jurídica)
 
-| # | Questão | Alternativas e efeitos | Recomendação |
-|---|---|---|---|
-| D-1 | Atribuir cada destinação a uma entrada/doação específica | (a) não atribuir (estoque fungível); (b) leitura derivada FIFO (só relatório); (c) lotes explícitos | (a) agora; (b) como análise futura; (c) só com requisito real |
-| D-2 | Estado para encerrar necessidade sem entrega total | usar `cancelada` + motivo; ou novo valor de enum (`ALTER TYPE ADD VALUE` é irreversível) | `cancelada` + motivo |
-| D-3 | Lista final de finalidades (ex.: consumo interno?) | manter as cinco; ou acrescentar | revisar com as organizações antes da migração |
-| D-4 | Limite de retroação de `delivered_on` | 30 dias com marca; ou sem limite; ou bloqueio | marca em 30 dias |
-| D-5 | Dupla aprovação para ajuste positivo de correção de registro | manter só proprietário/administrador; ou aprovar | manter, com motivo obrigatório |
-| D-6 | Caminho para corrigir unidade/dados de item, necessidade e oferta | usar item novo; criar edição (decisão de produto já pendente); correção administrativa de unidade da oferta | decidir **antes** de 99B |
-| D-7 | Vocabulário controlado de unidades | texto livre normalizado (hoje); ou lista | lista, em fase futura |
-| D-8 | Retenção, base legal e prazos para destinações e comprovantes | exige revisão jurídica | fora desta especificação |
+Este documento **não** é parecer legal e não declara obrigações específicas. Dependem de validação:
+- prazo de **retenção** de destinações, comprovantes e casos de regularização;
+- **base legal** e finalidade para o tratamento dos dados agregados e dos comprovantes;
+- adequação do `people_served`/`people_unit` quando as quantidades forem pequenas (risco de reidentificação);
+- tratamento de comprovantes que, apesar da orientação, contenham dados pessoais (eliminação sob solicitação × imutabilidade da trilha);
+- eventual exigência de convênios ou financiadores sobre comprovação de entrega.
+
+Todas as demais decisões de produto desta especificação estão **definidas** (seção 2). O que falta construir é **trabalho técnico**: [T-1] aprovação por risco das saídas de maior risco; [T-2] classificação de ajuste antigo como perda; [T-3] fuso de negócio no servidor; [T-4] regra exata de validação da conferência; [T-5] registro de leitura de comprovantes; inventário e vocabulário de unidades (99B); interface administrativa (99I).
 
 ---
 
-## 20. Condições objetivas para declarar a Fase 99 concluída
+## 22. Condições objetivas para declarar a Fase 99 concluída
 
 Só se **todas** valerem, com evidência (comandos e resultados reais, CI no commit integrado):
-1. As subfases 99B a 99J integradas, cada uma com o critério da seção 17.
-2. A matriz da seção 16 implementada e aprovada (nenhum item removido ou enfraquecido).
-3. Nenhuma saída nova sem destinação; nenhum caminho cria saída ao mudar status.
-4. Atendimento calculado só por destinações contabilizáveis líquidas; suprimento e atendimento separados nos relatórios.
+1. As subfases 99B a 99K integradas, cada uma com o critério da seção 19.
+2. A matriz da seção 18 implementada e aprovada (nenhum item removido ou enfraquecido).
+3. Nenhuma saída nova sem destinação; nenhum caminho cria saída ao mudar status; ajuste continua separado.
+4. Atendimento calculado só por destinações contabilizáveis líquidas; suprimento e atendimento separados nos relatórios e nas telas.
 5. Doação local com `linked_need_id` conta uma vez, só por destinação.
-6. Nenhuma conversão automática de unidade; quantidades física e contabilizável separadas.
+6. Nenhuma conversão automática; nenhum lançamento com unidade incerta; divergência sempre vira caso auditável e retomável; quantidade física e contabilizável separadas.
 7. Saídas e resoluções antigas preservadas e identificadas; zero backfill.
 8. Comprovantes protegidos por finalidade, sem dado pessoal exigido.
-9. Cadeia de auditoria íntegra; Fases 94 a 98 sem regressão; `qa:security` e `qa:visual` (incluindo cenários novos) aprovados.
+9. Cadeia de auditoria íntegra; Fases 94 a 98 sem regressão; `qa:security` e `qa:visual` (com cenários novos) aprovados.
 10. `docs/ROADMAP_ATUAL.md`, `docs/PRIVACY.md` e `docs/RBAC_PERMISSOES.md` refletindo exatamente o que está implementado (não o planejado).
 11. O fluxo de doação não é declarado concluído de ponta a ponta antes disso.
