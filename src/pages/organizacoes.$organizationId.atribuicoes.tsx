@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getOrganizations } from "../endpoints/organizations_GET.schema";
@@ -22,9 +22,10 @@ import { ReceiptHistoryPanel } from "../components/ReceiptHistoryPanel";
 import { FileDropzone } from "../components/FileDropzone";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/Select";
 import { z } from "zod";
-import { ArrowLeft, Network, PackageCheck, FileCheck, X } from "lucide-react";
+import { ArrowLeft, Network, PackageCheck, FileCheck, X, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { isAllowedProofUrl } from "../helpers/proofUrl";
+import { CLOSED_REASON_LABELS, formatRemaining, remainingMs, urgencyOf } from "../helpers/assignmentDeadline";
 import styles from "./organizacoes.$organizationId.atribuicoes.module.css";
 
 const statusLabels: Record<string, string> = {
@@ -72,7 +73,18 @@ export default function OrganizationAllocationsPage() {
     queryKey: ["organization-allocations", organizationId],
     queryFn: () => getOrganizationAllocations({ organizationId }),
     enabled: Number.isFinite(organizationId),
+    refetchInterval: 60_000, // pendências e expirações refletem sem recarregar a página (fonte única: este mesmo endpoint)
   });
+
+  // Tempo restante pelo relógio do SERVIDOR (serverNow da consulta + tempo decorrido); o relógio do navegador só mede o intervalo.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const remainingFor = (dueIso: string) =>
+    allocationsQuery.data ? remainingMs(dueIso, allocationsQuery.data.serverNow, allocationsQuery.dataUpdatedAt, nowMs) : Number.POSITIVE_INFINITY;
+  const pending = (allocationsQuery.data?.allocations ?? []).filter((x) => x.pendingAction);
 
   const itemsQuery = useQuery({
     queryKey: ["inventory-items", organizationId],
@@ -165,16 +177,78 @@ export default function OrganizationAllocationsPage() {
         </div>
       </div>
 
+      {allocationsQuery.isError && (
+        <div className={styles.errorBox} role="alert">
+          Não foi possível carregar as atribuições agora. {allocationsQuery.error instanceof Error ? allocationsQuery.error.message : ""}{" "}
+          <Button size="sm" variant="outline" onClick={() => allocationsQuery.refetch()}>Tentar de novo</Button>
+        </div>
+      )}
+
+      <section className={styles.pendingBox} aria-labelledby="pendencias-titulo">
+        <h2 id="pendencias-titulo" className={styles.pendingTitle}>
+          <Clock size={18} aria-hidden="true" /> Pendências com prazo
+          <Badge variant={pending.length > 0 ? "warning" : "outline"} aria-label={`${pending.length} ${pending.length === 1 ? "pendência" : "pendências"}`}>{pending.length}</Badge>
+        </h2>
+        <p className={styles.pendingExplain}>
+          A Levora atribuiu estas oportunidades automaticamente, porque a compatibilidade com as necessidades da organização foi alta. Para manter a atribuição,
+          registre a primeira movimentação até o vencimento: agende a coleta ou registre o recebimento. Sem movimentação no prazo, a atribuição é encerrada e a
+          oportunidade volta para outras organizações — a expiração não conta como recusa.
+        </p>
+        {allocationsQuery.isFetching && !allocationsQuery.data ? <Skeleton className={styles.listSkeleton} style={{ height: "4rem" }} /> : pending.length === 0 ? (
+          <p className={styles.hintText}>Nenhuma atribuição automática aguardando ação no momento.</p>
+        ) : (
+          <ul className={styles.pendingList} aria-live="polite">
+            {pending.map((a) => {
+              const ms = remainingFor(a.responseDueAt!);
+              const urgency = urgencyOf(ms);
+              return (
+                <li key={a.id} className={`${styles.pendingItem} ${urgency === "soon" ? styles.pendingItemSoon : urgency === "expired" ? styles.pendingItemExpired : ""}`}>
+                  <div>
+                    <p className={styles.pendingItemTitle}>{a.opportunityTitle}</p>
+                    <p className={styles.pendingItemMeta}>
+                      {a.quantityAllocated} {a.opportunityUnit ?? ""} · vence em {new Date(a.responseDueAt!).toLocaleString("pt-BR")} ·{" "}
+                      <strong>{urgency === "expired" ? "prazo vencido (encerramento em processamento)" : `restam ${formatRemaining(ms)}`}</strong>
+                    </p>
+                  </div>
+                  <div className={styles.headerRow}>
+                    <Badge variant={urgency === "expired" ? "destructive" : urgency === "soon" ? "warning" : "outline"}>
+                      {urgency === "expired" ? "Vencido" : urgency === "soon" ? "Vence em breve" : "No prazo"}
+                    </Badge>
+                    <a href={`#atribuicao-${a.id}`} className={styles.pendingLink}>Ir para a atribuição</a>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       {allocationsQuery.isFetching && !allocationsQuery.data ? <Skeleton className={styles.listSkeleton} /> : (
         <ul className={styles.list}>
           {(allocationsQuery.data?.allocations ?? []).map((a) => (
-            <li key={a.id} className={styles.card}>
+            <li key={a.id} id={`atribuicao-${a.id}`} className={styles.card}>
               <div className={styles.headerRow}>
                 <h3 className={styles.cardTitle}>{a.opportunityTitle}</h3>
                 <Badge variant={a.status === "recebida" ? "success" : a.status === "recusada" || a.status === "cancelada" ? "destructive" : "outline"}>
-                  {statusLabels[a.status]}
+                  {a.closedReason ? "Encerrada pelo sistema" : statusLabels[a.status]}
                 </Badge>
               </div>
+              {a.pendingAction && a.responseDueAt && (() => {
+                const ms = remainingFor(a.responseDueAt);
+                const urgency = urgencyOf(ms);
+                return (
+                  <p className={`${styles.deadlineLine} ${urgency === "soon" ? styles.deadlineSoon : urgency === "expired" ? styles.deadlineExpired : ""}`}>
+                    <strong>Ação necessária:</strong> agende a coleta ou registre o recebimento até {new Date(a.responseDueAt).toLocaleString("pt-BR")} (
+                    {urgency === "expired" ? "prazo vencido" : `restam ${formatRemaining(ms)}`}). Sem movimentação, a atribuição é encerrada e a oportunidade segue para outra organização.
+                  </p>
+                );
+              })()}
+              {a.closedReason && (
+                <p className={styles.closedLine}>
+                  {CLOSED_REASON_LABELS[a.closedReason] ?? "Encerrada pelo sistema"}
+                  {a.closedAt ? ` em ${new Date(a.closedAt).toLocaleString("pt-BR")}` : ""}. Isto não é uma recusa da organização.
+                </p>
+              )}
               <p className={styles.meta}>
                 Fonte: {a.sourceName} · quantidade atribuída: {a.quantityAllocated} {a.opportunityUnit ?? ""}
                 {a.opportunityLocationCity ? ` · ${a.opportunityLocationCity}/${a.opportunityLocationState ?? ""}` : ""}

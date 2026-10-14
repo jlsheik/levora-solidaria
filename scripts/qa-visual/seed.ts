@@ -2,6 +2,7 @@
 // dono e voluntário de uma organização ativa, uma necessidade, um item de estoque COM movimentações (entrada de 5 kg e saída de 1 kg, pelos
 // endpoints reais, para exibir a variação negativa), uma capacidade (diálogo de exclusão) e uma atribuição aceita (diálogo de recebimento com o
 // FileDropzone). As credenciais abaixo existem só neste banco descartável.
+import { sql } from "kysely";
 import { db } from "../../src/helpers/db";
 import { generatePasswordHash } from "../../src/helpers/generatePasswordHash";
 import { buildRequest, createSessionCookie } from "../../test/helpers";
@@ -38,7 +39,8 @@ for (const [type, quantity, reason] of [["entrada", 5, "entrada sintética para 
 // atribuição aceita (abre o diálogo "Registrar recebimento", onde fica o FileDropzone)
 const source = await db.insertInto("sources").values({ name: "Fonte QA", type: "manual", connectorKey: "manual", status: "ativa", createdByUserId: owner }).returning("id").executeTakeFirstOrThrow();
 const opp = await db.insertInto("opportunityRegistry").values({ sourceId: source.id, title: "Doação sintética aceita", status: "validada", quantity: "10", unit: "kg", discoveredByUserId: owner }).returning("id").executeTakeFirstOrThrow();
-await db.insertInto("opportunityAllocations").values({ opportunityRegistryId: opp.id, organizationId: org.id, status: "aceita", quantityAllocated: "5" }).execute();
+// Fase 98: é uma atribuição AUTOMÁTICA com prazo próximo do vencimento (5 h), para a tela renderizar a seção de pendências no estado "vence em breve".
+await db.insertInto("opportunityAllocations").values({ opportunityRegistryId: opp.id, organizationId: org.id, status: "aceita", quantityAllocated: "5", autoMatched: true, responseDueAt: sql<Date>`now() + interval '5 hours'` }).execute();
 
 await db.destroy();
 console.log("semente QA aplicada");

@@ -28,3 +28,22 @@
 .uploadedProof span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .removeProofButton { display: inline-flex; align-items: center; justify-content: center; background: none; border: none; color: var(--muted-foreground); cursor: pointer; padding: var(--spacing-1); }
 .removeProofButton:hover { color: var(--destructive); }
+
+/* Fase 98 — pendências das atribuições automáticas (prazo de resposta) */
+.pendingBox { margin-bottom: var(--spacing-6); padding: var(--spacing-4); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.pendingTitle { display: flex; align-items: center; gap: var(--spacing-2); font-family: var(--font-family-display); font-size: 1.0625rem; font-weight: 600; margin: 0 0 var(--spacing-1) 0; }
+.pendingExplain { font-size: 0.8125rem; color: var(--muted-foreground); line-height: 1.5; margin: 0 0 var(--spacing-3) 0; max-width: 46rem; }
+.pendingList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-2); }
+.pendingItem { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-3); flex-wrap: wrap; padding: var(--spacing-3); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.pendingItemSoon { border-color: var(--warning); }
+.pendingItemExpired { border-color: var(--destructive); }
+.pendingItemTitle { font-weight: 600; font-size: 0.9375rem; margin: 0; }
+.pendingItemMeta { font-size: 0.8125rem; color: var(--muted-foreground); margin: 2px 0 0 0; }
+.pendingLink { font-size: 0.8125rem; font-weight: 500; color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+.pendingLink:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: var(--radius-sm); }
+.deadlineLine { font-size: 0.8125rem; margin: var(--spacing-2) 0 0 0; padding: var(--spacing-2) var(--spacing-3); background: var(--surface); border-left: 3px solid var(--border); border-radius: var(--radius-sm); }
+.deadlineSoon { border-left-color: var(--warning); }
+.deadlineExpired { border-left-color: var(--destructive); }
+.closedLine { font-size: 0.8125rem; color: var(--muted-foreground); margin: var(--spacing-2) 0 0 0; }
+.errorBox { padding: var(--spacing-3); border: 1px solid var(--destructive); border-radius: var(--radius-md); color: var(--destructive); font-size: 0.875rem; margin-bottom: var(--spacing-4); }
+.navBadge { display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; margin-left: 0.375rem; border-radius: 999px; background: var(--warning); color: var(--warning-foreground); font-size: 0.6875rem; font-weight: 600; line-height: 1; }

@@ -205,7 +205,7 @@ describe("CSS dos componentes compartilhados (contrato estático)", () => {
     expect(tsx).toContain("aria-label=\"Clear error\"");
   });
 
-  it("os 13 usos de <Button variant=\"outline\"> continuam usando a variante (sem trocar por classes locais)", () => {
+  it("os 15 usos de <Button variant=\"outline\"> continuam usando a variante (sem trocar por classes locais)", () => {
     const files = [
       "src/components/EditNeedDialog.tsx", "src/components/ReceiptHistoryPanel.tsx", "src/components/RenameOrganizationDialog.tsx", "src/components/RenameSourceDialog.tsx",
       "src/pages/organizacoes.$organizationId.atribuicoes.tsx", "src/pages/organizacoes.$organizationId.prestacao-contas.tsx", "src/pages/organizacoes.$organizationId.tsx",
@@ -217,6 +217,6 @@ describe("CSS dos componentes compartilhados (contrato estático)", () => {
       // só <Button ...variant="outline"> (multilinha incluída), não <Badge variant="outline">
       total += [...src.matchAll(/<Button\b[^>]*?variant="outline"/g)].length;
     }
-    expect(total).toBe(13);
+    expect(total).toBe(15); // 13 + 2 da Fase 98 ("Tentar de novo" nas atribuições e "Verificar de novo" no diálogo de atribuição manual)
   });
 });
