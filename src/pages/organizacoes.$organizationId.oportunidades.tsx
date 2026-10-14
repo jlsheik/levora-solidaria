@@ -30,6 +30,7 @@ import { Input } from "../components/Input";
 import { Textarea } from "../components/Textarea";
 import { Button } from "../components/Button";
 import { Badge } from "../components/Badge";
+import { UnitText } from "../components/UnitText";
 import { Skeleton } from "../components/Skeleton";
 import {
   Select,
@@ -195,6 +196,11 @@ export default function OpportunitiesPage() {
         <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>
           Configurações de Matching
         </Link>
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
+          <Link to={`/organizacoes/${organizationId}/unidades`} className={styles.tabNavItem}>
+            Unidades
+          </Link>
+        )}
       </nav>
 
       <div className={styles.titleRow}>
@@ -348,7 +354,7 @@ export default function OpportunitiesPage() {
                 <p className={styles.oppMeta}>
                   Doador: {opp.donorName}
                   {opp.donorContact ? ` (${opp.donorContact})` : ""}
-                  {opp.quantityOffered ? ` · ${opp.quantityOffered} ${opp.unit ?? ""}` : ""} · registrada por{" "}
+                  {opp.quantityOffered ? <> · {opp.quantityOffered} <UnitText unit={opp.unit} /></> : ""} · registrada por{" "}
                   {opp.createdByDisplayName} em {new Date(opp.createdAt).toLocaleDateString("pt-BR")}
                 </p>
                 {opp.description && <p className={styles.oppDescription}>{opp.description}</p>}

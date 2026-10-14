@@ -168,7 +168,8 @@ describe("consistência dos cenários e do autoteste", () => {
       expect(["guest", "owner", "volunteer"]).toContain(s.user);
       expect(s.path.startsWith("/")).toBe(true);
       expect(["button", "switch", "field", "errorText", "text", "boundary", "dropzoneFocus"]).toContain(s.measure);
-      for (const step of s.steps) expect(Object.keys(step).length === 1 && ("click" in step || "setFile" in step)).toBe(true);
+      for (const step of s.steps) expect(Object.keys(step).length === 1 && ("click" in step || "setFile" in step || "select" in step || "type" in step)).toBe(true);
+      if (s.blockUrls !== undefined) expect(Array.isArray(s.blockUrls) && s.blockUrls.every((u: unknown) => typeof u === "string" && u.length > 0)).toBe(true);
       for (const vp of s.viewports ?? []) expect(VIEWPORTS.some((v: { w: number }) => v.w === vp.w)).toBe(true);
       expect(typeof s.target.css).toBe("string");
       if (states[s.measure]) for (const st of s.states) expect(states[s.measure]).toContain(st);

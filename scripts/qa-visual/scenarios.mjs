@@ -16,6 +16,8 @@
 //   sign      (text) regex que o TEXTO deve satisfazer (o indicador não pode depender só da cor)
 //   bgToken   (text) variável CSS usada como fundo quando o fundo é um gradiente (ex.: "--surface" no FileDropzone)
 //   expect    (field) { height?: número exato (px) , minHeight?: número }
+//   blockUrls (opcional) padrões de URL que o navegador NÃO consegue buscar durante o cenário (produz o estado de erro de carregamento real)
+//             passos { select: { css, value } } e { type: { css, text } } preenchem um <select>/<input> existente (filtros)
 //   viewports (opcional) subconjunto de VIEWPORTS (padrão: todos)
 //
 // Toda combinação cenário × viewport × tema também recebe duas verificações de CONTENÇÃO: sem rolagem horizontal da página e, com diálogo
@@ -36,6 +38,9 @@ const NEEDS = "/organizacoes/1/necessidades";
 const MATCHING = "/organizacoes/1/matching";
 const INVENTORY = "/organizacoes/1/inventario";
 const ATTRIBUTIONS = "/organizacoes/1/atribuicoes";
+// Fase 99B: diagnóstico de unidades. A organização 1 tem valores canônicos, alias, ambíguos, desconhecidos e ausentes; a 2 (do mesmo dono) não tem nenhum.
+const UNITS = "/organizacoes/1/unidades";
+const UNITS_EMPTY = "/organizacoes/2/unidades";
 const editNeed = { click: { css: 'button[class*="_ghost_"]', text: "^Editar a necessidade" } };
 const openReceive = { click: { css: "button", text: "^Registrar recebimento direto" } };
 // arquivo sintético que o FileDropzone RECUSA (a lista aceita é image/jpeg, image/png, image/webp): provoca o estado de erro real
@@ -55,6 +60,8 @@ export const CI_PROFILE_IDS = [
   "org-outline-leave-disabled", "matching-destructive-confirm", "matching-switch", "matching-switch-disabled",
   "inventory-secondary-movement", "inventory-delta-negative",
   "dropzone-border", "dropzone-keyboard-focus", "dropzone-error-text", "needs-primary-new",
+  // Fase 99B: tela de diagnóstico de unidades (classificadas, desconhecidas/ambíguas, vazio, erro, filtros; os 4 viewports incluem o móvel)
+  "units-badge-canonical", "units-badge-unknown", "units-badge-ambiguous", "units-empty", "units-error", "units-filter-select", "units-filter-input", "units-filtered-unknown", "units-filter-no-results", "units-inventory-pending-marker",
 ];
 
 export const SCENARIOS = [
@@ -91,6 +98,18 @@ export const SCENARIOS = [
   { id: "dropzone-keyboard-focus", user: "owner", path: ATTRIBUTIONS, steps: [openReceive], target: dropzone, measure: "dropzoneFocus", variant: "FileDropzone: foco por teclado" },
   { id: "dropzone-error-text", user: "owner", path: ATTRIBUTIONS, steps: [openReceive, badFile], target: { css: '[role="alert"] span', within: '[role="dialog"]' }, measure: "text", variant: "FileDropzone: erro" },
   { id: "dropzone-error-clear", user: "owner", path: ATTRIBUTIONS, steps: [openReceive, badFile], target: { css: 'button[aria-label="Clear error"]', within: '[role="dialog"]' }, measure: "button", variant: "ghost (ícone)", states: ALL4 },
+
+  // ---- Fase 99B: diagnóstico de unidades (somente leitura). Cada estado exigido pela especificação tem seu cenário.
+  { id: "units-badge-canonical", user: "owner", path: UNITS, steps: [], target: { css: 'td [data-kind="canonica"]', text: "^Canônica" }, measure: "text", variant: "Unidades: classificadas" },
+  { id: "units-badge-unknown", user: "owner", path: UNITS, steps: [], target: { css: 'td [data-kind="desconhecida"]', text: "^Desconhecida" }, measure: "text", variant: "Unidades: desconhecidas" },
+  { id: "units-badge-ambiguous", user: "owner", path: UNITS, steps: [], target: { css: 'td [data-kind="ambigua"]', text: "^Ambígua" }, measure: "text", variant: "Unidades: ambíguas" },
+  { id: "units-empty", user: "owner", path: UNITS_EMPTY, steps: [], target: { css: 'p[role="status"]', text: "^Esta organização ainda não tem nenhum valor" }, measure: "text", variant: "Unidades: lista vazia" },
+  { id: "units-error", user: "owner", path: UNITS, steps: [], blockUrls: ["*/_api/v1/unit-inventory*"], target: { css: '[role="alert"] p', text: "^Não foi possível carregar o diagnóstico" }, measure: "text", variant: "Unidades: erro de carregamento" },
+  { id: "units-filter-select", user: "owner", path: UNITS, steps: [], target: { css: "select#filtro-classe" }, measure: "field", variant: "Unidades: filtro (select)", expect: { height: 40 } },
+  { id: "units-filter-input", user: "owner", path: UNITS, steps: [], target: { css: "input#filtro-valor" }, measure: "field", variant: "Unidades: filtro (busca)", expect: { height: 40 } },
+  { id: "units-filtered-unknown", user: "owner", path: UNITS, steps: [{ select: { css: "select#filtro-classe", value: "desconhecida" } }], target: { css: 'td [data-kind="desconhecida"]', text: "^Desconhecida" }, measure: "text", variant: "Unidades: filtros aplicados" },
+  { id: "units-filter-no-results", user: "owner", path: UNITS, steps: [{ type: { css: "input#filtro-valor", text: "zzz-sem-resultado" } }], target: { css: 'p[role="status"]', text: "^Nenhum valor corresponde" }, measure: "text", variant: "Unidades: filtros sem resultado" },
+  { id: "units-inventory-pending-marker", user: "owner", path: INVENTORY, steps: [], target: { css: 'span[class*="_pending_"]', text: "a classificar" }, measure: "text", variant: "Inventário: unidade a classificar" },
 
   // ---- voluntário: Switch desabilitado
   { id: "matching-switch-disabled", user: "volunteer", path: MATCHING, steps: [], target: { css: '[role="switch"]' }, measure: "switch", variant: "Switch (desabilitado)", states: ["disabled"], info: true },

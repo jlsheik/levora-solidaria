@@ -21,11 +21,22 @@ const mk = async (email: string, name: string) => {
 const owner = await mk("dono@qa.example", "Dona QA");
 const volunteer = await mk("voluntario@qa.example", "Voluntária QA");
 const org = await db.insertInto("organizations").values({ name: "Associação QA", slug: "associacao-qa", type: "organizacao_social", city: "Contagem", state: "MG", status: "ativa", createdByUserId: owner }).returning("id").executeTakeFirstOrThrow();
+const emptyOrg = await db.insertInto("organizations").values({ name: "Associação QA Vazia", slug: "associacao-qa-vazia", type: "organizacao_social", city: "Contagem", state: "MG", status: "ativa", createdByUserId: owner }).returning("id").executeTakeFirstOrThrow(); // Fase 99B: organização SEM nenhum valor de unidade (estado vazio do diagnóstico)
 await db.insertInto("memberships").values([
+  { organizationId: emptyOrg.id, userId: owner, role: "proprietario", status: "ativo" },
   { organizationId: org.id, userId: owner, role: "proprietario", status: "ativo" },
   { organizationId: org.id, userId: volunteer, role: "voluntario", status: "ativo" },
 ]).execute();
 const item = await db.insertInto("inventoryItems").values({ organizationId: org.id, name: "Arroz", unit: "kg", createdByUserId: owner }).returning("id").executeTakeFirstOrThrow();
+// Fase 99B: valores de unidade variados (alias, desconhecido; ambíguo e ausente na doação local) para o diagnóstico de unidades
+await db.insertInto("inventoryItems").values([
+  { organizationId: org.id, name: "Água", unit: "litros", createdByUserId: owner },
+  { organizationId: org.id, name: "Lenço", unit: "x", createdByUserId: owner },
+]).execute();
+await db.insertInto("donationOpportunities").values([
+  { organizationId: org.id, title: "Doação QA com unidade ambígua", donorName: "Doador QA", unit: "un", createdByUserId: owner },
+  { organizationId: org.id, title: "Doação QA sem unidade", donorName: "Doador QA", createdByUserId: owner },
+]).execute();
 await db.insertInto("needs").values({ organizationId: org.id, title: "Cestas básicas", description: "Famílias do bairro", quantityNeeded: "300", unit: "kg", priority: "media", status: "aberta", createdByUserId: owner }).execute();
 await db.insertInto("organizationCapacities").values({ organizationId: org.id, category: "alimentos", unit: "kg", maxCapacity: "500", createdByUserId: owner }).execute();
 

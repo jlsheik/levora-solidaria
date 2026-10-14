@@ -29,7 +29,7 @@ relatorios.leia
 organizacao.gerencie
 ```
 
-`organizacao.gerencie` (Fase 21): edita capacidade por categoria, área de
+`organizacao.gerencie` (Fase 99B: também autoriza, só para leitura, o diagnóstico de unidades — `GET unit-inventory`, `docs/UNIDADES_INVENTARIO_99B.md`; nenhuma permissão nova) (Fase 21): edita capacidade por categoria, área de
 atendimento e configuração de logística da própria organização (dados que
 alimentam o motor de matching). Sem `organizacao.leia` correspondente —
 ler essa configuração é aberto a qualquer membro ativo via

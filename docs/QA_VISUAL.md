@@ -22,7 +22,7 @@ Pré-requisitos: Node 22.x (versão declarada em `package.json`), Edge e/ou Chro
 npm run qa:visual                                    # tudo: cenários × 4 viewports × 2 temas, nos navegadores encontrados (Edge e Chrome)
 npm run qa:visual -- --browser edge --verbose        # só o Edge; mostra também as linhas PASS
 npm run qa:visual -- --viewports 375,1280            # subconjunto de viewports (largura ou WxH)
-npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (18 de 27 cenários; o relatório lista os omitidos)
+npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (28 de 37 cenários; o relatório lista os omitidos)
 npm run qa:visual -- --only needs-primary-new,matching-switch
 npm run qa:visual -- --list                          # lista cenários, viewports e temas
 npm run qa:visual -- --self-test                     # prova que o detector acusa regressões e ausências (ver abaixo)
@@ -131,7 +131,7 @@ não for 22** e registra `node -v`, `google-chrome --version` e `docker --versio
 | | Local (completo) | CI (reduzido) |
 |---|---|---|
 | Navegador | Edge e Chrome | **só o Chrome do runner** (`--browser chrome`; nunca Edge); `QA_BROWSER_NO_SANDBOX=1` por opt-in explícito (AppArmor do runner) |
-| `qa:visual` | 27 cenários × 4 viewports × 2 temas | `--profile ci`: **18 cenários** × os mesmos 4 viewports × 2 temas |
+| `qa:visual` | 37 cenários × 4 viewports × 2 temas | `--profile ci`: **28 cenários** × os mesmos 4 viewports × 2 temas |
 | `qa:security` | 5 partes, 2 navegadores | **as 5 partes** (calibração, CSRF, XSS, uploads, cabeçalhos nginx/Docker), 1 navegador |
 | Duração | ~12 min + ~7 min | alvo ~10 min (limite do job: 40 min) |
 
@@ -244,3 +244,7 @@ Acrescente um objeto em `scripts/qa-visual/scenarios.mjs` (campos documentados n
 já existente), não crie outra infraestrutura.
 
 **Endurecimento do workflow (validado no run `38516837928`, commit `d863660`; os dois jobs passaram e o runner baixou as SHAs e os digests indicados).** As três ações (`checkout` v4.4.0, `setup-node` v4.4.0, `upload-artifact` v4.6.2) estão fixadas em SHA completo de commit verificado (as mesmas que `@v4` resolvia), o checkout usa `persist-credentials: false` (nenhum passo faz Git depois dele), o job `test` tem `timeout-minutes: 30` (observado: ~7,5 a ~10 min) e `qa-browser` segue com 40. As imagens `nginx:1.27-alpine` e `alpine/openssl:3.5.9` são referenciadas por tag **e** digest (o mesmo digest do nginx que o runner baixou nos runs verdes; o do openssl é o da tag 3.5.9, confirmado no Docker Hub e por pull local), em `ci.yml` e na ferramenta; `test/qaCi.test.ts` exige a igualdade. Quem tiver outra build local dessas imagens precisa fazer `docker pull` das referências com digest (a parte `headers` recusa com código 3 se não existirem). Ficam de fora, de propósito: `postgres:16` (serviço do job, tag móvel de versão menor) e a atualização periódica das SHAs (manual: trocar SHA e comentário juntos).
+
+## Fase 99B — cenários da tela de diagnóstico de unidades
+
+Dez cenários novos (`units-*`, total 37; todos no perfil `ci`, que passa a ter 28): classificadas (canônica), desconhecidas, ambíguas, lista vazia (organização 2 da semente, sem nenhuma unidade), **erro de carregamento** (o navegador bloqueia só `*/_api/v1/unit-inventory*`; o padrão não pode ser mais amplo, senão bloqueia o módulo `unit-inventory_GET.schema.ts` do próprio Vite), filtro (select e busca, altura 40 px), filtros aplicados, filtros sem resultado e o marcador "(a classificar)" no inventário. O móvel é coberto pelos viewports 375×812 e 390×844 (a tabela vira cartões, sem rolagem horizontal). Novos passos do runner: `{ select }` e `{ type }` (preenchem controles existentes) e o campo `blockUrls`. O primeiro contraste real medido derrubou o uso das variantes `success` e `warning` do `Badge` (4,11:1 e 2,86:1) — a tela usa um selo próprio com texto no token de leitura normal.

@@ -253,6 +253,17 @@ async function runStep(ctx, sc, step) {
     await sleep(500);
     return true;
   }
+  if (step.select || step.type) { // preenche um <select> ou <input> existente pelos eventos que o React escuta (o valor é digitado como um usuário faria)
+    const spec = step.select ?? step.type;
+    if (!(await waitUntil(() => ctx.cdp.eval(`!!document.querySelector(${q(spec.css)})`), 8000))) { addMissing(ctx, sc, "passo", `campo não encontrado: ${spec.css}`); return false; }
+    const done = await ctx.cdp.eval(`(() => { const el = document.querySelector(${q(spec.css)}); if (!el) return false;
+      const proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, ${q(step.select ? spec.value : spec.text)});
+      el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); return true; })()`);
+    if (!done) { addMissing(ctx, sc, "passo", `campo não preenchido: ${spec.css}`); return false; }
+    await sleep(500);
+    return true;
+  }
   addUnmeasurable(ctx, sc, "passo", `passo desconhecido: ${Object.keys(step).join(",")}`);
   return false;
 }
@@ -265,6 +276,7 @@ function viewportProblem(ctx, sc, m, when) {
 }
 
 async function runOne(ctx, sc) {
+  await ctx.cdp.send("Network.setBlockedURLs", { urls: sc.blockUrls ?? [] }); // cenário de erro de carregamento: bloqueia só a URL pedida (sempre reposto a cada cenário)
   await ctx.cdp.send("Emulation.setDeviceMetricsOverride", emulationParams(ctx.vp)); // aplica ANTES de navegar; a conferência é feita com a página da aplicação carregada
   await navigate(ctx.cdp, `${ctx.baseUrl}${sc.path}`);
   const vp = await applyViewport(ctx.cdp, ctx.vp);
