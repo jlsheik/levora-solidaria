@@ -143,6 +143,26 @@ propositalmente "hostil a idempotência" (`CREATE TABLE` sem
 `IF NOT EXISTS`), para falhar alto em vez de mascarar um erro. Use
 `db:migrate:incremental` para bancos existentes.
 
+### Antes de atualizar um banco COM dados: três pré-condições (medidas na Fase 94)
+
+`test/schemaMigrationsData.test.ts` atualiza um banco que já tinha dados (baseline do commit 590ff60) migração por migração e prova que **nenhum registro é alterado, perdido, trocado ou duplicado**.
+Mas três migrações adicionam restrições que **dados antigos válidos no baseline podem violar**; nesse caso o runner falha de forma ruidosa e atômica (nada fica pela metade, a migração que falhou não é
+registrada em `schema_migrations`, os dados não mudam) e a atualização só conclui depois de corrigir o dado. Confira ANTES (cada consulta deve devolver 0 linhas):
+
+```sql
+-- 0013: e-mails que diferem só em maiúsculas/minúsculas
+SELECT lower(email), count(*) FROM users GROUP BY 1 HAVING count(*) > 1;
+-- 0005: oportunidades com quantidade zero ou negativa
+SELECT id, quantity FROM opportunity_registry WHERE quantity IS NOT NULL AND quantity <= 0;
+-- 0007: avaliações de matching duplicadas para a mesma alocação
+SELECT allocation_id, count(*) FROM match_evaluations WHERE allocation_id IS NOT NULL GROUP BY 1 HAVING count(*) > 1;
+```
+
+O que a atualização **faz com os dados antigos** (verificado): linhas do `audit_log` ficam com `previous_event_hash`/`event_hash` NULL (início de uma nova cadeia, não corrupção — `docs/AUDIT.md`);
+`opportunity_allocations.need_id` fica NULL (sem backfill); as tabelas novas (convites, arquivos, capacidades, configurações e áreas de matching, ledger de atendimento e resoluções) nascem vazias — nenhuma
+migração fabrica dados a partir dos antigos. **Não coberto:** bancos criados antes do baseline 590ff60, volumes grandes (tempo e bloqueios das migrações em tabelas grandes), concorrência durante a
+atualização e as sequências de dados que só existem em produção.
+
 ## Múltiplas instâncias (escala horizontal)
 
 Duas peças deste sistema hoje são **estado em memória de um único
