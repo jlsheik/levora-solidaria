@@ -164,6 +164,11 @@ export default function OrganizationAllocationsPage() {
         <span className={styles.tabNavItemActive}>Rede Levora</span>
         <Link to={`/organizacoes/${organizationId}/prestacao-contas`} className={styles.tabNavItem}>Prestação de contas</Link>
         <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>Configurações de Matching</Link>
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
+          <Link to={`/organizacoes/${organizationId}/unidades`} className={styles.tabNavItem}>
+            Unidades
+          </Link>
+        )}
       </nav>
 
       <div className={styles.titleRow}>

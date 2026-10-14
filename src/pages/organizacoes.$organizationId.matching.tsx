@@ -110,6 +110,11 @@ export default function OrganizationMatchingSettingsPage() {
           Prestação de contas
         </Link>
         <span className={styles.tabNavItemActive}>Configurações de Matching</span>
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
+          <Link to={`/organizacoes/${organizationId}/unidades`} className={styles.tabNavItem}>
+            Unidades
+          </Link>
+        )}
       </nav>
 
       <div className={styles.titleRow}>

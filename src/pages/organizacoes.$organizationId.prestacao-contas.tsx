@@ -170,6 +170,11 @@ export default function ImpactReportPage() {
         <Link to={`/organizacoes/${organizationId}/atribuicoes`} className={styles.tabNavItem}>Rede Levora</Link>
         <span className={styles.tabNavItemActive}>Prestação de contas</span>
         <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>Configurações de Matching</Link>
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
+          <Link to={`/organizacoes/${organizationId}/unidades`} className={styles.tabNavItem}>
+            Unidades
+          </Link>
+        )}
       </nav>
 
       <div className={styles.titleRow}>
