@@ -30,11 +30,15 @@ export async function handle(request: Request) {
     }
 
     const result = await db.transaction().execute(async (trx) => {
+      // Fase 96: trava a linha da oferta antes de ler o status (mesma ordem de opportunities-receive_POST: oferta primeiro, auditoria por último). Sem a trava, um
+      // cancelamento concorrente com o recebimento podia sobrescrever "recebida" (ou o contrário) e deixar auditoria dizendo o oposto do estado final. O status é
+      // lido e decidido SOB a trava; "recebida" continua sendo terminal (409).
       const existing = await trx
         .selectFrom("donationOpportunities")
         .select(["id", "status", "title", "linkedNeedId"])
         .where("id", "=", input.opportunityId)
         .where("organizationId", "=", input.organizationId)
+        .forUpdate()
         .executeTakeFirst();
 
       if (!existing) return null;
@@ -54,8 +58,10 @@ export async function handle(request: Request) {
         .updateTable("donationOpportunities")
         .set(updates as never)
         .where("id", "=", input.opportunityId)
+        .where("status", "<>", "recebida") // defesa em profundidade: nunca sobrescreve um recebimento
         .returning(["id", "status", "linkedNeedId"])
         .execute();
+      if (!updated) throw new ConflictError("Esta oportunidade já foi recebida e não pode ter o status alterado por aqui");
 
       await recordAuditLogEntry(
         {
