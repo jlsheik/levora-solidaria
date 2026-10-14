@@ -11,12 +11,26 @@ hoje, honestamente, e as que ainda não existem.
 - Senha com `bcrypt` (`src/helpers/generatePasswordHash.tsx`), nunca texto
   puro.
 - Sessão: **não é JWT stateless**. Login cria uma linha real na tabela
-  `sessions` (id aleatório de 32 bytes, `expires_at`); o cookie carrega só
+  `sessions` (id aleatório de 32 bytes; `expires_at` é gravado mas **não é lido**, ver
+  "Ciclo de vida e expiração" abaixo); o cookie carrega só
   o id da sessão, assinado com JWT (`jose`) para garantir integridade —
   `src/helpers/getSetServerSession.tsx`. Isso permite revogar uma sessão
   específica apagando a linha (usado em logout), diferente de JWT puro
   stateless, que não pode ser revogado antes de expirar.
 - Cookie: `HttpOnly`, `Secure`, `SameSite=Lax`.
+- **Ciclo de vida e expiração das sessões (investigado na Fase 94, `test/sessionLifecycle.test.ts`, 12 testes).** O que decide se uma sessão autoriza uma requisição são duas coisas, ambas no servidor e
+  num ponto central (`getServerSessionOrThrow` + `getServerUserSession`, usados por todos os endpoints): (1) o `exp` do JWT do cookie — 7 dias a partir da emissão, **renovado a cada `session_GET`**
+  (sessão deslizante, a UI chama no carregamento); expira no instante exato do `exp` (jose: `exp <= agora` ⇒ expirado; testado com relógio controlado); e (2) a **existência da linha** em `sessions`
+  — logout e exclusão de conta (`ON DELETE CASCADE`) a apagam e a revogação é imediata. Resultados medidos: cookie ausente, lixo, assinado com outro segredo ou expirado ⇒ 401 com o mesmo corpo
+  (sem eco do token); sessão revogada ⇒ 401 e nunca é recriada nem renovada; sessão expirada não é renovada por `session_GET`; sessão válida em organização alheia ⇒ 403 (autorização ≠ autenticação);
+  cada login cria uma sessão independente; o logout repetido é idempotente (200); logout com cookie expirado ⇒ 401. A limpeza de linhas ociosas (`lastAccessed` há mais de 7 dias, 10% das
+  requisições) é higiene: o `exp` do cookie já barra a sessão antes disso.
+- **`sessions.expires_at` é NÃO FUNCIONAL (instantâneo informativo).** É gravada no login (`login + 7 dias`) e nunca lida, atualizada nem usada pela limpeza; como o cookie desliza, ela diverge do
+  prazo real com o uso (testado: coluna no passado ⇒ token em dia segue autorizando; renovação não a atualiza). **Não há vulnerabilidade comprovada**: nenhuma sessão expirada pelo `exp` autoriza
+  requisição, e uma sessão ativa só dura enquanto o usuário volta a cada 7 dias (comportamento deslizante já existente). Consequência de política, **não alterada**: não existe tempo máximo
+  ABSOLUTO de sessão (uma sessão usada com regularidade nunca expira) — impor um limite absoluto é decisão de política e passaria a deslogar quem hoje está logado. A coluna não foi removida nem
+  ligada à validação (remoção exige migration própria). Não há MFA nem desativação de usuário na conta (`users` não tem status; `memberships.inativo` barra o acesso à organização, testado em
+  `membershipLifecycle`). A tabela `sessions` só tem índice na PK (limpeza e exclusão de conta fazem varredura; irrelevante no volume atual).
 - **Bloqueio por força bruta em duas camadas** (`src/endpoints/auth/login_with_password_POST.ts`):
   por e-mail (5 tentativas falhas / 15 min, tabela `login_attempts`) e por
   IP (`src/helpers/rateLimit.tsx`, 20 tentativas / 15 min) — a primeira
