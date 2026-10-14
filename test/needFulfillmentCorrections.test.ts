@@ -991,4 +991,3 @@ describe("Fase 78 — invariantes finais", () => {
     expect(await balance(s)).toBe(222);
   });
 });
-
