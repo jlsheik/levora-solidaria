@@ -39,6 +39,7 @@ const SCHEDULED_TASK_LOCK_IDS: Record<string, number> = {
   runMatchingSweep: 4,
   // Fase 53 — verificação periódica da audit hash-chain (SEC-06).
   verifyAuditChain: 5,
+  expireAssignmentDeadlines: 6,
 };
 
 export interface ScheduledTaskLockResult<T> {

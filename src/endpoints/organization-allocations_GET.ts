@@ -3,6 +3,7 @@ import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requireOrganizationMembership } from "../helpers/organizationAccess.js";
 import { schema } from "./organization-allocations_GET.schema.js";
 import superjson from "superjson";
+import { sql } from "kysely";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
@@ -23,6 +24,11 @@ export async function handle(request: Request) {
         "opportunityAllocations.quantityAllocated",
         "opportunityAllocations.notes",
         "opportunityAllocations.createdAt",
+        "opportunityAllocations.autoMatched",
+        "opportunityAllocations.decidedByUserId",
+        "opportunityAllocations.responseDueAt",
+        "opportunityAllocations.closedAt",
+        "opportunityAllocations.closedReason",
         "opportunityRegistry.id as opportunityId",
         "opportunityRegistry.title as opportunityTitle",
         "opportunityRegistry.description as opportunityDescription",
@@ -37,13 +43,23 @@ export async function handle(request: Request) {
       .orderBy("opportunityAllocations.createdAt", "desc")
       .execute();
 
+    // Fonte ÚNICA da pendência (a tela e o contador usam este mesmo dado): atribuição AUTOMÁTICA 'aceita' que ninguém decidiu e que tem prazo de resposta gravado
+    // (response_due_at é gravado só na criação automática; linhas antigas/manuais ficam sem prazo e nunca aparecem como pendência). `serverNow` é o relógio do BANCO,
+    // para a tela calcular o tempo restante sem depender do relógio do navegador.
+    const nowRow = await sql<{ now: Date }>`SELECT now() AS now`.execute(db);
+    const mapped = rows.map(({ autoMatched, decidedByUserId, responseDueAt, closedAt, ...r }) => ({
+      ...r,
+      quantityAllocated: Number(r.quantityAllocated),
+      createdAt: r.createdAt.toString(),
+      responseDueAt: responseDueAt ? responseDueAt.toISOString() : null,
+      closedAt: closedAt ? closedAt.toISOString() : null,
+      pendingAction: r.status === "aceita" && autoMatched && decidedByUserId === null && responseDueAt !== null,
+    }));
     return new Response(
       superjson.stringify({
-        allocations: rows.map((r) => ({
-          ...r,
-          quantityAllocated: Number(r.quantityAllocated),
-          createdAt: r.createdAt.toString(),
-        })),
+        allocations: mapped,
+        pendingCount: mapped.filter((a) => a.pendingAction).length,
+        serverNow: nowRow.rows[0].now.toISOString(),
       }),
       { headers: { "Content-Type": "application/json" } }
     );

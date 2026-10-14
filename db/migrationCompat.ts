@@ -29,6 +29,8 @@ export const MIGRATION_COMPAT: Record<string, Compat> = {
   "0011_need_resolutions.sql": { kind: "safe", category: "tabela-nova-vazia", reason: "cria a tabela need_resolutions, que não existia antes: UNIQUE(need_id), o índice único de stock_transaction_id e as chaves estrangeiras só se aplicam a linhas futuras." },
   "0012_opportunity_allocations_need_id.sql": { kind: "safe", category: "restricao-satisfeita-por-construcao", reason: "o UNIQUE (id, organization_id) em needs contém a chave primária id, logo é único por construção; opportunity_allocations.need_id é coluna nova NULLABLE que nasce NULL, e a chave estrangeira composta (need_id, organization_id) não valida linhas com need_id NULL (MATCH SIMPLE)." },
   "0013_users_email_case_insensitive.sql": { kind: "precheck" },
+  "0014_allocation_response_deadline.sql": { kind: "safe", category: "coluna-nullable-sem-rejeicao", reason: "adiciona response_due_at, closed_at e closed_reason a opportunity_allocations como colunas NULLABLE sem DEFAULT e sem backfill: as linhas antigas ficam NULL, o CHECK de closed_reason aceita NULL e o índice idx_opportunity_allocations_response_due é parcial e não único." },
+  "0015_platform_assignment_settings.sql": { kind: "safe", category: "tabela-nova-vazia", reason: "cria a tabela platform_assignment_settings, que não existia antes: não há linhas anteriores para violar os CHECK de id e de response_deadline_hours nem a chave estrangeira para users." },
 };
 
 /** Termos que, sozinhos, não justificam nada. */

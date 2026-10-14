@@ -237,6 +237,8 @@ export interface Needs {
 
 export interface OpportunityAllocations {
   autoMatched: Generated<boolean>;
+  closedAt: Timestamp | null;
+  closedReason: string | null;
   createdAt: Generated<Timestamp>;
   createdByUserId: number | null;
   decidedByUserId: number | null;
@@ -248,8 +250,16 @@ export interface OpportunityAllocations {
   organizationId: number;
   quantityAllocated: Numeric;
   reservedUntil: Timestamp | null;
+  responseDueAt: Timestamp | null;
   status: Generated<AllocationStatus>;
   updatedAt: Generated<Timestamp>;
+}
+
+export interface PlatformAssignmentSettings {
+  id: number;
+  responseDeadlineHours: Generated<number>;
+  updatedAt: Generated<Timestamp>;
+  updatedByUserId: number | null;
 }
 
 export interface OpportunityRegistry {
@@ -415,6 +425,7 @@ export interface DB {
   organizationCapacities: OrganizationCapacities;
   organizationInvites: OrganizationInvites;
   organizationMatchingSettings: OrganizationMatchingSettings;
+  platformAssignmentSettings: PlatformAssignmentSettings;
   organizationServiceAreas: OrganizationServiceAreas;
   organizations: Organizations;
   sessions: Sessions;
