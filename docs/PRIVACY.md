@@ -80,6 +80,19 @@ documento precisa ganhar uma seção específica sobre base legal, minimização
 adicional (evitar endereço completo quando um ponto seguro bastar — já
 instruído na seção 13) e controles de acesso extras para esse dado.
 
+## Destinação de recursos e pessoas atendidas — diretrizes APROVADAS, ainda NÃO implementadas
+
+> **Estado:** planejamento da Fase 99 (`docs/DESTINACAO_E_PRESTACAO_DE_CONTAS_ESPECIFICACAO.md`). Nada abaixo está ativo no sistema hoje: não existe registro de destinação, `people_served`, propósito de comprovante de destinação nem as permissões `destinacoes.*`. Quando cada controle for implementado, esta seção deve ser atualizada **para refletir o que passou a existir**, e só então.
+
+Diretrizes aprovadas:
+- **Finalidade:** demonstrar o destino dos recursos (prestação de contas) — não identificar pessoas. Registra-se finalidade, quantidade e unidade, data, necessidade (quando houver), **número agregado** de pessoas atendidas (quando pertinente), observações operacionais não sensíveis, comprovante opcional, autor e data.
+- **Minimização:** sem cadastro nominal de beneficiários; **não** se pedem nomes, contatos, documentos nem dados sensíveis para registrar uma destinação. A soma de pessoas declaradas não é número de pessoas distintas e não deve ser apresentada como tal.
+- **Prevenção de dado pessoal indevido:** a interface orientará a não colocar dados pessoais nas observações e a não enviar comprovantes com documentos ou imagens identificáveis desnecessárias. Não haverá detecção automática; a mitigação é orientação e acesso restrito.
+- **Acesso por função e organização:** leitura e registro limitados a papéis definidos (proprietário, administrador e operador), isolados por organização (integridade referencial composta no banco e autorização nos endpoints); voluntário não lê destinações.
+- **Comprovantes:** privados por padrão, sem URL pública; leitura autorizada pela finalidade (permissão de leitura de destinações), não apenas pela associação à organização — o que hoje não é assim para os arquivos existentes (`files-download` exige só associação à organização).
+- **Correção, reversão e auditoria:** nada é editado nem apagado; correções são eventos novos com autor, data e motivo, preservando a trilha de auditoria.
+- **Retenção e revisão:** ainda **não há** política de retenção para esses dados; o prazo, a base legal e eventuais obrigações dependem de **revisão jurídica**, que este documento não substitui.
+
 ## Portal público de transparência
 
 Ainda não implementado (ver README, "Estado conhecido/lacunas" e
