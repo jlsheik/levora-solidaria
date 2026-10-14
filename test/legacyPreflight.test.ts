@@ -122,7 +122,8 @@ describe("bloqueio por dados legados: nada é aplicado, registrado ou alterado",
   it("várias condições ao mesmo tempo: as três aparecem no mesmo relatório e cada correção parcial remove só o seu bloqueio", async () => {
     const { name, sql } = await mkdb(BAD_EMAIL + BAD_QTY + BAD_EVAL);
     const all = preflightCli(name); expect(all.status).toBe(2);
-    for (const c of CHECKS) expect(all.out).toContain(`[pendente-com-conflito] ${c.migration}`);
+    for (const c of CHECKS.filter((x) => /^(0005|0007|0013)_/.test(x.migration))) expect(all.out).toContain(`[pendente-com-conflito] ${c.migration}`);
+    expect(all.out).toContain("[pendente-limpa] 0009_"); expect(all.out).toContain("[pendente-limpa] 0010_"); // sem linhas no ledger
     await sql.unsafe(FIX_EMAIL); const two = preflightCli(name);
     expect(two.status).toBe(2); expect(two.out).toContain("[pendente-limpa] 0013_users_email_case_insensitive.sql"); expect(two.out).toContain("[pendente-com-conflito] 0005_"); expect(two.out).toContain("[pendente-com-conflito] 0007_");
     await sql.unsafe(FIX_QTY); const one = preflightCli(name);
@@ -248,5 +249,91 @@ describe("somente leitura (verificável)", () => {
     const { name, sql } = await mkdb(BAD_QTY);
     const r = spawnSync(process.execPath, [TSX, "db/run-migrations.ts"], { encoding: "utf8", env: { ...process.env, NODE_ENV: "production", DATABASE_URL: urlFor(name), LEVORA_SKIP_PREFLIGHT: "1" }, timeout: 120000 });
     expect(r.status).toBe(2); expect(`${r.stdout}${r.stderr}`).not.toContain("IGNORADA"); expect(await exists(sql, "schema_migrations")).toBe(false);
+  }, 120000);
+});
+
+// ---------------------------------------------------------------------------------------------- 0009 e 0010 (adicionadas pela análise do contrato de migrações) e aviso de migração sem classificação
+/** Banco no estado em que só as `k` primeiras migrações foram aplicadas (pelo runner REAL; o desvio de testes só vale aqui), com as demais pendentes de novo. */
+async function dbAt(k: number, extraSql: string) {
+  const d = await mkdb();
+  await d.sql.unsafe(`CREATE TABLE schema_migrations (id TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  for (const f of FILES.slice(k)) await d.sql`INSERT INTO schema_migrations (id) VALUES (${f})`;
+  const r = cli("db/run-migrations.ts", urlFor(d.name), { LEVORA_SKIP_PREFLIGHT: "1" }); expect(r.status, r.out).toBe(0);
+  await d.sql`DELETE FROM schema_migrations WHERE id IN ${d.sql(FILES.slice(k))}`;
+  if (extraSql) await d.sql.unsafe(extraSql);
+  return d;
+}
+const LEDGER_BASE = `
+INSERT INTO inventory_items (id,organization_id,name,unit,created_by_user_id) VALUES (1,1,'Arroz','kg',1);
+INSERT INTO stock_transactions (id,organization_id,item_id,type,delta) VALUES (1,1,1,'entrada',10);`;
+const NF = (cols: string, vals: string) => `INSERT INTO need_fulfillments (${cols}) VALUES ${vals};`;
+const OFF_TRIGGERS = `ALTER TABLE need_fulfillments DISABLE TRIGGER need_fulfillments_no_update; ALTER TABLE need_fulfillments DISABLE TRIGGER need_fulfillments_no_delete;`;
+const ON_TRIGGERS = `ALTER TABLE need_fulfillments ENABLE TRIGGER need_fulfillments_no_update; ALTER TABLE need_fulfillments ENABLE TRIGGER need_fulfillments_no_delete;`;
+
+describe("0009 e 0010: o ledger de atendimento (need_fulfillments) com linhas antigas", () => {
+  it("0009 — duas reversões para a mesma linha impedem o índice único; identifica os ids, nada é aplicado, e corrigido o dado a atualização conclui", async () => {
+    const { name, sql } = await dbAt(8, LEDGER_BASE
+      + NF("id,organization_id,allocation_id,stock_transaction_id,quantity,unit,entry_type", "(1,1,1,1,10,'kg','original')")
+      + NF("id,organization_id,allocation_id,quantity,unit,entry_type,reverses_fulfillment_id", "(2,1,1,10,'kg','reversal',1),(3,1,1,10,'kg','reversal',1)"));
+    const before = await fingerprint(sql);
+    const pf = preflightCli(name);
+    expect(pf.status, pf.out).toBe(2); expect(pf.out).toContain("[pendente-com-conflito] 0009_need_fulfillments_inheritance_rules.sql"); expect(pf.out).toMatch(/ids impeditivos: 2,3\b/);
+    expect(pf.out).toContain("[pendente-limpa] 0010_"); // sem linhas entre organizações
+    const run = runnerCli(name); expect(run.status).toBe(2); expect(appliedIn(run.out)).toEqual([]);
+    expect(await fingerprint(sql)).toEqual(before);
+    expect((await sql`SELECT count(*)::int AS n FROM schema_migrations`)[0].n).toBe(8); // nada novo registrado
+    await sql.unsafe(OFF_TRIGGERS + `DELETE FROM need_fulfillments WHERE id = 3;` + ON_TRIGGERS); // correção MANUAL (o ledger é append-only: exige desligar o gatilho com revisão)
+    const ok = runnerCli(name); expect(ok.status, ok.out).toBe(0); expect(appliedIn(ok.out)).toEqual(FILES.slice(8));
+  }, 240000);
+
+  it("0010 — atendimento cujo movimento de estoque é de OUTRA organização impede a chave estrangeira composta; identifica o id e conclui após a correção manual", async () => {
+    const { name, sql } = await dbAt(9, `INSERT INTO organizations (id,name,slug,type,status,city,state,created_by_user_id) VALUES (2,'Outra','outra','igreja','ativa','Betim','MG',2);`
+      + LEDGER_BASE + `INSERT INTO inventory_items (id,organization_id,name,unit,created_by_user_id) VALUES (2,2,'Feijão','kg',2); INSERT INTO stock_transactions (id,organization_id,item_id,type,delta) VALUES (2,2,2,'entrada',5);`
+      + NF("id,organization_id,allocation_id,stock_transaction_id,quantity,unit,entry_type", "(1,1,1,2,5,'kg','original'),(2,1,2,1,1,'kg','original')")); // a linha 1 usa o movimento 2 (da organização 2)
+    const before = await fingerprint(sql);
+    const pf = preflightCli(name);
+    expect(pf.status, pf.out).toBe(2); expect(pf.out).toContain("[pendente-com-conflito] 0010_need_fulfillments_stock_transaction_org_fk.sql"); expect(pf.out).toMatch(/ids impeditivos: 1\b/); expect(pf.out).not.toMatch(/ids impeditivos: 1 \| 2/);
+    expect(pf.out).toContain("[ja-aplicada] 0009_");
+    const run = runnerCli(name); expect(run.status).toBe(2); expect(appliedIn(run.out)).toEqual([]); expect(await fingerprint(sql)).toEqual(before);
+    await sql.unsafe(OFF_TRIGGERS + `DELETE FROM need_fulfillments WHERE id = 2; UPDATE need_fulfillments SET stock_transaction_id = 1 WHERE id = 1;` + ON_TRIGGERS);
+    const ok = runnerCli(name); expect(ok.status, ok.out).toBe(0); expect(appliedIn(ok.out)).toEqual(FILES.slice(9));
+  }, 240000);
+
+  it("quando a tabela do ledger ainda vai ser criada pela própria atualização (0006 pendente), 0009 e 0010 nascem vazias: 'pendente-limpa', sem tratar a ausência como erro", async () => {
+    const { sql } = await mkdb();
+    const r = await runPreflight(sql, FILES);
+    for (const m of ["0009_", "0010_"]) {
+      const c = r.results.find((x) => x.migration.startsWith(m))!;
+      expect(c.state).toBe("pendente-limpa"); expect(c.detail).toContain("será criada por migração anterior ainda pendente");
+    }
+    expect(r.status).toBe("autorizada");
+  }, 120000);
+
+  it("com 0006 aplicada e 0008 pendente: 0009 nasce vazia (a coluna entry_type ainda não existe) e 0010 vê a tabela real, sem linhas", async () => {
+    const { sql } = await dbAt(6, "");
+    const r = await runPreflight(sql, FILES);
+    expect(r.results.find((x) => x.migration.startsWith("0009_"))!.detail).toContain("será criada por migração anterior ainda pendente");
+    expect(r.results.find((x) => x.migration.startsWith("0010_"))!.state).toBe("pendente-limpa");
+    expect(r.status).toBe("autorizada");
+  }, 180000);
+
+  it("estrutura que FALTA com a migração que a cria já aplicada continua sendo 'estrutura-ausente' (bloqueia): a regra de 'nasce vazia' não esconde erro", async () => {
+    const { sql } = await dbAt(8, "");
+    await sql.unsafe(`ALTER TABLE need_fulfillments DROP COLUMN reverses_fulfillment_id CASCADE`); // 0008 aplicada, mas a coluna sumiu
+    const r = await runPreflight(sql, FILES.slice(0, 13));
+    expect(r.results.find((x) => x.migration.startsWith("0009_"))!.state).toBe("estrutura-ausente");
+    expect(r.status).toBe("bloqueada-por-estado");
+  }, 180000);
+});
+
+describe("migração pendente sem classificação: só AVISA (os códigos de saída não mudam)", () => {
+  it("runPreflight com um arquivo pendente que não está em db/migrationCompat.ts autoriza e avisa; migrações classificadas não geram o aviso", async () => {
+    const { name, sql } = await mkdb();
+    const withNew = await runPreflight(sql, [...FILES, "0014_sem_classificacao.sql"]);
+    expect(withNew.status).toBe("autorizada"); expect(withNew.exitCode).toBe(PREFLIGHT_EXIT.OK);
+    expect(withNew.warnings.join(" ")).toContain("0014_sem_classificacao.sql"); expect(withNew.warnings.join(" ")).toContain("SEM classificação");
+    expect(formatPreflight(withNew)).toContain("db/migrationCompat.ts");
+    expect((await runPreflight(sql, FILES)).warnings.join(" ")).not.toContain("SEM classificação");
+    expect(preflightCli(name).status).toBe(0); // o comando real, sobre os arquivos reais (todos classificados), segue autorizando
   }, 120000);
 });

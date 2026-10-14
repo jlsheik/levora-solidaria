@@ -146,12 +146,14 @@ propositalmente "hostil a idempotência" (`CREATE TABLE` sem
 ### Antes de atualizar um banco COM dados: pré-verificação automática (Fase 94)
 
 `test/schemaMigrationsData.test.ts` atualiza um banco que já tinha dados (baseline do commit 590ff60) migração por migração e prova que **nenhum registro é alterado, perdido, trocado ou duplicado**.
-Três migrações, porém, criam restrições que **dados antigos válidos no baseline podem violar** — são condições preexistentes dos dados (restrições legítimas), não defeitos do runner:
+Cinco migrações, porém, criam restrições que **dados antigos válidos no baseline podem violar** — são condições preexistentes dos dados (restrições legítimas), não defeitos do runner:
 
 | Migração | Restrição criada | Dado antigo que a impede |
 |---|---|---|
 | `0005` | `CHECK (quantity IS NULL OR quantity > 0)` em `opportunity_registry` | oportunidade com quantidade **0 ou negativa** |
 | `0007` | índice único parcial `match_evaluations(allocation_id) WHERE allocation_id IS NOT NULL` | **duas ou mais avaliações** para a mesma alocação |
+| `0009` | índice único parcial `need_fulfillments(reverses_fulfillment_id) WHERE entry_type = 'reversal'` | **duas reversões** da mesma linha do ledger (o ledger não tem produtor de reversão no código: só aparece por SQL manual) |
+| `0010` | chave estrangeira composta `need_fulfillments(stock_transaction_id, organization_id)` → `stock_transactions(id, organization_id)` | atendimento cujo movimento de estoque é de **outra organização** (o código sempre usa a mesma; só por SQL manual) |
 | `0013` | índice único `users(LOWER(email))` | e-mails que **diferem só em maiúsculas/minúsculas** (a comparação é a do próprio índice: mesma expressão e mesma collation) |
 
 Sem proteção, o runner aplicaria as migrações anteriores e só então falharia (atômico, mas deixando a atualização pela metade). Por isso `npm run db:migrate:incremental` agora executa, **antes de qualquer escrita**
@@ -173,10 +175,13 @@ já registra tudo e passa como `ja-aplicada`. A verificação roda numa transaç
 
 **Privacidade.** O relatório mostra **ids** (e contagens), nunca e-mails nem outros dados pessoais, URL de conexão, host ou senha; na 0007/0013 cada grupo aparece como `id1,id2`, separados por ` | `; acima de 20 itens, mostra 20 e "… e mais N".
 
+**Tabelas que a própria atualização cria.** Se a estrutura de uma verificação ainda não existe porque uma migração anterior **pendente** a cria (0009/0010 dependem da 0006/0008), ela nasce vazia nesta atualização: a verificação é "pendente-limpa". Se a migração que a cria já foi aplicada e a estrutura falta, é `estrutura-ausente` (bloqueia).
+
 **Como corrigir (manual, nunca automático) e repetir:**
 - `0013`: para cada grupo de contas listado, decida qual mantém o e-mail e altere ou consolide as outras (os ids identificam as contas em `users`).
 - `0005`: corrija a quantidade das oportunidades listadas em `opportunity_registry` (0 e negativos não são aceitos; `NULL` é aceito).
 - `0007`: em cada grupo de `match_evaluations`, decida qual avaliação vale e desvincule as demais (`allocation_id = NULL`).
+- `0009` e `0010` (ledger `need_fulfillments`, append-only): decisão de dados com revisão; a correção exige desligar temporariamente os gatilhos `need_fulfillments_no_update`/`no_delete` com `ALTER TABLE … DISABLE TRIGGER`, corrigir as linhas listadas e **religar** os gatilhos (o teste faz exatamente isso em banco descartável).
 Depois rode `npm run db:preflight` até sair `0` e então `npm run db:migrate:incremental`. A ferramenta não oferece correção, remoção ou "ignorar".
 
 **Desvio de testes.** `LEVORA_SKIP_PREFLIGHT=1` só tem efeito com `NODE_ENV=test` (o harness que aplica migrações uma a uma precisa chegar à migração em si); com qualquer outro `NODE_ENV` é ignorado e o bloqueio vale (testado).
@@ -185,6 +190,19 @@ Depois rode `npm run db:preflight` até sair `0` e então `npm run db:migrate:in
 `opportunity_allocations.need_id` fica NULL (sem backfill); as tabelas novas (convites, arquivos, capacidades, configurações e áreas de matching, ledger de atendimento e resoluções) nascem vazias — nenhuma
 migração fabrica dados a partir dos antigos. **Não coberto:** bancos criados antes do baseline 590ff60, volumes grandes (tempo e bloqueios das migrações em tabelas grandes), concorrência durante a
 atualização, e condições de dados que **futuras** migrações venham a exigir (cada nova migração que crie uma restrição deve ganhar a sua verificação em `CHECKS`).
+
+### Escrevendo uma migração nova: classificação obrigatória
+
+Toda migração em `db/migrations/` precisa de uma entrada em `db/migrationCompat.ts` **no mesmo commit**, ou `test/migrationCompat.test.ts` falha:
+- `{ kind: "precheck" }` — a migração impõe uma condição nova sobre linhas **que já existem** (CHECK, índice único, chave estrangeira, NOT NULL em coluna existente...). Exige também a entrada correspondente em `CHECKS` (`db/legacyPreflight.ts`):
+  `migration` (o nome do arquivo), `rule`, `requires` (tabela.coluna usadas pela consulta), `providedBy` (migrações pendentes que criam essa estrutura, se for o caso), `objectExists` (como saber que a restrição já existe), `conflictQuery`
+  (agregação **somente leitura** que devolve `ids` e `n` dos registros impeditivos, com a MESMA expressão/chave da restrição, nunca dados pessoais) e `fixHint`. Escreva também um teste com dados conflitantes em `test/legacyPreflight.test.ts`.
+- `{ kind: "safe", category, reason }` — comprovadamente não rejeita dados existentes. `category`: `tabela-nova-vazia` (só CREATE; sem ALTER TABLE), `coluna-nullable-sem-rejeicao` (coluna nullable sem constraint, índice único ou NOT NULL novo) ou
+  `restricao-satisfeita-por-construcao` (a restrição é implicada por algo que já vale: chave primária, DEFAULT aceito pelo CHECK, restrição antiga mais forte). `reason`: ≥ 60 caracteres, **específica**, citando objetos reais do SQL (tabela, coluna, índice) e dizendo POR QUE nenhuma linha antiga pode violar. "n/a", "sem risco" ou frases que não citam nada da migração são recusadas.
+
+**Como o teste detecta omissões:** falha se houver migração sem classificação, classificação de arquivo inexistente, "precheck" sem verificação (ou verificação sem "precheck"/de arquivo inexistente/duplicada), justificativa genérica, curta ou sem objetos do SQL, ou categoria que contradiz o SQL. Cada caso é exercitado com metadados em memória (os arquivos de produção não são alterados) e por mutações das classificações reais.
+**O que NÃO garante:** não há análise semântica do SQL — o teste garante que a decisão existe, é revisável e coerente, **não que esteja certa**; a revisão humana da frase e da consulta continua obrigatória. Casos que sempre pedem análise manual: backfills e conversões de dados, `ALTER COLUMN … TYPE`, `SET NOT NULL` em coluna existente, constraints sobre colunas preenchidas por código, qualquer `UPDATE`/`DELETE` dentro da migração, e dependências entre migrações pendentes.
+**Relação com o comando real:** `npm run db:preflight` (e o início do `db:migrate:incremental`) executa as verificações de `CHECKS`; se houver migração **pendente** sem classificação, ele imprime um **aviso** (os códigos de saída 0/2/3 não mudam) — o gate é o teste. Quando a migração `0014` (hoje em outro checkout) for incorporada, o teste exigirá sua classificação e o SQL real deverá ser inspecionado antes de escolher entre "precheck" e "safe".
 
 ## Múltiplas instâncias (escala horizontal)
 

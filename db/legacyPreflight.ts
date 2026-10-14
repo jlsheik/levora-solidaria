@@ -1,10 +1,13 @@
 /**
  * Pré-verificação de DADOS LEGADOS antes de `npm run db:migrate:incremental` — SOMENTE LEITURA.
  *
- * Três migrações criam restrições que dados antigos, válidos no baseline histórico, podem violar (provado em test/schemaMigrationsData.test.ts):
+ * Migrações que criam restrições que dados antigos podem violar (as três primeiras provadas em test/schemaMigrationsData.test.ts):
  *   0005  CHECK (quantity IS NULL OR quantity > 0)                     em opportunity_registry
  *   0007  UNIQUE (allocation_id) WHERE allocation_id IS NOT NULL       em match_evaluations
+ *   0009  UNIQUE (reverses_fulfillment_id) WHERE entry_type='reversal' em need_fulfillments
+ *   0010  FK (stock_transaction_id, organization_id) → stock_transactions   em need_fulfillments
  *   0013  UNIQUE (LOWER(email))                                        em users
+ * COMO uma migração nova entra aqui (ou é declarada segura) está em db/migrationCompat.ts — o contrato é testado em test/migrationCompat.test.ts.
  * O runner aplica cada migração numa transação, mas as anteriores já foram confirmadas quando a falha acontece. Esta verificação roda ANTES da primeira escrita do
  * runner e só avalia as migrações realmente PENDENTES. Ela não corrige nada, não cria tabela (nem `schema_migrations`), usa transação READ ONLY e não imprime e-mails:
  * os registros são identificados por id.
@@ -13,6 +16,7 @@
  * ponto histórico esperado) · inconsistente (registro e objeto não batem) · nao-verificada (erro). Qualquer coisa diferente de "tudo limpo" NÃO autoriza a atualização.
  */
 import type postgres from "postgres";
+import { MIGRATION_COMPAT } from "./migrationCompat.js";
 
 export type CheckState = "ja-aplicada" | "pendente-limpa" | "pendente-com-conflito" | "estrutura-ausente" | "inconsistente";
 export type PreflightStatus = "autorizada" | "bloqueada-por-dados" | "bloqueada-por-estado" | "nao-verificada";
@@ -25,6 +29,11 @@ interface Check {
   rule: string;
   /** Tabela.coluna que precisam existir para a consulta de dados poder rodar. */
   requires: Array<{ table: string; column: string }>;
+  /**
+   * Migrações que criam/alteram a estrutura exigida acima. Se a estrutura ainda não existe PORQUE uma delas está pendente, a tabela/coluna nasce vazia dentro desta mesma
+   * atualização: não há linha antiga a violar a restrição (verificação vazia = limpa). Se nenhuma está pendente e a estrutura falta, é "estrutura-ausente" (bloqueia).
+   */
+  providedBy?: string[];
   /** Como saber se a restrição já existe no banco. */
   objectExists: string;
   /** Linhas que IMPEDEM a criação: `ids` e, se houver, `grupo` (nunca dados pessoais). */
@@ -60,6 +69,26 @@ export const CHECKS: readonly Check[] = [
     conflictQuery: `SELECT array_agg(g.ids_txt ORDER BY g.first_id) AS ids, sum(g.n)::int AS n FROM (SELECT min(id) AS first_id, count(*) AS n, array_to_string(array_agg(id ORDER BY id), ',') AS ids_txt FROM users GROUP BY LOWER(email) HAVING count(*) > 1) g`,
     fixHint: "para cada grupo de contas listado (ids separados por vírgula), decida qual conta mantém o e-mail e altere/consolide as outras manualmente",
   },
+  {
+    migration: "0009_need_fulfillments_inheritance_rules.sql",
+    rule: "no máximo UMA reversão (need_fulfillments.entry_type = 'reversal') por reverses_fulfillment_id",
+    requires: [{ table: "need_fulfillments", column: "id" }, { table: "need_fulfillments", column: "entry_type" }, { table: "need_fulfillments", column: "reverses_fulfillment_id" }],
+    providedBy: ["0006_need_fulfillments.sql", "0008_need_fulfillments_ledger_of_events.sql"],
+    objectExists: `SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_need_fulfillments_one_reversal_per_target') AS e`,
+    // mesma chave do índice único parcial; NULL não conta (o índice trata NULLs como distintos)
+    conflictQuery: `SELECT array_agg(g.ids_txt ORDER BY g.target) AS ids, sum(g.n)::int AS n FROM (SELECT reverses_fulfillment_id AS target, count(*) AS n, array_to_string(array_agg(id ORDER BY id), ',') AS ids_txt FROM need_fulfillments WHERE entry_type = 'reversal' AND reverses_fulfillment_id IS NOT NULL GROUP BY reverses_fulfillment_id HAVING count(*) > 1) g`,
+    fixHint: "para cada grupo de linhas do ledger listado (ids separados por vírgula), decida qual reversão vale; o ledger é append-only, então a correção é uma decisão de dados que exige intervenção manual e revisão",
+  },
+  {
+    migration: "0010_need_fulfillments_stock_transaction_org_fk.sql",
+    rule: "o movimento de estoque de um atendimento (stock_transaction_id) precisa pertencer à MESMA organização do atendimento",
+    requires: [{ table: "need_fulfillments", column: "id" }, { table: "need_fulfillments", column: "stock_transaction_id" }, { table: "need_fulfillments", column: "organization_id" }, { table: "stock_transactions", column: "id" }, { table: "stock_transactions", column: "organization_id" }],
+    providedBy: ["0006_need_fulfillments.sql"],
+    objectExists: `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'need_fulfillments_stock_transaction_org_fkey') AS e`,
+    // a FK composta só falha com stock_transaction_id não nulo cujo movimento não existe PARA ESSA organização (organization_id é NOT NULL)
+    conflictQuery: `SELECT array_agg(nf.id ORDER BY nf.id) AS ids, count(*)::int AS n FROM need_fulfillments nf WHERE nf.stock_transaction_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM stock_transactions s WHERE s.id = nf.stock_transaction_id AND s.organization_id = nf.organization_id)`,
+    fixHint: "o ledger é append-only: investigue cada linha listada (o movimento de estoque é de outra organização) e decida a correção manualmente, com revisão",
+  },
 ];
 
 export interface CheckResult { migration: string; rule: string; state: CheckState; detail: string; offendingGroups?: string[]; conflictingRows?: number; fixHint?: string }
@@ -93,6 +122,8 @@ async function evaluate(tx: postgres.Sql, files: string[]): Promise<PreflightRes
   const unknown = [...applied].filter((id) => !known.has(id));
   if (unknown.length) warnings.push(`schema_migrations registra ${unknown.length} migração(ões) que esta versão do código não conhece (${unknown.slice(0, 5).join(", ")}${unknown.length > 5 ? ", …" : ""})`);
   const pending = files.filter((f) => !applied.has(f));
+  const unclassified = pending.filter((f) => !(f in MIGRATION_COMPAT));
+  if (unclassified.length) warnings.push(`migração(ões) pendente(s) SEM classificação de compatibilidade com dados legados (db/migrationCompat.ts): ${unclassified.join(", ")} — analise o SQL, registre uma verificação em CHECKS ou declare-a segura com justificativa`);
 
   const results: CheckResult[] = [];
   for (const c of CHECKS) {
@@ -102,6 +133,11 @@ async function evaluate(tx: postgres.Sql, files: string[]): Promise<PreflightRes
     const cols = await tx`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'`;
     const have = new Set(cols.map((r) => `${r.table_name}.${r.column_name}`));
     const missing = c.requires.filter((r) => !have.has(`${r.table}.${r.column}`));
+    if (missing.length && !isApplied && c.providedBy?.some((p) => !applied.has(p) && known.has(p))) {
+      // a estrutura ainda não existe porque uma migração anterior pendente a cria nesta mesma atualização: nasce vazia
+      results.push({ migration: c.migration, rule: c.rule, state: "pendente-limpa", detail: `pendente; a estrutura (${missing.map((m) => `${m.table}.${m.column}`).join(", ")}) será criada por migração anterior ainda pendente e nasce vazia: nenhum registro antigo a verificar` });
+      continue;
+    }
     if (missing.length) {
       results.push({ migration: c.migration, rule: c.rule, state: "estrutura-ausente", detail: `falta ${missing.map((m) => `${m.table}.${m.column}`).join(", ")}: o banco não está no ponto histórico esperado (instalação nova? use \`npm run db:migrate\`; banco antigo? investigue)` });
       continue;
