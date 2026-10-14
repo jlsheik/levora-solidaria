@@ -465,14 +465,14 @@ export async function runStagingSeed(options: { resetPasswords?: boolean } = {})
     await ensureMatchingConfig(stats, orgA, actor.demo, {
       capacities: [
         { category: "alimentos", unit: "kg", maxCapacity: 500 },
-        { category: "agasalhos", unit: "un", maxCapacity: 200 },
+        { category: "agasalhos", unit: "unidade", maxCapacity: 200 },
       ],
       areas: [{ city: "Belo Horizonte", state: "MG" }, { city: "Contagem", state: "MG" }],
       coleta: { realizaColeta: true, raioColetaKm: 20, observacoesLogisticas: "Coleta com veículo próprio, dias úteis (sintético)." },
     });
     await ensureMatchingConfig(stats, orgB, actor.parceiro, {
       capacities: [
-        { category: "higiene", unit: "un", maxCapacity: 400 },
+        { category: "higiene", unit: "unidade", maxCapacity: 400 },
         { category: "alimentos", unit: "kg", maxCapacity: 200 },
       ],
       areas: [{ city: "Contagem", state: "MG" }, { city: "Betim", state: "MG" }],
@@ -483,14 +483,14 @@ export async function runStagingSeed(options: { resetPasswords?: boolean } = {})
     const arroz = await ensureItem(stats, orgA, actor.demo, { name: "Arroz branco 5kg (Demo)", unit: "kg", category: "alimentos", initialQuantity: 20 });
     await ensureStockTx(stats, orgA, arroz, actor.operador, "entrada", 30, marker("Doação de campanha (sintético)"));
     await ensureStockTx(stats, orgA, arroz, actor.operador, "saida", 10, marker("Distribuição semanal (sintético)"));
-    const leite = await ensureItem(stats, orgA, actor.demo, { name: "Leite em pó lata (Demo)", unit: "un", category: "alimentos", initialQuantity: 60 });
-    const cobertor = await ensureItem(stats, orgA, actor.demo, { name: "Cobertor casal (Demo)", unit: "un", category: "agasalhos", initialQuantity: 5 });
-    const fralda = await ensureItem(stats, orgB, actor.parceiro, { name: "Fralda infantil M (Demo)", unit: "un", category: "higiene", initialQuantity: 100 });
+    const leite = await ensureItem(stats, orgA, actor.demo, { name: "Leite em pó lata (Demo)", unit: "unidade", category: "alimentos", initialQuantity: 60 });
+    const cobertor = await ensureItem(stats, orgA, actor.demo, { name: "Cobertor casal (Demo)", unit: "unidade", category: "agasalhos", initialQuantity: 5 });
+    const fralda = await ensureItem(stats, orgB, actor.parceiro, { name: "Fralda infantil M (Demo)", unit: "unidade", category: "higiene", initialQuantity: 100 });
 
     // --- Necessidades -----------------------------------------------------
     const needCobertor = await ensureNeed(stats, orgA, actor.demo, {
       title: marker("Cobertores para o inverno"), description: "Necessidade aberta e ainda não atendida (cenário 1).",
-      itemId: cobertor, quantityNeeded: 30, unit: "un", priority: "alta",
+      itemId: cobertor, quantityNeeded: 30, unit: "unidade", priority: "alta",
     });
     const needArroz = await ensureNeed(stats, orgA, actor.demo, {
       title: marker("Arroz para cestas básicas"), description: "Parcialmente atendida por uma doação recebida (cenário 2).",
@@ -498,15 +498,15 @@ export async function runStagingSeed(options: { resetPasswords?: boolean } = {})
     });
     const needLeite = await ensureNeed(stats, orgA, actor.demo, {
       title: marker("Leite em pó para lactentes"), description: "Atendida com o estoque próprio (cenário 3).",
-      itemId: leite, quantityNeeded: 20, unit: "un", priority: "media",
+      itemId: leite, quantityNeeded: 20, unit: "unidade", priority: "media",
     });
     const needKit = await ensureNeed(stats, orgA, actor.demo, {
       title: marker("Kit escolar (campanha encerrada)"), description: "Cancelada — histórico (cenário 4).",
-      quantityNeeded: 15, unit: "un", priority: "baixa",
+      quantityNeeded: 15, unit: "unidade", priority: "baixa",
     });
     await ensureNeed(stats, orgB, actor.parceiro, {
       title: marker("Fraldas infantis tamanho M"), description: "Necessidade aberta que alimenta o matching real.",
-      itemId: fralda, quantityNeeded: 150, unit: "un", priority: "alta",
+      itemId: fralda, quantityNeeded: 150, unit: "unidade", priority: "alta",
     });
     await ensureNeedStatus(stats, orgA, needLeite, "atendida", actor.demo);
     await ensureNeedStatus(stats, orgA, needKit, "cancelada", actor.demo);
@@ -515,7 +515,7 @@ export async function runStagingSeed(options: { resetPasswords?: boolean } = {})
     // --- Oportunidades do modelo por organização (tela da organização) -----
     await ensureLegacyOpportunity(stats, orgA, actor.demo, needCobertor, {
       title: marker("Doação de cobertores - Associação de Moradores Fictícia"), description: "Contato inicial com doador, ainda sem retorno.",
-      category: "agasalhos", quantityOffered: 15, unit: "un", donorName: "Associação de Moradores Fictícia",
+      category: "agasalhos", quantityOffered: 15, unit: "unidade", donorName: "Associação de Moradores Fictícia",
     }, "registrada");
     await ensureLegacyOpportunity(stats, orgA, actor.operador, needArroz, {
       title: marker("Cestas de arroz - Supermercado Fictício"), description: "Doador em negociação.",
@@ -528,7 +528,7 @@ export async function runStagingSeed(options: { resetPasswords?: boolean } = {})
 
     await ensureRegistry(stats, source, actor.admin, "O1-descoberta", {
       ...base, title: marker("Roupas de inverno - Padaria Fictícia"), description: "Recém-descoberta, aguardando verificação.",
-      category: "agasalhos", quantity: 40, unit: "un", locationCity: "Belo Horizonte", urgency: "media",
+      category: "agasalhos", quantity: 40, unit: "unidade", locationCity: "Belo Horizonte", urgency: "media",
     }, "descoberta");
     await ensureRegistry(stats, source, actor.admin, "O2-verificacao", {
       ...base, title: marker("Excedente de legumes - Feira Fictícia"), description: "Em verificação pela equipe.",
@@ -536,12 +536,12 @@ export async function runStagingSeed(options: { resetPasswords?: boolean } = {})
     }, "em_verificacao");
     await ensureRegistry(stats, source, actor.admin, "O3-validada", {
       ...base, title: marker("Cestas de higiene - Empresa Fictícia"), description: "Validada, ainda sem destinação.",
-      category: "higiene", quantity: 60, unit: "un", locationCity: "Contagem", urgency: "media",
+      category: "higiene", quantity: 60, unit: "unidade", locationCity: "Contagem", urgency: "media",
     }, "validada");
 
     const o4 = await ensureRegistry(stats, source, actor.admin, "O4-matching", {
       ...base, title: marker("Fraldas infantis - Comércio Fictício"), description: "Aguardando destinação: o matching real avalia as organizações.",
-      category: "higiene", quantity: 120, unit: "un", locationCity: "Contagem", urgency: "alta",
+      category: "higiene", quantity: 120, unit: "unidade", locationCity: "Contagem", urgency: "alta",
     }, "aguardando_destinacao");
     // A transição para aguardando_destinacao já dispara o matching; se por
     // qualquer falha não houver nenhuma avaliação, roda explicitamente.
@@ -556,7 +556,7 @@ export async function runStagingSeed(options: { resetPasswords?: boolean } = {})
     // aguardando_destinacao (estado legítimo, não forçado).
     const o7 = await ensureRegistry(stats, source, actor.admin, "O7-aguardando-destinacao", {
       ...base, title: marker("Brinquedos educativos - Loja Fictícia"), description: "Aguardando destinação: sem organização elegível por enquanto.",
-      category: "brinquedos", quantity: 30, unit: "un", locationCity: "Curitiba", locationState: "PR", urgency: "baixa",
+      category: "brinquedos", quantity: 30, unit: "unidade", locationCity: "Curitiba", locationState: "PR", urgency: "baixa",
     }, "aguardando_destinacao");
 
     const o5 = await ensureRegistry(stats, source, actor.admin, "O5-concluida", {
@@ -570,7 +570,7 @@ export async function runStagingSeed(options: { resetPasswords?: boolean } = {})
 
     const o6 = await ensureRegistry(stats, source, actor.admin, "O6-em-coleta", {
       ...base, title: marker("Cobertores 20 un - Igreja Fictícia"), description: "Atribuída e com coleta agendada.",
-      category: "agasalhos", quantity: 20, unit: "un", locationCity: "Belo Horizonte", urgency: "alta",
+      category: "agasalhos", quantity: 20, unit: "unidade", locationCity: "Belo Horizonte", urgency: "alta",
     }, "validada");
     await ensureAllocationFlow(stats, {
       key: "O6", registryId: o6, orgId: orgA, needId: needCobertor, quantity: 20, itemId: cobertor, stop: "em_coleta",

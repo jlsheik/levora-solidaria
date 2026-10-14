@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { requiredUnitInput } from "../helpers/unitInput.js";
 import superjson from "superjson";
 import { nonNegativeQuantity } from "../helpers/quantityRules.js";
 
 export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),
   category: z.string().min(1, "Informe a categoria").max(100),
-  unit: z.string().min(1, "Informe a unidade").max(50),
+  unit: requiredUnitInput("unidade da capacidade"),
   maxCapacity: nonNegativeQuantity("Capacidade não pode ser negativa"),
 });
 

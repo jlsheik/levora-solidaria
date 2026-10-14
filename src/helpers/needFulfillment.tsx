@@ -3,6 +3,7 @@ import { sql } from "kysely";
 import type { DB } from "./schema.js";
 import { normalize } from "./opportunityMatching.js";
 import { roundQuantity } from "./quantityRules.js";
+import { unitsEquivalent } from "./unitVocabulary.js";
 
 /**
  * Ledger append-only de EVENTOS de atendimento de necessidades
@@ -154,7 +155,7 @@ export async function createNeedFulfillment(trx: Transaction<DB>, input: CreateN
     // puramente textual.
     if (need) {
       needId = resolvedNeedId;
-      isCountable = normalize(need.unit) === normalize(input.unit);
+      isCountable = unitsEquivalent(need.unit, input.unit);
       if (!isCountable) {
         unitMismatchNote = `Unidade do recebimento ("${input.unit}") diverge da unidade da necessidade ${resolvedNeedId} ("${need.unit}") — is_countable=false para nunca somar unidades incompatíveis, mas need_id é preservado (a relação com a need é um fato certo, não descartado por causa da unidade).`;
       }
