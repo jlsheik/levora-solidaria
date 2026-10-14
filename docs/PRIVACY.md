@@ -80,6 +80,19 @@ documento precisa ganhar uma seção específica sobre base legal, minimização
 adicional (evitar endereço completo quando um ponto seguro bastar — já
 instruído na seção 13) e controles de acesso extras para esse dado.
 
+## Destinação de recursos e pessoas atendidas — política APROVADA, controles ainda NÃO implementados
+
+> **Estado:** planejamento da Fase 99 (`docs/DESTINACAO_E_PRESTACAO_DE_CONTAS_ESPECIFICACAO.md`). Tudo abaixo é **requisito aprovado para desenvolvimento futuro**, não capacidade atual: não existe registro de destinação, `people_served`, propósito de comprovante de destinação, fila de regularização de unidades nem as permissões `destinacoes.*`. Cada controle só passa a constar como existente quando for implementado e verificado; esta seção deve então ser atualizada para refletir o que passou a existir.
+
+Política aprovada:
+- **Finalidade:** demonstrar o destino dos recursos (prestação de contas), não identificar pessoas. Registra-se finalidade, quantidade e unidade, data efetiva e data de registro, necessidade (quando houver), **número agregado** de pessoas ou famílias (quando pertinente), observações operacionais não sensíveis, comprovante opcional, autor e histórico de correção.
+- **Minimização:** sem cadastro nominal de beneficiários; não se pedem nomes, contatos, documentos nem dados sensíveis. A soma de pessoas declaradas não é número de pessoas distintas e não deve ser apresentada como tal. Conferências físicas de unidade e casos de regularização registram evidência ou observação **sem dados pessoais desnecessários**.
+- **Prevenção de dado pessoal indevido:** a interface orientará a não colocar dados pessoais nas observações e a não anexar documentos identificáveis sem necessidade. Não haverá detecção automática; a mitigação é orientação e acesso restrito.
+- **Acesso por função e organização:** leitura e registro limitados a papéis definidos, isolados por organização (integridade referencial composta e autorização nos endpoints); voluntário não lê destinações.
+- **Comprovantes:** privados, sem URL pública. A leitura será autorizada pela **finalidade do arquivo, pelo recurso ao qual está vinculado, pela função do usuário e pela permissão de leitura**; pertencer à mesma organização **não basta**. Isso difere do comportamento atual para os arquivos existentes (`files-download` exige só associação à organização), que permanece até a implementação.
+- **Auditoria:** alterações de comprovantes e de dados de destinação são eventos novos auditados, com autor, data e motivo, quando aplicável; nada é editado nem apagado. O registro de acesso (leitura) a comprovantes é requisito a avaliar por custo e finalidade.
+- **Retenção e revisão jurídica:** ainda **não há** política de retenção para esses dados. Prazo, base legal, adequação do número agregado de pessoas (risco de reidentificação em quantidades pequenas) e tratamento de comprovantes com dado pessoal enviado por engano dependem de **avaliação jurídica**, que este documento não substitui.
+
 ## Portal público de transparência
 
 Ainda não implementado (ver README, "Estado conhecido/lacunas" e
