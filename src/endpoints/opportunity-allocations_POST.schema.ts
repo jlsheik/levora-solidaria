@@ -11,6 +11,9 @@ export const schema = z.object({
   // requiredRemaining > 0, da MESMA organização — validado no servidor,
   // nunca confiado do cliente. Nunca inferido automaticamente.
   needId: z.coerce.number().int().positive().optional(),
+  // Fase 98: confirmação EXPLÍCITA do admin quando a organização já recusou/cancelou esta oportunidade. Sem ela o servidor responde 409 (code
+  // 'recusa_anterior_requer_confirmacao'); com ela a atribuição manual segue (exceção administrativa) e a auditoria registra a confirmação.
+  confirmPriorRefusal: z.boolean().optional(),
 });
 
 export type OutputType = {

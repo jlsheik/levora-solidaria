@@ -3,6 +3,7 @@ import { claimTaskRun, finishTaskRun, failTaskRun } from "./backgroundTasks.js";
 import { recordAuditLogEntry } from "./auditLog.js";
 import type { OpportunityRegistryStatus } from "./schema.js";
 import { withScheduledTaskLock } from "./scheduledTaskLock.js";
+import { closeOpenProposals } from "./offerClosure.js";
 
 const TERMINAL_STATUSES: OpportunityRegistryStatus[] = ["concluida", "recusada", "expirada", "cancelada", "bloqueada", "duplicada"];
 
@@ -77,6 +78,9 @@ async function expireOne(opportunityId: number): Promise<Outcome> {
       .where("status", "not in", TERMINAL_STATUSES)
       .execute();
 
+    // Fase 98: as propostas pendentes (sem movimentação) são encerradas junto com a oferta, na mesma transação: uma oferta expirada não deixa proposta aceitável.
+    const closedProposals = await closeOpenProposals(trx, opportunityId, "oferta_expirada_automatica", null);
+
     await recordAuditLogEntry(
       {
         organizationId: null,
@@ -84,7 +88,7 @@ async function expireOne(opportunityId: number): Promise<Outcome> {
         action: "descoberta_central.expirada_automaticamente",
         entityType: "opportunity_registry",
         entityId: String(opportunityId),
-        metadata: { title: opp.title },
+        metadata: { title: opp.title, ...(closedProposals.length > 0 ? { propostasEncerradas: closedProposals } : {}) },
       },
       trx
     );

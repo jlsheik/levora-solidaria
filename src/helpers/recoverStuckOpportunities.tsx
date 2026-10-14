@@ -3,6 +3,7 @@ import { db } from "./db.js";
 import { recordAuditLogEntry } from "./auditLog.js";
 import { concludeOpportunityIfAllTerminalAndReceived } from "./concludeOpportunity.js";
 import { reopenOpportunityIfNoActiveAllocations } from "./reopenOpportunity.js";
+import { closeOpenProposals, lockOfferAllocations } from "./offerClosure.js";
 
 /**
  * Recuperação de oportunidades presas: `reservada`/`atribuida` SEM nenhuma atribuição em andamento (`proposta`, `aceita`, `em_coleta`, `em_transporte`).
@@ -16,10 +17,13 @@ import { reopenOpportunityIfNoActiveAllocations } from "./reopenOpportunity.js";
  */
 const IN_PROGRESS = ["proposta", "aceita", "em_coleta", "em_transporte"] as const;
 const MAX_PER_RUN = 200;
+const CLOSED_OFFER_STATUSES = ["cancelada", "expirada", "recusada", "bloqueada", "duplicada"] as const;
 
 export interface RecoveryResult {
   reopened: number[];
   concluded: number[];
+  /** Resíduos antigos: propostas pendentes de ofertas JÁ encerradas (anteriores à Fase 98), encerradas agora (ids das atribuições). */
+  closedOrphanProposals: number[];
   failed: Array<{ opportunityId: number; message: string }>;
 }
 
@@ -36,7 +40,7 @@ export async function recoverStuckOpportunities(): Promise<RecoveryResult> {
     .limit(MAX_PER_RUN)
     .execute();
 
-  const out: RecoveryResult = { reopened: [], concluded: [], failed: [] };
+  const out: RecoveryResult = { reopened: [], concluded: [], closedOrphanProposals: [], failed: [] };
   for (const { id } of candidates) {
     try {
       const r = await db.transaction().execute(async (trx) => {
@@ -71,6 +75,32 @@ export async function recoverStuckOpportunities(): Promise<RecoveryResult> {
       else if (r === "reaberta") out.reopened.push(id);
     } catch (err) {
       out.failed.push({ opportunityId: id, message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  // Fase 98 — resíduos de antes do encerramento atômico: oferta cancelada/expirada/recusada com proposta ainda pendente. A proposta é encerrada (motivo
+  // 'oferta_encerrada': a origem — administrador ou sistema — não é reconstituível para linhas antigas, então não é afirmada). Mesma ordem de travas dos demais caminhos.
+  const orphanOffers = await db
+    .selectFrom("opportunityAllocations as a")
+    .innerJoin("opportunityRegistry as o", "o.id", "a.opportunityRegistryId")
+    .select("a.opportunityRegistryId")
+    .distinct()
+    .where("a.status", "=", "proposta")
+    .where("o.status", "in", [...CLOSED_OFFER_STATUSES])
+    .orderBy("a.opportunityRegistryId")
+    .limit(MAX_PER_RUN)
+    .execute();
+  for (const { opportunityRegistryId } of orphanOffers) {
+    try {
+      const closed = await db.transaction().execute(async (trx) => {
+        await lockOfferAllocations(trx, opportunityRegistryId);
+        const offer = await trx.selectFrom("opportunityRegistry").select("status").where("id", "=", opportunityRegistryId).forUpdate().executeTakeFirst();
+        if (!offer || !(CLOSED_OFFER_STATUSES as readonly string[]).includes(offer.status)) return [] as number[];
+        return closeOpenProposals(trx, opportunityRegistryId, "oferta_encerrada", null);
+      });
+      out.closedOrphanProposals.push(...closed);
+    } catch (err) {
+      out.failed.push({ opportunityId: opportunityRegistryId, message: err instanceof Error ? err.message : String(err) });
     }
   }
   return out;
