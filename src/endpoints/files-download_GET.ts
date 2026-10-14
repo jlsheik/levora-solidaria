@@ -2,7 +2,7 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requireOrganizationMembership } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
-import { adapterForProvider } from "../helpers/storageAdapter.js";
+import { adapterForProvider, keyBelongsToOrganization } from "../helpers/storageAdapter.js";
 import { schema } from "./files-download_GET.schema.js";
 import { ALLOWED_CONTENT_TYPES } from "./files-upload_POST.schema.js";
 import { buildContentDisposition } from "../helpers/contentDisposition.js";
@@ -34,6 +34,11 @@ export async function handle(request: Request) {
     }
 
     await requireOrganizationMembership(user.id, file.organizationId);
+
+    // Chave adulterada no banco (de outra organização, com `..` ou fora do formato) nunca vai ao armazenamento: o objeto servido tem de ser da organização do registro.
+    if (!keyBelongsToOrganization(file.storageKey, file.organizationId)) {
+      throw new Error(`Chave de armazenamento inconsistente com a organização do arquivo ${file.id}`);
+    }
 
     // Provedor GRAVADO no registro (não o configurado agora), resolvido só DEPOIS da autorização acima; valor desconhecido/sem configuração = erro controlado.
     const buffer = await adapterForProvider(file.storageProvider).download(file.storageKey);

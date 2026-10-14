@@ -60,10 +60,12 @@ class LocalDiskStorageAdapter implements StorageAdapter {
   }
 
   // storageKey vem do banco (não de entrada de usuário diretamente), mas
-  // resolve e confirma que o caminho final continua dentro do diretório de
+  // confirma o formato `<organizationId>/<uuid>` (o mesmo que o adaptador S3 exige) e que o caminho final continua dentro do diretório de
   // upload antes de tocar no filesystem — defesa em profundidade contra
-  // path traversal caso um storageKey malformado chegue aqui.
+  // path traversal caso um storageKey malformado chegue aqui. Só a verificação "dentro da raiz" não bastava: `1/../2/<uuid>` resolve para
+  // dentro da raiz, mas para o objeto de OUTRA organização.
   private resolveSafePath(storageKey: string): string {
+    if (!MANAGED_KEY_SHAPE.test(storageKey)) throw new Error("Chave de armazenamento inválida");
     const resolved = path.resolve(LOCAL_STORAGE_DIR, storageKey);
     if (!resolved.startsWith(LOCAL_STORAGE_DIR + path.sep)) {
       throw new Error("Chave de armazenamento inválida");
@@ -79,6 +81,10 @@ class LocalDiskStorageAdapter implements StorageAdapter {
  */
 export const MANAGED_KEY_SHAPE = /^\d+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/; // mesmo formato nos dois provedores (disco: caminho relativo; S3: chave)
 const S3_KEY_SHAPE = MANAGED_KEY_SHAPE;
+/** A chave gravada em um registro de arquivo tem de ter o formato gerado pelo app E o prefixo da organização do próprio registro (`<organizationId>/<uuid>`). */
+export function keyBelongsToOrganization(storageKey: string, organizationId: number): boolean {
+  return MANAGED_KEY_SHAPE.test(storageKey) && storageKey.startsWith(`${organizationId}/`);
+}
 function assertS3KeyShape(key: string): void {
   if (!S3_KEY_SHAPE.test(key)) throw new Error("Chave de armazenamento inválida");
 }

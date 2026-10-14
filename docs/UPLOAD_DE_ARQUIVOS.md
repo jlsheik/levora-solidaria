@@ -93,6 +93,8 @@ chave; autorização por sessão e organização (401/403/404/400, membro inativ
 bucket, endpoint, chaves, assinatura nem stack — nem no log.
 
 **Defeitos reais encontrados e corrigidos (só no adaptador):** (1) uma chave adulterada no banco (`1/../2/<uuid>`, `//`, esquema) ia à rede e o SDK normaliza `..`, apontando para OUTRO
+
+**Revisão independente do PR #1 — chave de outra organização (corrigido).** A guarda do S3 só conferia o *formato* da chave e a do disco só que o caminho ficava *dentro da raiz*: uma linha de `files` da organização A com `storage_key` = `<B>/<uuid>` (formato válido) ou `<A>/../<B>/<uuid>` (continua dentro da raiz do disco) servia o objeto da organização B a um membro de A (reproduzido em `test/storageKeyOrganization.test.ts` antes da correção). Agora `files-download` exige `keyBelongsToOrganization` (formato + prefixo `<organization_id>/` igual ao do registro) **antes** de tocar o armazenamento, e o adaptador de disco também exige o formato `<org>/<uuid>`. O endpoint nunca usou entrada do usuário como chave: o cenário exige escrita indevida no banco (defesa em profundidade).
 objeto do bucket — o adaptador de disco tinha a guarda, o S3 não; agora `download`/`delete` exigem o formato `<org>/<uuid>` antes de qualquer chamada; (2) **sem timeout**: um S3 que não responde
 (ou um corpo que trava no meio) deixava o download pendurado para sempre — o cliente agora usa `socketTimeout` (inatividade) de 30 s, configurável por `S3_REQUEST_TIMEOUT_MS` (o `requestTimeout`
 do SDK só emite aviso, por isso não é usado).

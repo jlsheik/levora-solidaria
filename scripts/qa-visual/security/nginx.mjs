@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 export const NGINX_IMAGE = "nginx:1.27-alpine";
-export const OPENSSL_IMAGE = "alpine/openssl";
+export const OPENSSL_IMAGE = "alpine/openssl:3.5.9"; // versão fixa (a mesma do primeiro run verde do CI); "latest" mudava sem aviso
 const docker = (args, opt = {}) => spawnSync("docker", args, { encoding: "utf8", windowsHide: true, env: { ...process.env, MSYS_NO_PATHCONV: "1" }, timeout: 120000, ...opt });
 const toDockerPath = (p) => p.replace(/\\/g, "/");
 

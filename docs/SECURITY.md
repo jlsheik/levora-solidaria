@@ -186,6 +186,8 @@ pelo `Content-Disposition`. **Consistência (Fase 94):** o upload compensa a fal
 **Diagnóstico de integridade (`npm run storage:audit`, somente leitura):** lista órfãos, registros sem objeto e metadados inconsistentes, e declara a auditoria **incompleta** (saída 2) quando banco, disco ou listagem S3 não puderam ser lidos por completo — sem exclusão nem correção automática (ver `docs/UPLOAD_DE_ARQUIVOS.md`).
 
 **Armazenamento S3:** o adaptador foi exercitado com o SDK real contra um servidor S3 **local** (`test/storageS3.test.ts`; ver `docs/UPLOAD_DE_ARQUIVOS.md`): chave só no formato `<org>/<uuid>` (uma chave adulterada
+
+**Chave de armazenamento × organização:** o download só serve o objeto cuja chave tem o formato `<org>/<uuid>` **e** o prefixo da organização do próprio registro (`keyBelongsToOrganization`, revisão do PR #1); o adaptador de disco também exige o formato. Cobertura: `test/storageKeyOrganization.test.ts`.
 no banco era enviada ao S3 com segmentos `..`; corrigido), timeout de inatividade de 30 s (antes um S3 mudo pendurava o download), autorização antes de qualquer leitura no armazenamento e erros sem vazar bucket,
 endpoint, chaves ou assinatura. **Não feito (decisão/infraestrutura):** varredura de malware, reencodar imagens, isolar uploads em outra origem (não há necessidade demonstrada: nenhum tipo renderizável como
 documento ativo é aceito) e compatibilidade com um bucket **real** (AWS/R2/MinIO) — o servidor local não valida assinaturas e não substitui um teste com credenciais de um serviço de verdade.

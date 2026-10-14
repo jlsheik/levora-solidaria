@@ -161,7 +161,7 @@ jobs:
       - name: Pull Docker images for the nginx header checks
         run: |
           docker pull nginx:1.27-alpine
-          docker pull alpine/openssl:latest
+          docker pull alpine/openssl:3.5.9
 
       - name: qa:visual (reduced profile, Chrome only)
         run: npm run qa:visual -- --browser chrome --profile ci --out reports/qa-visual.json

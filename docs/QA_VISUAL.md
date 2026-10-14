@@ -140,7 +140,7 @@ secondary, desabilitado), Switch (ligado/desligado/foco/desabilitado), Input/Tex
 inventário. **Omitidos (9):** `login-password-field`, `needs-edit-dialog-title`, `org-outline-rename`, `matching-ghost-delete-icon`, `inventory-delta-positive`, `inventory-delta-icon-out`,
 `dropzone-title`, `dropzone-subtitle`, `dropzone-error-clear` (variantes redundantes da mesma família). `test/qaCi.test.ts` trava que o perfil só cita cenários existentes e cobre essas famílias.
 
-**Docker (cabeçalhos de produção):** o runner `ubuntu-latest` tem Docker. O job faz `docker pull` explícito de `nginx:1.27-alpine` e `alpine/openssl` (a ferramenta não baixa imagens
+**Docker (cabeçalhos de produção):** o runner `ubuntu-latest` tem Docker. O job faz `docker pull` explícito de `nginx:1.27-alpine` e `alpine/openssl:3.5.9` (versão fixa; era `latest`) (a ferramenta não baixa imagens
 sozinha) e a parte `headers` roda o `deploy/nginx.conf` real. No Linux, o contêiner alcança a API do host por `--add-host host.docker.internal:host-gateway` e a API de QA escuta em
 `0.0.0.0` (`QA_API_HOST`, só nessa parte e só no runner efêmero; localmente continua 127.0.0.1). **Sem Docker a parte `headers` vira `ENV` (saída 3) e o job reprova** — não é omitida em silêncio.
 
@@ -203,7 +203,7 @@ Unicode e `<img onerror>.png`; 8 MB+1 e corpo > 16 MB; linhas ANTIGAS `text/html
 id inexistente/inválido, e usuário de OUTRA organização (download e envio). Calibração: o mesmo conteúdo ativo servido inline como HTML/SVG **executa** (detector acusa) e
 servido como `image/png`+nosniff ou `attachment` **não** executa.
 
-**Cabeçalhos de produção** (parte `headers`; **exige Docker** com as imagens `nginx:1.27-alpine` e `alpine/openssl` já presentes — a rotina não baixa nada; sem elas a parte
+**Cabeçalhos de produção** (parte `headers`; **exige Docker** com as imagens `nginx:1.27-alpine` e `alpine/openssl:3.5.9` (versão fixa; era `latest`) já presentes — a rotina não baixa nada; sem elas a parte
 vira ENV, saída 3, e as demais continuam). Faz uma build temporária do cliente (`vite build --outDir` temporário, sem tocar em `dist/`), gera um certificado autoassinado,
 sobe o **`deploy/nginx.conf` real** (só domínio, certificado e porta da API trocados; cada troca é conferida e, se a configuração mudar, a rotina falha em vez de testar outra
 coisa) e mede: (1) por location (`/`, `/login`, `/index.html`, rota da SPA, JS, CSS, asset inexistente, API pelo proxy, 404 e recusa 415 da API) a CSP (impõe bloqueio, sem
