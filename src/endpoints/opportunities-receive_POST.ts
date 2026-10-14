@@ -16,11 +16,15 @@ export async function handle(request: Request) {
     await requirePermission(user.id, input.organizationId, "oportunidades.gerencie");
 
     const result = await db.transaction().execute(async (trx) => {
+      // Fase 96: a linha da oferta é TRAVADA antes de ler o status. Antes, duas requisições simultâneas liam "registrada", cada uma lançava a entrada (a única trava
+      // era a do item, e itens diferentes nem se serializavam) e a oferta de 10 unidades virava 20. Agora o status é lido e decidido sob a trava: a segunda
+      // requisição espera a primeira confirmar e então vê "recebida" (409). Ordem de travas: oferta → item → auditoria (a mesma de opportunities-status_POST).
       const opportunity = await trx
         .selectFrom("donationOpportunities")
         .select(["id", "status", "title", "donorName"])
         .where("id", "=", input.opportunityId)
         .where("organizationId", "=", input.organizationId)
+        .forUpdate()
         .executeTakeFirst();
 
       if (!opportunity) return { type: "not_found" as const };
@@ -39,6 +43,18 @@ export async function handle(request: Request) {
 
       if (!item) return { type: "item_not_found" as const };
 
+      // "Reivindica" a oferta ANTES de lançar o estoque: atualização condicional (defesa em profundidade além da trava). Se, por qualquer motivo, a linha não estiver
+      // mais num estado recebível, nada foi escrito ainda e a resposta é a mesma do contrato (409).
+      const [updatedOpportunity] = await trx
+        .updateTable("donationOpportunities")
+        .set({ status: "recebida", updatedAt: new Date() })
+        .where("id", "=", input.opportunityId)
+        .where("organizationId", "=", input.organizationId)
+        .where("status", "not in", ["recebida", "cancelada"])
+        .returning(["id", "status"])
+        .execute();
+      if (!updatedOpportunity) return { type: "invalid_status" as const, status: "recebida" as const };
+
       const [tx] = await trx
         .insertInto("stockTransactions")
         .values({
@@ -50,13 +66,6 @@ export async function handle(request: Request) {
           createdByUserId: user.id,
         })
         .returning(["id"])
-        .execute();
-
-      const [updatedOpportunity] = await trx
-        .updateTable("donationOpportunities")
-        .set({ status: "recebida", updatedAt: new Date() })
-        .where("id", "=", input.opportunityId)
-        .returning(["id", "status"])
         .execute();
 
       await recordAuditLogEntry(
