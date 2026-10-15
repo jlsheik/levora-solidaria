@@ -41,6 +41,8 @@ import {
 import { z } from "zod";
 import { ArrowLeft, Plus, ClipboardList, Pencil } from "lucide-react";
 import { EditNeedDialog, type EditableNeed } from "../components/EditNeedDialog";
+import { NeedClosureDialog, type ClosableNeed } from "../components/NeedClosureDialog";
+import { CLOSURE_REASON_LABELS } from "../endpoints/need-closure_POST.schema";
 import { toast } from "sonner";
 import styles from "./organizacoes.$organizationId.necessidades.module.css";
 
@@ -64,6 +66,15 @@ const statusLabels: Record<string, string> = {
   cancelada: "Cancelada",
 };
 
+// Fase 99F: a situação visível vem do ATENDIMENTO derivado das destinações (o status "atendida" nunca é um clique)
+const attendanceStateLabels: Record<string, string> = {
+  sem_atendimento: "Sem atendimento",
+  parcial: "Parcialmente atendida",
+  atendida: "Atendida",
+  atendida_historica: "Histórico sem destinação",
+  cancelada: "Encerrada",
+};
+
 const newNeedSchema = z.object({
   title: z.string().min(3, "Informe um título"),
   description: z.string().optional(),
@@ -78,6 +89,7 @@ export default function NeedsPage() {
   const organizationId = Number(params.organizationId);
   const queryClient = useQueryClient();
   const [editNeed, setEditNeed] = useState<EditableNeed | null>(null);
+  const [closeNeed, setCloseNeed] = useState<ClosableNeed | null>(null);
   const [newNeedOpen, setNewNeedOpen] = useState(false);
 
   const orgsQuery = useQuery({
@@ -120,7 +132,7 @@ export default function NeedsPage() {
       postNeedsStatus({ organizationId, ...vars }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["needs", organizationId] });
-      toast.success("Status atualizado");
+      toast.success("Registro reaberto");
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Falha ao atualizar status"),
   });
@@ -344,6 +356,51 @@ export default function NeedsPage() {
                     </Badge>
                   )}
                 </div>
+
+                {/* Fase 99F — ATENDIMENTO FINAL: derivado só das destinações válidas (entregas), em medida separada do suprimento acima; nunca somadas. */}
+                <div className={styles.attendance} data-testid="need-attendance" data-state={need.attendance.state}>
+                  <div className={styles.attendanceHeader}>
+                    <span className={styles.attendanceTitle}>Atendimento (entregas registradas)</span>
+                    <Badge className={styles.stateBadge} variant={need.attendance.state === "atendida" ? "success" : need.attendance.state === "atendida_historica" ? "outline" : need.attendance.state === "cancelada" ? "secondary" : "outline"}>
+                      {attendanceStateLabels[need.attendance.state]}
+                    </Badge>
+                  </div>
+                  <div
+                    className={styles.progressBar}
+                    role="progressbar"
+                    aria-label={"Atendimento de " + need.title}
+                    aria-valuemin={0}
+                    aria-valuemax={need.attendance.requested}
+                    aria-valuenow={need.attendance.attended}
+                    aria-valuetext={`${need.attendance.attended} de ${need.attendance.requested} ${need.unit} atendidos`}
+                  >
+                    <div className={styles.progressFill} style={{ width: `${need.attendance.percent}%` }} />
+                  </div>
+                  <p className={styles.attendanceText}>
+                    Atendido: <strong>{need.attendance.attended} de {need.attendance.requested} {need.unit}</strong> ({need.attendance.percent}%)
+                    {need.attendance.remaining > 0 ? <> · faltam <strong>{need.attendance.remaining} {need.unit}</strong></> : null}
+                  </p>
+                  {need.attendance.state === "atendida_historica" && (
+                    <p className={styles.attendanceNote}>
+                      Atendimento histórico sem destinação estruturada: foi registrada como atendida antes do controle por entregas, não há destinação que a comprove e nenhuma foi inventada.
+                    </p>
+                  )}
+                  {need.attendance.surplus > 0 && (
+                    <p className={styles.attendanceNote}>Excedente autorizado nas entregas: {need.attendance.surplus} {need.unit} (não conta como atendimento).</p>
+                  )}
+                  {need.attendance.unitIncompatibleDestined > 0 && (
+                    <p className={styles.attendanceNote}>
+                      Há {need.attendance.unitIncompatibleDestined} (unidade do item) destinados em unidade incompatível com a da necessidade: não contam como atendimento e nada foi convertido.
+                    </p>
+                  )}
+                  {need.closure && (
+                    <p className={styles.attendanceNote}>
+                      Encerrada em {new Date(need.closure.closedAt).toLocaleDateString("pt-BR")}
+                      {need.closure.reasonCode ? ` — ${CLOSURE_REASON_LABELS[need.closure.reasonCode as keyof typeof CLOSURE_REASON_LABELS] ?? need.closure.reasonCode}` : ""}
+                      {need.closure.reasonText ? `: ${need.closure.reasonText}` : ""}. Atendido no encerramento: {need.closure.attendedSnapshot ?? 0} de {need.closure.quantityNeededSnapshot ?? need.quantityNeeded}.
+                    </p>
+                  )}
+                </div>
               </div>
               <div className={styles.needActions}>
                 {canManage && (
@@ -351,28 +408,39 @@ export default function NeedsPage() {
                     <Pencil size={14} />
                   </Button>
                 )}
-                {canManage ? (
-                  <Select
-                    value={need.status}
-                    onValueChange={(v) =>
-                      statusMutation.mutate({ needId: need.id, status: v as (typeof NeedStatusArrayValues)[number] })
-                    }
+                <Badge variant={need.status === "atendida" ? "success" : need.status === "cancelada" ? "secondary" : "outline"}>
+                  {need.status === "cancelada" ? "Encerrada" : statusLabels[need.status]}
+                </Badge>
+                {canManage && need.status === "aberta" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCloseNeed({ id: need.id, title: need.title, unit: need.unit, requested: need.attendance.requested, attended: need.attendance.attended, remaining: need.attendance.remaining, action: "encerrar" })}
+                    aria-label={"Encerrar a necessidade " + need.title}
                   >
-                    <SelectTrigger className={styles.statusSelect}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {NeedStatusArrayValues.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {statusLabels[s]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Badge variant={need.status === "atendida" ? "success" : need.status === "cancelada" ? "secondary" : "outline"}>
-                    {statusLabels[need.status]}
-                  </Badge>
+                    Encerrar
+                  </Button>
+                )}
+                {canManage && need.status === "cancelada" && need.closure && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCloseNeed({ id: need.id, title: need.title, unit: need.unit, requested: need.attendance.requested, attended: need.attendance.attended, remaining: need.attendance.remaining, action: "reabrir" })}
+                    aria-label={"Reabrir a necessidade " + need.title}
+                  >
+                    Reabrir
+                  </Button>
+                )}
+                {canManage && (need.status === "cancelada" ? !need.closure : need.attendance.state === "atendida_historica") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={statusMutation.isPending}
+                    onClick={() => statusMutation.mutate({ needId: need.id, status: "aberta" })}
+                    aria-label={"Reabrir o registro histórico da necessidade " + need.title}
+                  >
+                    Reabrir registro
+                  </Button>
                 )}
               </div>
             </li>
@@ -384,6 +452,7 @@ export default function NeedsPage() {
         </div>
       )}
       <EditNeedDialog organizationId={organizationId} need={editNeed} onOpenChange={(open) => !open && setEditNeed(null)} />
+      <NeedClosureDialog organizationId={organizationId} need={closeNeed} onOpenChange={(open) => !open && setCloseNeed(null)} />
     </div>
   );
 }

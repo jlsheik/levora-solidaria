@@ -498,7 +498,7 @@ describe("D. risco e segunda aprovação", () => {
 });
 
 describe("E. nenhuma rota cria saída sem destinação", () => {
-  it("49/50: a única escrita de movimento 'saida' no código é o núcleo da destinação; needs-status não baixa estoque e a resolução fica declarativa", async () => {
+  it("49/50: a única escrita de movimento 'saida' no código é o núcleo da destinação; needs-status não baixa estoque nem cria resolução (99F)", async () => {
     const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
     const writers = [...walk("src"), ...walk("scripts"), ...walk("db")].filter((f) => /\.(ts|tsx|mjs)$/.test(f)).filter((f) => {
       const t = readFileSync(f, "utf8");
@@ -509,13 +509,12 @@ describe("E. nenhuma rota cria saída sem destinação", () => {
     const w = await world();
     const [need] = await db.insertInto("needs").values({ organizationId: w.org.id, itemId: w.item.id, title: "Cestas", quantityNeeded: "40", unit: "kg", priority: "media", status: "aberta", createdByUserId: w.owner.userId }).returning("id").execute();
     const before = await balance(w);
+    // Fase 99F: sem destinações o status 'atendida' é recusado (409) e, em qualquer caso, nunca baixa estoque
     const res = await needStatusHandle(post("needs-status", w.owner.cookie, { organizationId: w.org.id, needId: need.id, status: "atendida" }));
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
     expect(await exits(w)).toHaveLength(0);
     expect(await balance(w)).toBe(before);
-    const [resolution] = await db.selectFrom("needResolutions").selectAll().where("needId", "=", need.id).execute();
-    expect(resolution.stockTransactionId).toBeNull();
-    // reabrir e atender de novo nunca produz uma baixa
+    expect(await db.selectFrom("needResolutions").selectAll().where("needId", "=", need.id).execute()).toHaveLength(0);
     await needStatusHandle(post("needs-status", w.owner.cookie, { organizationId: w.org.id, needId: need.id, status: "aberta" }));
     await needStatusHandle(post("needs-status", w.owner.cookie, { organizationId: w.org.id, needId: need.id, status: "atendida" }));
     expect(await exits(w)).toHaveLength(0);

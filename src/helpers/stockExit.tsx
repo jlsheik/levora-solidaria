@@ -16,6 +16,7 @@ import { getItemStockBalance } from "./stockBalance.js";
 import { roundQuantity } from "./quantityRules.js";
 import { classifyUnit, unitsEquivalent } from "./unitVocabulary.js";
 import { checkEffectiveDate, MAX_RETROACTIVE_DAYS } from "./businessDate.js";
+import { getNeedAttendance, remainingToAttend } from "./needAttendance.js";
 import { DESTINATION_LABELS, evaluateDestinationRisk, isAttendanceType, type DestinationType, type RiskReason } from "./destinationRules.js";
 
 export const DESTINATION_APPROVAL_ACTION = "saida_destinacao_alto_risco";
@@ -31,6 +32,9 @@ export interface DestinationExitInput {
   peopleUnit: "familias" | "pessoas" | null;
   notes: string | null;
   lateRegistrationReason: string | null;
+  /** Fase 99F: o usuário AUTORIZA expressamente que a saída física passe do que falta da necessidade (o excedente fica registrado, nunca conta como atendimento adicional). */
+  authorizeSurplus: boolean;
+  surplusReason: string | null;
 }
 
 export type ExitErrorCode =
@@ -43,7 +47,11 @@ export type ExitErrorCode =
   | "data_futura"
   | "data_invalida"
   | "retroativa_exige_autorizacao"
-  | "retroativa_exige_justificativa";
+  | "retroativa_exige_justificativa"
+  | "necessidade_ja_atendida"
+  | "excedente_nao_autorizado"
+  | "excedente_exige_permissao"
+  | "excedente_exige_motivo";
 
 export type ExitFailure = { type: "error"; code: ExitErrorCode; status: number; message: string; details?: Record<string, unknown> };
 
@@ -54,6 +62,12 @@ export interface PreparedExit {
   needTitle: string | null;
   isCountable: boolean;
   risk: RiskReason[];
+  /** Fase 99F: quantidade aplicada ao atendimento da necessidade (null sem necessidade contabilizável), excedente autorizado e se esta destinação completa a necessidade. */
+  applied: number | null;
+  surplus: number;
+  attendedBefore: number;
+  needQuantity: number | null;
+  fulfills: boolean;
   retroactive: boolean;
   businessToday: string;
   now: Date;
@@ -72,6 +86,8 @@ export function hashDestinationInput(input: DestinationExitInput): string {
     peopleUnit: input.peopleUnit,
     notes: input.notes ?? null,
     lateRegistrationReason: input.lateRegistrationReason ?? null,
+    authorizeSurplus: input.authorizeSurplus === true,
+    surplusReason: input.surplusReason ?? null,
   };
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
@@ -89,6 +105,7 @@ export async function serverNow(trx: Transaction<DB>): Promise<Date> {
  * tanto no pedido quanto na aprovação (que reavalia o estado atual). `actorCanAuthorizeLate`: quem pede/aprova pode autorizar data retroativa (proprietário/administrador).
  */
 export async function prepareDestinationExit(trx: Transaction<DB>, input: DestinationExitInput, ctx: { actorCanAuthorizeLate: boolean }): Promise<PreparedExit | ExitFailure> {
+  // `actorCanAuthorizeLate` (proprietário/administrador, `organizacao.gerencie`) também é quem pode AUTORIZAR excedente: a mesma permissão existente, sem nenhuma nova.
   const item = await trx
     .selectFrom("inventoryItems")
     .select(["id", "name", "unit", "organizationId"])
@@ -110,10 +127,15 @@ export async function prepareDestinationExit(trx: Transaction<DB>, input: Destin
 
   let needTitle: string | null = null;
   let isCountable = false;
+  let applied: number | null = null;
+  let surplus = 0;
+  let attendedBefore = 0;
+  let needQuantity: number | null = null;
+  let fulfills = false;
   if (input.needId !== null) {
     const need = await trx
       .selectFrom("needs")
-      .select(["id", "title", "status", "itemId", "unit"])
+      .select(["id", "title", "status", "itemId", "unit", "quantityNeeded"])
       .where("id", "=", input.needId)
       .where("organizationId", "=", input.organizationId)
       .forNoKeyUpdate()
@@ -124,6 +146,29 @@ export async function prepareDestinationExit(trx: Transaction<DB>, input: Destin
     needTitle = need.title;
     // contabilizável só com a MESMA unidade canônica; unidade incompatível registra a saída física, mas NÃO conta como atendimento (nada é convertido)
     isCountable = isAttendanceType(input.destinationType) && unitsEquivalent(need.unit, item.unit);
+
+    // Fase 99F: com a necessidade TRAVADA, recalcula quanto falta a partir das destinações CONFIRMADAS (nunca de um total vindo do cliente). Só a parcela que falta conta como
+    // atendimento; o que passa disso é EXCEDENTE e só existe com autorização expressa, motivo e permissão (a quantidade física real nunca é cortada nem trocada de unidade).
+    needQuantity = Number(need.quantityNeeded);
+    if (isCountable) {
+      const attendance = await getNeedAttendance(trx, need.id);
+      attendedBefore = attendance.appliedNet;
+      const remaining = remainingToAttend(needQuantity, attendance);
+      if (remaining <= 0) return fail("necessidade_ja_atendida", 409, `A necessidade "${need.title}" já foi atendida por inteiro (${attendance.appliedNet} de ${needQuantity} ${need.unit}); não há mais o que aplicar`, { maxAplicavel: 0 });
+      if (input.quantity <= remaining) {
+        applied = input.quantity;
+      } else {
+        const excess = roundQuantity(input.quantity - remaining);
+        if (!input.authorizeSurplus) {
+          return fail("excedente_nao_autorizado", 409, `A quantidade (${input.quantity} ${item.unit}) supera o que falta da necessidade "${need.title}": faltam ${remaining} ${need.unit} (excedente de ${excess}). Reduza a quantidade ou autorize o excedente com motivo`, { maxAplicavel: remaining, excedente: excess });
+        }
+        if (!ctx.actorCanAuthorizeLate) return fail("excedente_exige_permissao", 403, "Somente proprietário ou administrador pode autorizar excedente");
+        if (!input.surplusReason || input.surplusReason.trim().length < 10) return fail("excedente_exige_motivo", 422, "Autorizar excedente exige um motivo (mínimo de 10 caracteres)");
+        applied = remaining;
+        surplus = excess;
+      }
+      fulfills = roundQuantity(attendance.appliedNet + applied) >= needQuantity;
+    }
   }
 
   const now = await serverNow(trx);
@@ -149,6 +194,11 @@ export async function prepareDestinationExit(trx: Transaction<DB>, input: Destin
     needTitle,
     isCountable,
     risk: evaluateDestinationRisk({ destinationType: input.destinationType, quantity: input.quantity, balanceBefore }),
+    applied,
+    surplus,
+    attendedBefore,
+    needQuantity,
+    fulfills,
     retroactive: date.retroactive,
     businessToday: date.businessToday,
     now,
@@ -159,6 +209,8 @@ export interface ExecutedExit {
   stockTransactionId: string;
   destinationId: string;
   newStock: number;
+  /** Fase 99F: esta destinação completou a necessidade e a levou a `atendida` (nunca gera saída: é só o estado derivado). */
+  needFulfilled: boolean;
 }
 
 /** Grava a saída física e a destinação original, ligadas entre si. NÃO audita (quem chama audita por último). */
@@ -193,14 +245,22 @@ export async function executeDestinationExit(trx: Transaction<DB>, input: Destin
       peopleServed: input.peopleServed,
       peopleUnit: input.peopleUnit,
       notes: input.notes,
+      appliedQuantity: prepared.applied,
+      surplusQuantity: prepared.surplus > 0 ? prepared.surplus : null,
+      surplusReason: prepared.surplus > 0 ? input.surplusReason : null,
       lateRegistrationReason: prepared.retroactive ? input.lateRegistrationReason : null,
-      authorizedByUserId: prepared.retroactive ? actors.authorizerUserId : null,
+      authorizedByUserId: prepared.retroactive || prepared.surplus > 0 ? actors.authorizerUserId : null,
       createdByUserId: actors.creatorUserId,
     } as never)
     .returning(["id"])
     .execute();
 
-  return { stockTransactionId: String(tx.id), destinationId: String(destination.id), newStock: roundQuantity(prepared.balanceBefore - input.quantity) };
+  // Estado derivado: a destinação que completa a necessidade a leva a `atendida` NA MESMA transação (necessidade já travada; nenhuma saída é criada por isto)
+  if (prepared.fulfills && input.needId !== null) {
+    await trx.updateTable("needs").set({ status: "atendida", updatedAt: new Date() }).where("id", "=", input.needId).where("organizationId", "=", input.organizationId).where("status", "=", "aberta").execute();
+  }
+
+  return { stockTransactionId: String(tx.id), destinationId: String(destination.id), newStock: roundQuantity(prepared.balanceBefore - input.quantity), needFulfilled: prepared.fulfills && input.needId !== null };
 }
 
 /** As duas entradas de auditoria de uma saída executada (a antiga `inventario.saida_registrada` continua existindo para a conciliação). */
@@ -244,12 +304,28 @@ export async function auditExecutedExit(
         retroativa: prepared.retroactive,
         saldoAnterior: prepared.balanceBefore,
         riscoAvaliado: prepared.risk,
+        quantidadeAplicada: prepared.applied,
+        excedenteAutorizado: prepared.surplus > 0 ? { quantidade: prepared.surplus, motivo: input.surplusReason } : null,
+        atendidoAntes: prepared.attendedBefore,
         chaveIdempotencia: idempotencyKey,
         ...(actors.requesterUserId ? { solicitanteId: actors.requesterUserId, aprovadoPor: actors.actorUserId, pedidoAprovacaoId: actors.approvalRequestId ?? null } : {}),
       },
     },
     trx
   );
+  if (executed.needFulfilled && input.needId !== null) {
+    await recordAuditLogEntry(
+      {
+        organizationId: input.organizationId,
+        actorUserId: actors.actorUserId,
+        action: "necessidade.atendida_automaticamente",
+        entityType: "need",
+        entityId: String(input.needId),
+        metadata: { destinacaoId: executed.destinationId, quantidadeSolicitada: prepared.needQuantity, atendidoAntes: prepared.attendedBefore, quantidadeAplicada: prepared.applied, nenhumaSaidaCriadaPelaTransicao: true },
+      },
+      trx
+    );
+  }
 }
 
 export type ApprovedDestinationResult =
@@ -266,7 +342,7 @@ export async function executeApprovedDestinationRequest(
   req: { id: number; payload: unknown; requestedByUserId: number; organizationId: number | null },
   approverUserId: number
 ): Promise<ApprovedDestinationResult> {
-  const payload = req.payload as { input?: DestinationExitInput; idempotencyKey?: string } | null;
+  const payload = req.payload as { input?: DestinationExitInput; idempotencyKey?: string; requesterCanAuthorize?: boolean } | null;
   if (!payload?.input || !payload.idempotencyKey || req.organizationId === null || payload.input.organizationId !== req.organizationId) return { type: "payload_invalid" };
   const input = payload.input;
 
@@ -283,7 +359,7 @@ export async function executeApprovedDestinationRequest(
   const prepared = await prepareDestinationExit(trx, input, { actorCanAuthorizeLate: true });
   if (prepared.type === "error") return prepared;
 
-  const executed = await executeDestinationExit(trx, input, prepared, { creatorUserId: req.requestedByUserId, authorizerUserId: req.requestedByUserId });
+  const executed = await executeDestinationExit(trx, input, prepared, { creatorUserId: req.requestedByUserId, authorizerUserId: payload.requesterCanAuthorize ? req.requestedByUserId : approverUserId });
   await trx.updateTable("stockExitRequests").set({ status: "executada", stockTransactionId: executed.stockTransactionId, stockDestinationId: executed.destinationId }).where("id", "=", request.id).execute();
 
   return {

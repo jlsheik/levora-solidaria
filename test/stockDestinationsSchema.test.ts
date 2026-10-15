@@ -108,7 +108,7 @@ describe("stock_destinations — destinação original", () => {
 
   it("finalidade × atendimento: necessidade, contagem e pessoas atendidas só nas três finalidades de atendimento; pessoas sem unidade (e vice-versa) é inválido", async () => {
     const w = await world();
-    const [need] = await db.insertInto("needs").values({ organizationId: w.org.id, title: "Cestas", quantityNeeded: "10", unit: "kg", priority: "media", status: "aberta", createdByUserId: w.owner.userId }).returning("id").execute();
+    const [need] = await db.insertInto("needs").values({ organizationId: w.org.id, title: "Cestas", quantityNeeded: "100", unit: "kg", priority: "media", status: "aberta", createdByUserId: w.owner.userId }).returning("id").execute();
     for (const t of ["uso_operacional_instituicao", "doacao_a_terceiro", "devolucao_ao_doador", "perda", "descarte"]) {
       await expect(insert(original(w, await exit5(w), { destinationType: t, needId: need.id, notes: "justificativa operacional" })), t).rejects.toThrow(/need_only_attendance/);
       await expect(insert(original(w, await exit5(w), { destinationType: t, isCountable: true, notes: "justificativa operacional" })), t).rejects.toThrow(/countable_chk/);

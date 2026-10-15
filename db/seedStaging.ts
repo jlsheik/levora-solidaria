@@ -52,7 +52,7 @@ import { handle as inventoryItemsPost } from "../src/endpoints/inventory-items_P
 import { handle as stockTransactionsPost } from "../src/endpoints/stock-transactions_POST.js";
 import { handle as stockDestinationsPost } from "../src/endpoints/stock-destinations_POST.js";
 import { handle as needsPost } from "../src/endpoints/needs_POST.js";
-import { handle as needsStatusPost } from "../src/endpoints/needs-status_POST.js";
+import { handle as needClosurePost } from "../src/endpoints/need-closure_POST.js";
 import { handle as sourcesPost } from "../src/endpoints/sources_POST.js";
 import { handle as registryPost } from "../src/endpoints/opportunity-registry_POST.js";
 import { handle as registryStatusPost } from "../src/endpoints/opportunity-registry-status_POST.js";
@@ -270,12 +270,12 @@ async function ensureStockTx(
 }
 
 /** Saída com DESTINAÇÃO (Fase 99E): a saída física só existe pelo registro de destinação; a chave de idempotência derivada do marcador torna a semente reexecutável. */
-async function ensureStockExit(stats: SeedStats, orgId: number, itemId: number, actor: Actor, quantity: number, marker: string): Promise<void> {
+async function ensureStockExit(stats: SeedStats, orgId: number, itemId: number, actor: Actor, quantity: number, marker: string, needId?: number): Promise<void> {
   const idempotencyKey = `seed-${createHash("sha1").update(marker).digest("hex").slice(0, 24)}`;
   const already = await db.selectFrom("stockExitRequests").select("id").where("organizationId", "=", orgId).where("idempotencyKey", "=", idempotencyKey).executeTakeFirst();
   if (already) return; // semente reexecutável: a saída (com destinação) já existe
   await call(stats, `saída com destinação ${marker}`, stockDestinationsPost, actor,
-    { organizationId: orgId, itemId, quantity, destinationType: "distribuicao_familias", deliveredOn: businessDateOf(new Date()), idempotencyKey }, "stock-destinations");
+    { organizationId: orgId, itemId, quantity, destinationType: "distribuicao_familias", deliveredOn: businessDateOf(new Date()), idempotencyKey, ...(needId ? { needId } : {}) }, "stock-destinations");
 }
 
 async function ensureNeed(
@@ -288,12 +288,11 @@ async function ensureNeed(
   return created.need.id as number;
 }
 
-async function ensureNeedStatus(
-  stats: SeedStats, orgId: number, needId: number, status: "atendida" | "cancelada", actor: Actor
-): Promise<void> {
+/** Fase 99F: encerramento COM motivo estruturado (único caminho para "cancelada"); a situação "atendida" nasce da destinação que cobre a necessidade, nunca de um clique. */
+async function ensureNeedClosed(stats: SeedStats, orgId: number, needId: number, actor: Actor): Promise<void> {
   const need = await db.selectFrom("needs").select("status").where("id", "=", needId).executeTakeFirstOrThrow();
   if (need.status !== "aberta") return; // já foi movida (por este seed ou pelo fluxo normal)
-  await call(stats, `status da necessidade ${needId} → ${status}`, needsStatusPost, actor, { organizationId: orgId, needId, status }, "needs-status");
+  await call(stats, `encerramento da necessidade ${needId}`, needClosurePost, actor, { action: "encerrar", organizationId: orgId, needId, reasonCode: "necessidade_superada" }, "need-closure");
 }
 
 async function ensureSource(stats: SeedStats, admin: Actor): Promise<number> {
@@ -520,8 +519,10 @@ export async function runStagingSeed(options: { resetPasswords?: boolean } = {})
       title: marker("Fraldas infantis tamanho M"), description: "Necessidade aberta que alimenta o matching real.",
       itemId: fralda, quantityNeeded: 150, unit: "unidade", priority: "alta",
     });
-    await ensureNeedStatus(stats, orgA, needLeite, "atendida", actor.demo);
-    await ensureNeedStatus(stats, orgA, needKit, "cancelada", actor.demo);
+    // cenário 3: o atendimento é uma destinação real vinculada à necessidade (20 de 20 ⇒ "atendida" automática); o estoque extra mantém a saída abaixo do limiar de risco
+    await ensureStockTx(stats, orgA, leite, actor.operador, "entrada", 60, marker("Reposição de leite (sintético)"));
+    await ensureStockExit(stats, orgA, leite, actor.operador, 20, marker("Entrega de leite para lactentes (sintético)"), needLeite);
+    await ensureNeedClosed(stats, orgA, needKit, actor.demo);
 
 
     // --- Oportunidades do modelo por organização (tela da organização) -----
@@ -617,7 +618,7 @@ async function verifySeedResult(ids: {
   const balance = (id: number) => db.transaction().execute((trx) => getItemStockBalance(trx, id));
   const expected: [string, number, number][] = [
     ["Arroz (20+30-10 + 40 recebidos)", ids.arroz, 80],
-    ["Leite (60; 'atendida' não baixa estoque desde a Fase 99E)", ids.leite, 60],
+    ["Leite (60 + 60 de reposição − 20 entregues à necessidade)", ids.leite, 100],
     ["Cobertor (5 iniciais)", ids.cobertor, 5],
     ["Fralda (100 iniciais)", ids.fralda, 100],
   ];
@@ -639,8 +640,8 @@ async function verifySeedResult(ids: {
     (await status(ids.needLeite)) === "atendida" && (await status(ids.needKit)) === "cancelada",
     "cobertor=aberta arroz=aberta leite=atendida kit=cancelada");
 
-  const resolution = await db.selectFrom("needResolutions").select("id").where("needId", "=", ids.needLeite).executeTakeFirst();
-  check("necessidade atendida possui need_resolution", Boolean(resolution), resolution ? "sim" : "ausente");
+  const leiteDestination = await db.selectFrom("stockDestinations").select(["id", "appliedQuantity"]).where("needId", "=", ids.needLeite).where("entryType", "=", "original").executeTakeFirst();
+  check("necessidade atendida possui destinação estruturada que a comprova (99F)", Number(leiteDestination?.appliedQuantity ?? 0) === 20, leiteDestination ? "sim" : "ausente");
 
   const regStatus = async (id: number) => (await db.selectFrom("opportunityRegistry").select("status").where("id", "=", id).executeTakeFirstOrThrow()).status as string;
   check("lifecycle: O5 concluída (via recebimento real)", (await regStatus(ids.o5)) === "concluida", `status=${await regStatus(ids.o5)}`);

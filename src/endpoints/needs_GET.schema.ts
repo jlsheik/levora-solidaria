@@ -26,6 +26,30 @@ export type OutputType = {
     fulfilled: number;
     requiredRemaining: number;
     surplus: number;
+    /**
+     * Fase 99F — ATENDIMENTO FINAL derivado das destinações (nunca do ledger de suprimento acima; as duas medidas não se somam):
+     * `attended` = quantidade aplicada (só as 3 finalidades de atendimento, unidade compatível, líquida de reversões); `surplus` = excedente físico autorizado (não conta);
+     * `unitIncompatibleDestined` = físico destinado em unidade incompatível (não conta). `state`: sem_atendimento | parcial | atendida | atendida_historica | cancelada.
+     */
+    attendance: {
+      requested: number;
+      attended: number;
+      remaining: number;
+      percent: number;
+      physicalDestined: number;
+      surplus: number;
+      unitIncompatibleDestined: number;
+      state: "sem_atendimento" | "parcial" | "atendida" | "atendida_historica" | "cancelada";
+    };
+    /** Encerramento ativo (só em necessidade cancelada com evento): motivo estruturado e instantâneo do momento. */
+    closure: {
+      reasonCode: string | null;
+      reasonText: string | null;
+      quantityNeededSnapshot: number | null;
+      attendedSnapshot: number | null;
+      remainingSnapshot: number | null;
+      closedAt: string;
+    } | null;
   }>;
 };
 

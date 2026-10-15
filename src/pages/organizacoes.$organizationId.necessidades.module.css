@@ -252,3 +252,58 @@
 .formRowItem {
   flex: 1;
 }
+
+/* Fase 99F — atendimento final derivado das destinações */
+.attendance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-3);
+  padding-top: var(--spacing-3);
+  border-top: 1px solid var(--border);
+}
+
+.attendanceHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+}
+
+.attendanceTitle {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.progressBar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--muted);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+.attendanceText,
+.attendanceNote {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--card-foreground);
+  overflow-wrap: anywhere;
+}
+
+.attendanceNote {
+  color: var(--muted-foreground);
+}
+
+.stateBadge {
+  white-space: normal;
+  max-width: 100%;
+  text-align: left;
+}

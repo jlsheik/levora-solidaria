@@ -17,6 +17,9 @@ export const schema = z
     peopleUnit: z.enum(["familias", "pessoas"]).nullish(),
     notes: z.string().trim().max(1000, "No máximo 1000 caracteres").nullish(),
     lateRegistrationReason: z.string().trim().max(500).nullish(),
+    /** Fase 99F: autoriza expressamente o EXCEDENTE sobre o que falta da necessidade (proprietário/administrador, com motivo). */
+    authorizeSurplus: z.boolean().optional(),
+    surplusReason: z.string().trim().max(500).nullish(),
     idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{8,100}$/, "Chave de idempotência inválida"),
   })
   .superRefine((v, ctx) => {

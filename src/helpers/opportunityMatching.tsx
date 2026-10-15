@@ -1,7 +1,8 @@
 import { db } from "./db.js";
 import { recordAuditLogEntry } from "./auditLog.js";
 import { flootAi, FlootAiOutOfCreditsError, AiTimeoutError } from "./aiClient.js";
-import { getNeedFulfillmentBalanceBatch, computeNeedProgress } from "./needFulfillment.js";
+import { getNeedFulfillmentBalance, getNeedFulfillmentBalanceBatch, computeNeedProgress } from "./needFulfillment.js";
+import { getNeedAttendance, getNeedAttendanceBatch, remainingToAttend } from "./needAttendance.js";
 import { sql } from "kysely";
 import type { Transaction } from "kysely";
 import type { DB, Json, NeedPriority } from "./schema.js";
@@ -235,10 +236,16 @@ export async function runMatchingForOpportunity(
     // esteja neste conjunto.
     const candidateNeedIds = candidates.map((c) => c.needId);
     const fulfillmentByNeedId = await getNeedFulfillmentBalanceBatch(trx, candidateNeedIds);
+    // Fase 99F: o saldo que ainda falta usa o MENOR entre (a) o que a rede já SUPRIU (ledger de suprimento, que continua sendo a medida do que foi enviado) e (b) o que já foi
+    // ATENDIDO por destinações (atendimento final). Equivale a "solicitado − max(suprimento, atendido)": uma necessidade parcial continua pedindo só o que falta, uma já atendida
+    // (ou cancelada, que nem é candidata) deixa de receber, e o mesmo recurso nunca é contado duas vezes (suprimento recebido e depois destinado). Pesos e limiares: inalterados.
+    const attendanceByNeedId = await getNeedAttendanceBatch(trx, candidateNeedIds);
     const remainingByNeedId = new Map<number, number>();
     for (const c of candidates) {
-      const progress = computeNeedProgress(Number(c.quantityNeeded), fulfillmentByNeedId.get(c.needId) ?? 0);
-      remainingByNeedId.set(c.needId, progress.requiredRemaining);
+      const supply = computeNeedProgress(Number(c.quantityNeeded), fulfillmentByNeedId.get(c.needId) ?? 0);
+      const attendance = attendanceByNeedId.get(c.needId);
+      const attendedRemaining = attendance ? remainingToAttend(Number(c.quantityNeeded), attendance) : Number(c.quantityNeeded);
+      remainingByNeedId.set(c.needId, Math.min(supply.requiredRemaining, attendedRemaining));
     }
     const eligibleCandidates = candidates.filter((c) => (remainingByNeedId.get(c.needId) ?? 0) > 0);
 
@@ -598,6 +605,16 @@ export async function runMatchingForOpportunity(
           .execute();
         continue;
       }
+
+      // Fase 99F: a necessidade foi lida SEM trava no início; uma destinação que a complete (ou um encerramento) pode ter acontecido desde então. Relê o estado confirmado sob
+      // trava compartilhada (espera a transação concorrente da necessidade terminar) e não cria atribuição para necessidade que deixou de estar aberta ou já está atendida.
+      const live = await trx.selectFrom("needs").select(["status", "quantityNeeded"]).where("id", "=", cand.needId).forShare().executeTakeFirst();
+      if (!live || live.status !== "aberta") continue;
+      const liveRemaining = Math.min(
+        computeNeedProgress(Number(live.quantityNeeded), await getNeedFulfillmentBalance(trx, cand.needId)).requiredRemaining,
+        remainingToAttend(Number(live.quantityNeeded), await getNeedAttendance(trx, cand.needId))
+      );
+      if (liveRemaining <= 0) continue;
 
       const quantityToAllocate = remaining !== null ? Math.min(remaining, cand.needQuantity) : cand.needQuantity;
       const isHighConfidence = cand.finalScore >= HIGH_CONFIDENCE_THRESHOLD;

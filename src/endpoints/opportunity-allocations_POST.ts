@@ -3,6 +3,7 @@ import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePlatformAdmin } from "../helpers/platformAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
 import { getNeedFulfillmentBalance, computeNeedProgress } from "../helpers/needFulfillment.js";
+import { getNeedAttendance, remainingToAttend } from "../helpers/needAttendance.js";
 import { schema } from "./opportunity-allocations_POST.schema.js";
 import { sql } from "kysely";
 import superjson from "superjson";
@@ -62,7 +63,9 @@ export async function handle(request: Request) {
 
         const fulfilled = await getNeedFulfillmentBalance(trx, need.id);
         const progress = computeNeedProgress(Number(need.quantityNeeded), fulfilled);
-        if (progress.requiredRemaining <= 0) return { type: "need_no_remaining" as const };
+        // Fase 99F: também não aloca para necessidade já ATENDIDA por destinações (o menor entre o que falta pela rede e o que falta ao atendimento final)
+        const attendedRemaining = remainingToAttend(Number(need.quantityNeeded), await getNeedAttendance(trx, need.id));
+        if (Math.min(progress.requiredRemaining, attendedRemaining) <= 0) return { type: "need_no_remaining" as const };
       }
 
       // Nunca deixamos a soma das atribuições passar da quantidade total

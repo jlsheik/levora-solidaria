@@ -39,12 +39,14 @@ export function DestinationDialog({ organizationId, item, canAuthorizeLate, onCl
   const [peopleUnit, setPeopleUnit] = useState<"familias" | "pessoas">("pessoas");
   const [notes, setNotes] = useState("");
   const [lateReason, setLateReason] = useState("");
+  const [surplusOk, setSurplusOk] = useState(false);
+  const [surplusReason, setSurplusReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [key, setKey] = useState(newKey);
 
   useEffect(() => {
     if (item) {
-      setQuantity(""); setType(""); setNeedId(""); setDeliveredOn(businessDateOf(new Date())); setPeople(""); setPeopleUnit("pessoas"); setNotes(""); setLateReason(""); setError(null); setKey(newKey());
+      setQuantity(""); setType(""); setNeedId(""); setDeliveredOn(businessDateOf(new Date())); setPeople(""); setPeopleUnit("pessoas"); setNotes(""); setLateReason(""); setSurplusOk(false); setSurplusReason(""); setError(null); setKey(newKey());
     }
   }, [item?.id]);
 
@@ -63,6 +65,9 @@ export function DestinationDialog({ organizationId, item, canAuthorizeLate, onCl
   const retroactive = dateCheck.ok && dateCheck.retroactive;
   const selectedNeed = eligibleNeeds.find((n) => String(n.id) === needId);
   const unitMismatchNeed = !!selectedNeed && !!item && classifyUnit(selectedNeed.unit).canonicalId !== classifyUnit(item.unit).canonicalId;
+  // Fase 99F: quanto FALTA da necessidade (vem do servidor, derivado das destinações); a decisão final é sempre do servidor, aqui só se antecipa o aviso
+  const needRemaining = selectedNeed && !unitMismatchNeed ? selectedNeed.attendance.remaining : null;
+  const surplusPreview = needRemaining !== null && qtyValid && qty > needRemaining ? Math.round((qty - needRemaining) * 1000) / 1000 : 0;
   const risk = type !== "" && item && qtyValid ? evaluateDestinationRisk({ destinationType: type, quantity: qty, balanceBefore: item.currentStock }) : [];
   const notesRequired = type !== "" && REASON_REQUIRED_TYPES.includes(type);
 
@@ -73,6 +78,9 @@ export function DestinationDialog({ organizationId, item, canAuthorizeLate, onCl
   if (!dateCheck.ok) problems.push(dateCheck.reason === "futura" ? "A data efetiva não pode ser futura." : "Informe uma data válida.");
   if (retroactive && !canAuthorizeLate) problems.push(`Datas com mais de ${MAX_RETROACTIVE_DAYS} dias exigem proprietário ou administrador.`);
   if (retroactive && canAuthorizeLate && lateReason.trim().length < 10) problems.push("Explique por que a data é retroativa (mínimo de 10 caracteres).");
+  if (surplusPreview > 0 && !canAuthorizeLate) problems.push(`A quantidade supera o que falta da necessidade (faltam ${needRemaining} ${selectedNeed!.unit}). Reduza a quantidade: só proprietário ou administrador autoriza excedente.`);
+  if (surplusPreview > 0 && canAuthorizeLate && !surplusOk) problems.push(`A quantidade supera em ${surplusPreview} o que falta (${needRemaining} ${selectedNeed!.unit}). Reduza a quantidade ou autorize o excedente.`);
+  if (surplusPreview > 0 && canAuthorizeLate && surplusOk && surplusReason.trim().length < 10) problems.push("Explique o excedente (mínimo de 10 caracteres).");
   if (notesRequired && notes.trim().length < NOTES_MIN_WHEN_REQUIRED) problems.push(`Descreva o motivo (mínimo de ${NOTES_MIN_WHEN_REQUIRED} caracteres).`);
   if (people !== "" && !(Number.isInteger(Number(people)) && Number(people) >= 0)) problems.push("Pessoas atendidas deve ser um número inteiro.");
   const ready = !!item && type !== "" && qtyValid && problems.length === 0 && quantity !== "";
@@ -90,6 +98,8 @@ export function DestinationDialog({ organizationId, item, canAuthorizeLate, onCl
         peopleUnit: attendance && people !== "" ? peopleUnit : null,
         notes: notes.trim() || null,
         lateRegistrationReason: retroactive ? lateReason.trim() : null,
+        authorizeSurplus: surplusPreview > 0 && surplusOk ? true : undefined,
+        surplusReason: surplusPreview > 0 && surplusOk ? surplusReason.trim() : null,
         idempotencyKey: key,
       }),
     onSuccess: (result) => {
@@ -137,10 +147,24 @@ export function DestinationDialog({ organizationId, item, canAuthorizeLate, onCl
               ) : (
                 <select id="dest-need" className={`${inputStyles.input} ${styles.select}`} value={needId} onChange={(e) => setNeedId(e.target.value)}>
                   <option value="">Não vincular</option>
-                  {eligibleNeeds.map((n) => <option key={n.id} value={n.id}>{n.title} ({n.quantityNeeded} {n.unit})</option>)}
+                  {eligibleNeeds.map((n) => <option key={n.id} value={n.id}>{n.title} (faltam {n.attendance.remaining} de {n.quantityNeeded} {n.unit})</option>)}
                 </select>
               )}
               {unitMismatchNeed && <p className={styles.warning} role="status">A unidade da necessidade ({selectedNeed!.unit}) não é a do item ({item.unit}): a saída será registrada, mas NÃO contará como atendimento da necessidade. Nada é convertido.</p>}
+
+              {surplusPreview > 0 && canAuthorizeLate && (
+                <>
+                  <label className={styles.label} htmlFor="dest-surplus-ok">
+                    <input id="dest-surplus-ok" type="checkbox" checked={surplusOk} onChange={(e) => setSurplusOk(e.target.checked)} /> Autorizo o excedente de {surplusPreview} {item.unit} (o atendimento conta só o que faltava)
+                  </label>
+                  {surplusOk && (
+                    <>
+                      <label className={styles.label} htmlFor="dest-surplus-reason">Motivo do excedente</label>
+                      <Textarea id="dest-surplus-reason" value={surplusReason} maxLength={500} onChange={(e) => setSurplusReason(e.target.value)} />
+                    </>
+                  )}
+                </>
+              )}
 
               <div className={styles.row}>
                 <div>
