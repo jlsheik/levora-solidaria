@@ -31,6 +31,7 @@ export const UNIT_SOURCES: readonly UnitSourceDefinition[] = [
   { id: "donation_opportunities", label: "Doação local", meaning: "Unidade informada pela organização na doação local (opcional); hoje não é lida no recebimento.", table: "donation_opportunities", column: "unit", nullable: true },
   { id: "opportunity_registry", label: "Oferta da rede (atribuída)", meaning: "Unidade da oferta da rede atribuída à organização (opcional); hoje não é lida no recebimento.", table: "opportunity_registry", column: "unit", nullable: true },
   { id: "organization_capacities", label: "Capacidade de armazenamento", meaning: "Unidade da capacidade declarada; usada pelo matching junto da categoria.", table: "organization_capacities", column: "unit", nullable: false },
+  { id: "stock_destinations", label: "Destinação de estoque", meaning: "Unidade canônica do item copiada na destinação (eventos imutáveis; só unidades do vocabulário). Ainda sem gravação: a 99E criará os registros.", table: "stock_destinations", column: "unit", nullable: true },
   { id: "need_fulfillments", label: "Suprimento recebido (ledger)", meaning: "Unidade copiada do item no recebimento da rede; registro imutável.", table: "need_fulfillments", column: "unit", nullable: false },
 ] as const;
 

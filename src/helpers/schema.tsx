@@ -308,6 +308,57 @@ export interface UnitRegularizationEvents {
   reason: string | null;
 }
 
+export type StockDestinationEntryType = "correction" | "original" | "reversal";
+
+export type StockDestinationType = "atendimento_coletivo" | "descarte" | "devolucao_ao_doador" | "distribuicao_familias" | "doacao_a_terceiro" | "entrega_instituicao_parceira" | "perda" | "uso_operacional_instituicao";
+
+export type StockDestinationReversalKind = "correcao_quantidade" | "devolucao_fisica" | "estorno_documental";
+
+export interface StockDestinations {
+  authorizedByUserId: number | null;
+  createdAt: Generated<Timestamp>;
+  createdByUserId: number;
+  deliveredOn: Timestamp | null;
+  destinationType: StockDestinationType | null;
+  entryType: StockDestinationEntryType;
+  id: Generated<Int8>;
+  isCountable: boolean | null;
+  itemId: number;
+  lateRegistrationReason: string | null;
+  needId: number | null;
+  notes: string | null;
+  organizationId: number;
+  peopleServed: number | null;
+  peopleUnit: "familias" | "pessoas" | null;
+  proofFileId: number | null;
+  quantity: Numeric | null;
+  reason: string | null;
+  reversalKind: StockDestinationReversalKind | null;
+  reversesDestinationId: Int8 | null;
+  stockTransactionId: Int8 | null;
+  surplusReason: string | null;
+  unit: string | null;
+}
+
+export type NeedClosureEntryType = "encerramento" | "reabertura";
+
+export type NeedClosureReasonCode = "desistencia_da_organizacao" | "duplicidade" | "necessidade_superada" | "outro" | "recursos_insuficientes";
+
+export interface NeedClosures {
+  attendedSnapshot: Numeric | null;
+  correctsClosureId: Int8 | null;
+  createdAt: Generated<Timestamp>;
+  createdByUserId: number;
+  entryType: NeedClosureEntryType;
+  id: Generated<Int8>;
+  needId: number;
+  organizationId: number;
+  quantityNeededSnapshot: Numeric | null;
+  reasonCode: NeedClosureReasonCode | null;
+  reasonText: string | null;
+  remainingSnapshot: Numeric | null;
+}
+
 export interface PlatformAssignmentSettings {
   id: number;
   responseDeadlineHours: Generated<number>;
@@ -482,7 +533,9 @@ export interface DB {
   organizationServiceAreas: OrganizationServiceAreas;
   organizations: Organizations;
   sessions: Sessions;
+  needClosures: NeedClosures;
   sources: Sources;
+  stockDestinations: StockDestinations;
   unitRegularizationCases: UnitRegularizationCases;
   unitRegularizationEvents: UnitRegularizationEvents;
   stockTransactions: StockTransactions;

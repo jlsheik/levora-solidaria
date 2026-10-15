@@ -6,7 +6,7 @@ Código: `src/helpers/unitVocabulary.ts` (vocabulário e classificação, puro),
 
 ## 1. Onde a unidade adquire significado de negócio
 
-Há **seis colunas** `unit` no schema (`db/schema.sql`); `stock_transactions` **não** tem unidade — o saldo é expresso na unidade do item. O teste `test/unitInventory.test.ts` (caso 13) lê o schema e falha se aparecer uma coluna `unit` que não esteja no inventário.
+Há **sete colunas** `unit` no schema (`db/schema.sql`; a sétima, `stock_destinations.unit`, entrou na Fase 99D e já está no inventário, ainda sem registros); `stock_transactions` **não** tem unidade — o saldo é expresso na unidade do item. O teste `test/unitInventory.test.ts` (caso 13) lê o schema e falha se aparecer uma coluna `unit` que não esteja no inventário.
 
 | Origem (tabela.campo) | Anulável | Como o valor nasce | Onde vira significado de negócio |
 |---|---|---|---|
