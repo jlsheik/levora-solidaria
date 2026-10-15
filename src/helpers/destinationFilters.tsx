@@ -65,6 +65,6 @@ export function destinationWhere(f: DestinationFilter): RawBuilder<unknown> {
   if (f.state === "ativa") parts.push(sql`${REVERSED} = 0`);
   if (f.state === "parcialmente_revertida") parts.push(sql`${REVERSED} > 0 AND ${REVERSED} < d.quantity`);
   if (f.state === "revertida") parts.push(sql`${REVERSED} >= d.quantity`);
-  if (f.state === "com_correcao") parts.push(sql`EXISTS (SELECT 1 FROM stock_destinations c WHERE c.entry_type = 'correction' AND c.reverses_destination_id = d.id)`);
+  if (f.state === "com_correcao") parts.push(sql`EXISTS (SELECT 1 FROM stock_destinations c WHERE c.entry_type = 'correction' AND c.reverses_destination_id = d.id AND c.proof_file_id IS NULL)`);
   return sql.join(parts.map((p) => sql`(${p})`), sql` AND `);
 }

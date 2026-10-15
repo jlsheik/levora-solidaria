@@ -8,7 +8,7 @@ export const ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp", "
 
 export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),
-  purpose: z.enum(["comprovante_entrega"]),
+  purpose: z.enum(["comprovante_entrega", "comprovante_destinacao"]),
   // Sem caracteres de controle (\r, \n, etc.) — este valor é gravado como
   // `originalFilename` e depois usado literalmente no header
   // `Content-Disposition` do download (files-download_GET.ts). Sem esta

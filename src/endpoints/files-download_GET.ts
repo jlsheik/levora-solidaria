@@ -1,6 +1,8 @@
 import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
-import { requireOrganizationMembership } from "../helpers/organizationAccess.js";
+import { requireOrganizationMembership, requirePermission } from "../helpers/organizationAccess.js";
+import { roleHasPermission } from "../helpers/permissions.js";
+import { getProofState, PROOF_PURPOSE } from "../helpers/destinationProofs.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
 import { adapterForProvider, keyBelongsToOrganization } from "../helpers/storageAdapter.js";
 import { schema } from "./files-download_GET.schema.js";
@@ -22,7 +24,7 @@ export async function handle(request: Request) {
 
     const file = await db
       .selectFrom("files")
-      .select(["id", "organizationId", "storageProvider", "storageKey", "originalFilename", "contentType"])
+      .select(["id", "organizationId", "storageProvider", "storageKey", "originalFilename", "contentType", "purpose", "uploadedByUserId"])
       .where("id", "=", input.fileId)
       .executeTakeFirst();
 
@@ -33,7 +35,18 @@ export async function handle(request: Request) {
       });
     }
 
-    await requireOrganizationMembership(user.id, file.organizationId);
+    const membership = await requireOrganizationMembership(user.id, file.organizationId);
+
+    // Fase 99J — comprovante de DESTINAÇÃO: pertencer à organização não basta. Exige a permissão de leitura de destinações (`inventario.lance`) E um vínculo vigente com uma destinação da
+    // organização. Arquivo pendente (ainda sem vínculo) ou com a referência removida só é servido a quem o enviou e a proprietário/administrador (para conferir/auditar), nunca como comprovante.
+    if (file.purpose === PROOF_PURPOSE) {
+      await requirePermission(user.id, file.organizationId, "inventario.lance");
+      const proof = await getProofState(db, file.organizationId, file.id);
+      const privileged = file.uploadedByUserId === user.id || roleHasPermission(membership.role, "organizacao.gerencie");
+      if (proof.state !== "vigente" && !privileged) {
+        return new Response(superjson.stringify({ message: "Arquivo não encontrado" }), { status: 404, headers: { "Content-Type": "application/json" } });
+      }
+    }
 
     // Chave adulterada no banco (de outra organização, com `..` ou fora do formato) nunca vai ao armazenamento: o objeto servido tem de ser da organização do registro.
     if (!keyBelongsToOrganization(file.storageKey, file.organizationId)) {

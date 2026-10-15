@@ -407,6 +407,8 @@ Doação local com `linked_need_id`: o recebimento **não** é atendimento; o v�
 
 ## 12. Privacidade e comprovantes [E5]
 
+> **Implementação (99J):** `docs/DESTINACAO_COMPROVANTES_99J.md`. Decisões: o vínculo é evento `correction` com `proof_file_id`; remoção por `proof_removed`; leitura pelas permissões existentes (`inventario.lance` + vínculo vigente), sem a permissão `destinacoes.leia` proposta; sem política de retenção.
+
 **Requisitos aprovados (ainda NÃO implementados; ver `docs/PRIVACY.md`):**
 - **Sem cadastro nominal** de beneficiários. Registra-se: finalidade, quantidade, unidade, data efetiva e de registro, necessidade (se houver), número agregado de pessoas/famílias com `people_unit`, observações operacionais **não sensíveis**, comprovante opcional, autor, histórico de correção e reversão.
 - `people_served` **não** é número de pessoas distintas: relatórios o rotulam "soma das quantidades declaradas nos registros".

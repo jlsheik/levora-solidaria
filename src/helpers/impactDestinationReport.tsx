@@ -76,6 +76,8 @@ export interface DestinationReport {
   records: number;
   correctedRecords: number;
   revertedRecords: number;
+  /** Fase 99J: registros do filtro com comprovante VIGENTE (opcional) × sem comprovante. Não há comprovante obrigatório; ausência não é irregularidade. Só contagem: o acesso ao arquivo é protegido no download. */
+  proofs: { withProof: number; withoutProof: number };
   byPurpose: DestinationPurposeRow[];
   /** Indicadores separados por grupo e unidade (físico líquido). Nunca somam unidades diferentes. */
   indicators: Array<{ group: IndicatorGroup; unit: string; physicalNet: number }>;
@@ -134,7 +136,7 @@ export async function buildDestinationReport(db: Kysely<DB>, p: DestinationParam
            coalesce(sum(CASE WHEN d.need_id IS NOT NULL AND NOT d.is_countable THEN d.quantity - coalesce(r.q, 0) ELSE 0 END), 0) AS incompatible_net,
            coalesce(sum(pe.people) FILTER (WHERE pe.people_unit = 'pessoas' AND coalesce(r.q, 0) < d.quantity), 0) AS persons,
            coalesce(sum(pe.people) FILTER (WHERE pe.people_unit = 'familias' AND coalesce(r.q, 0) < d.quantity), 0) AS families,
-           count(*) FILTER (WHERE EXISTS (SELECT 1 FROM stock_destinations c WHERE c.entry_type = 'correction' AND c.reverses_destination_id = d.id)) AS corrected,
+           count(*) FILTER (WHERE EXISTS (SELECT 1 FROM stock_destinations c WHERE c.entry_type = 'correction' AND c.proof_file_id IS NULL AND c.reverses_destination_id = d.id)) AS corrected,
            count(*) FILTER (WHERE r.q IS NOT NULL) AS reverted_records
       FROM stock_destinations d
       JOIN inventory_items i ON i.id = d.item_id AND i.organization_id = ${org}
@@ -188,7 +190,7 @@ export async function buildDestinationReport(db: Kysely<DB>, p: DestinationParam
   // eventos corretivos criados no período (data de registro), com os mesmos filtros de item/necessidade (via a original)
   const ev = (
     await sql<{ corrections: string; estorno: string; devolucao: string; quantidade: string }>`
-    SELECT count(*) FILTER (WHERE x.entry_type = 'correction') AS corrections,
+    SELECT count(*) FILTER (WHERE x.entry_type = 'correction' AND x.proof_file_id IS NULL) AS corrections,
            count(*) FILTER (WHERE x.reversal_kind = 'estorno_documental') AS estorno,
            count(*) FILTER (WHERE x.reversal_kind = 'devolucao_fisica') AS devolucao,
            count(*) FILTER (WHERE x.reversal_kind = 'correcao_quantidade') AS quantidade
@@ -216,12 +218,23 @@ export async function buildDestinationReport(db: Kysely<DB>, p: DestinationParam
   const toWithout = (automatic: boolean): WithoutDestinationRow[] =>
     withoutRows.filter((r) => r.automatic === automatic).map((r) => ({ itemId: r.itemId, itemName: r.itemName, unit: r.unit, count: num(r.n), quantity: num(r.q) }));
 
+  const proofRow = (
+    await sql<{ withProof: string }>`
+    SELECT count(*) FILTER (WHERE coalesce((SELECT NOT (e.proof_removed IS TRUE) FROM stock_destinations e WHERE (e.id = d.id OR e.reverses_destination_id = d.id) AND e.proof_file_id IS NOT NULL ORDER BY e.id DESC LIMIT 1), false)) AS with_proof
+      FROM stock_destinations d
+     WHERE d.organization_id = ${org} AND d.entry_type = 'original' ${windowCond} ${itemCond} ${needCond} ${typeCond}
+  `.execute(db)
+  ).rows[0];
+  const totalRecords = byPurpose.reduce((sum, r) => sum + r.records, 0);
+  const withProof = num(proofRow.withProof);
+
   return {
     basis: p.basis,
     filters: { destinationType: p.destinationType },
     records: byPurpose.reduce((sum, r) => sum + r.records, 0),
     correctedRecords: rows.reduce((sum, r) => sum + num(r.corrected), 0),
     revertedRecords: rows.reduce((sum, r) => sum + num(r.revertedRecords), 0),
+    proofs: { withProof, withoutProof: totalRecords - withProof },
     byPurpose,
     indicators,
     eventsInPeriod: { corrections: num(ev.corrections), estornoDocumental: num(ev.estorno), devolucaoFisica: num(ev.devolucao), correcaoQuantidade: num(ev.quantidade) },

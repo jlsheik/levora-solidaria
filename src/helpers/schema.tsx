@@ -332,6 +332,7 @@ export interface StockDestinations {
   peopleServed: number | null;
   peopleUnit: "familias" | "pessoas" | null;
   proofFileId: number | null;
+  proofRemoved: boolean | null;
   quantity: Numeric | null;
   reason: string | null;
   reversalKind: StockDestinationReversalKind | null;

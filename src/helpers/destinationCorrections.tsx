@@ -446,6 +446,8 @@ export interface DestinationEventView {
   /** Para uma reversão: houve movimento físico de estoque (entrada ou ajuste)? */
   physicalMovement: "entrada" | "ajuste" | null;
   changes: { deliveredOn: string | null; peopleServed: number | null; peopleUnit: string | null; notes: string | null };
+  /** Fase 99J: evento de comprovante (anexo ou remoção da referência); nunca movimenta estoque. */
+  proof: { fileId: number; name: string; action: "anexado" | "removido" } | null;
   createdByDisplayName: string;
   createdAt: string;
 }
@@ -470,6 +472,10 @@ export interface DestinationView {
   documentallyRevertedQuantity: number;
   quantityCorrectedQuantity: number;
   state: "ativa" | "parcialmente_revertida" | "revertida";
+  /** Fase 99J: comprovante VIGENTE (opcional); o download é autorizado de novo pelo servidor a cada acesso. */
+  proof: { fileId: number; name: string; contentType: string; sizeBytes: number; attachedAt: string; attachedByDisplayName: string; downloadUrl: string } | null;
+  /** O usuário que consulta pode anexar comprovante a esta destinação (quem registrou ou proprietário/administrador, sem comprovante vigente). A decisão final é do servidor. */
+  canAttachProof: boolean;
   createdByDisplayName: string;
   createdAt: string;
   events: DestinationEventView[];
@@ -505,7 +511,8 @@ export async function destinationTotals(db: Kysely<DB> | Transaction<DB>, filter
 export async function listDestinationHistory(
   db: Kysely<DB> | Transaction<DB>,
   organizationId: number,
-  filter: Omit<DestinationFilter, "organizationId"> & { limit: number; beforeId?: string }
+  filter: Omit<DestinationFilter, "organizationId"> & { limit: number; beforeId?: string },
+  viewer?: { userId: number; canManage: boolean }
 ): Promise<{ destinations: DestinationView[]; hasMore: boolean }> {
   const full: DestinationFilter = { ...filter, organizationId };
   // ordem ESTÁVEL por id decrescente (keyset): os filtros nunca mudam a ordenação, e `beforeId` não pula nem repete linhas
@@ -525,7 +532,7 @@ export async function listDestinationHistory(
     .innerJoin("inventoryItems as i", "i.id", "d.itemId")
     .innerJoin("users as u", "u.id", "d.createdByUserId")
     .leftJoin("needs as n", "n.id", "d.needId")
-    .select(["d.id", "d.itemId", "i.name as itemName", "d.destinationType", "d.quantity", "d.unit", "d.isCountable", "d.appliedQuantity", "d.surplusQuantity", "d.needId", "n.title as needTitle", "n.status as needStatus", "d.deliveredOn", "d.peopleServed", "d.peopleUnit", "d.notes", "u.displayName as createdByDisplayName", "d.createdAt"])
+    .select(["d.id", "d.itemId", "i.name as itemName", "d.destinationType", "d.quantity", "d.unit", "d.isCountable", "d.appliedQuantity", "d.surplusQuantity", "d.needId", "n.title as needTitle", "n.status as needStatus", "d.deliveredOn", "d.peopleServed", "d.peopleUnit", "d.notes", "u.displayName as createdByDisplayName", "d.createdByUserId", "d.createdAt"])
     .where("d.organizationId", "=", organizationId)
     .where("d.id", "in", pageIds)
     .orderBy("d.id", "desc")
@@ -537,7 +544,8 @@ export async function listDestinationHistory(
     .selectFrom("stockDestinations as e")
     .innerJoin("users as u", "u.id", "e.createdByUserId")
     .leftJoin("stockTransactions as t", "t.id", "e.stockTransactionId")
-    .select(["e.id", "e.entryType", "e.reversalKind", "e.quantity", "e.reason", "e.stockTransactionId", "t.type as movementType", "e.reversesDestinationId", "e.deliveredOn", "e.peopleServed", "e.peopleUnit", "e.notes", "u.displayName as createdByDisplayName", "e.createdAt"])
+    .leftJoin("files as pf", (j) => j.onRef("pf.id", "=", "e.proofFileId").on("pf.organizationId", "=", organizationId))
+    .select(["e.id", "e.entryType", "e.reversalKind", "e.quantity", "e.reason", "e.stockTransactionId", "t.type as movementType", "e.reversesDestinationId", "e.deliveredOn", "e.peopleServed", "e.peopleUnit", "e.notes", "e.proofFileId", "e.proofRemoved", "pf.originalFilename as proofName", "pf.contentType as proofType", "pf.sizeBytes as proofSize", "u.displayName as createdByDisplayName", "e.createdAt"])
     .where("e.organizationId", "=", organizationId)
     .where("e.entryType", "in", ["correction", "reversal"])
     .where("e.reversesDestinationId", "in", rows.map((r) => r.id))
@@ -555,6 +563,8 @@ export async function listDestinationHistory(
       recorded,
       mine.filter((e) => e.entryType === "correction").map((e) => ({ id: String(e.id), deliveredOn: e.deliveredOn === null ? null : dateOnly(e.deliveredOn), peopleServed: e.peopleServed, peopleUnit: e.peopleUnit as "familias" | "pessoas" | null, notes: e.notes }))
     );
+    const proofEvents = mine.filter((e) => e.proofFileId !== null);
+    const lastProof = proofEvents[proofEvents.length - 1];
     return {
       id: String(r.id),
       itemId: r.itemId,
@@ -574,6 +584,8 @@ export async function listDestinationHistory(
       documentallyRevertedQuantity: sum("estorno_documental"),
       quantityCorrectedQuantity: sum("correcao_quantidade"),
       state: reversed <= 0 ? "ativa" : reversed >= quantity ? "revertida" : "parcialmente_revertida",
+      proof: lastProof && lastProof.proofRemoved !== true ? { fileId: lastProof.proofFileId!, name: lastProof.proofName ?? "arquivo", contentType: lastProof.proofType ?? "", sizeBytes: Number(lastProof.proofSize ?? 0), attachedAt: lastProof.createdAt.toISOString(), attachedByDisplayName: lastProof.createdByDisplayName, downloadUrl: `/_api/v1/files-download?fileId=${lastProof.proofFileId}` } : null,
+      canAttachProof: !(lastProof && lastProof.proofRemoved !== true) && !!viewer && (viewer.canManage || viewer.userId === r.createdByUserId),
       createdByDisplayName: r.createdByDisplayName,
       createdAt: r.createdAt.toISOString(),
       events: mine.map((e): DestinationEventView => ({
@@ -585,6 +597,7 @@ export async function listDestinationHistory(
         stockTransactionId: e.stockTransactionId === null ? null : String(e.stockTransactionId),
         physicalMovement: e.movementType === "entrada" || e.movementType === "ajuste" ? e.movementType : null,
         changes: { deliveredOn: e.deliveredOn === null ? null : dateOnly(e.deliveredOn), peopleServed: e.peopleServed, peopleUnit: e.peopleUnit, notes: e.notes },
+        proof: e.proofFileId === null ? null : { fileId: e.proofFileId, name: e.proofName ?? "arquivo", action: e.proofRemoved === true ? "removido" : "anexado" },
         createdByDisplayName: e.createdByDisplayName,
         createdAt: e.createdAt.toISOString(),
       })),

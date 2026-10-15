@@ -476,3 +476,10 @@ Edição de quantidade, unidade, item e status das necessidades; edição de ite
 - **Interface:** página `/organizacoes/:id/destinacoes` (aba "Destinação"), filtros na URL, totais, cartões com correções/reversões e ações da 99G; 7 cenários `qa:visual` (perfil `ci`: 65 de 74), incluindo o filtro por necessidade.
 - **Não implementado:** exportação (a especificação não a atribui a nenhuma fase), visão histórica por data de corte (revertido/situação são acumulados até hoje), administração da plataforma.
 - **Pendente (99J, 99K):** comprovantes e privacidade (99J); validação de ponta a ponta (99K). A Fase 99 **não** está concluída.
+
+**Fase 99J (comprovantes de destinação) implementada — branch `fase-99j-destination-proofs`, encadeada sobre a 99I (PR #14) → 99H (#13) → 99G (#12) → 99F (#11); nada integrado.** Detalhes: `docs/DESTINACAO_COMPROVANTES_99J.md`.
+- **Migration `0023_destination_proofs`:** `proof_removed`, CHECKs de forma, índice único (um arquivo vincula-se uma vez) e gatilho (propósito, remoção só do vigente). Vínculo = evento `correction` imutável; remover = evento com `proof_removed`; o objeto armazenado nunca é apagado. Reaproveita `files`/`storageAdapter`/`files-upload` (novo propósito `comprovante_destinacao`) e a idempotência das correções.
+- **Autorização:** download exige `inventario.lance` + vínculo vigente (pendente/removido só autor ou proprietário/administrador); anexar = quem registrou (com o próprio arquivo) ou proprietário/administrador; remover = proprietário/administrador. Sem permissão nova.
+- **Interface:** comprovante no cartão da destinação (abrir, anexar, remover) com linha do tempo; **relatório da 99H** com contagem com × sem comprovante; 5 cenários `qa:visual` (perfil `ci`: 70).
+- **Limitações:** sem retenção/exclusão/anonimização (avaliação jurídica), sem antimalware, sem limpeza automática de arquivos pendentes, sem barra de progresso percentual.
+- **Pendente (99K):** validação de ponta a ponta. A Fase 99 **não** está concluída; exportação segue sem atribuição na especificação.

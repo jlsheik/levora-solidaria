@@ -12,6 +12,7 @@ import { Badge } from "./Badge";
 import { Input } from "./Input";
 import { Textarea } from "./Textarea";
 import { Skeleton } from "./Skeleton";
+import { AttachProofDialog, RemoveProofDialog, proofSizeLabel } from "./DestinationProofDialogs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./Dialog";
 import inputStyles from "./Input.module.css";
 import styles from "./DestinationHistory.module.css";
@@ -35,6 +36,8 @@ export function DestinationHistory({ organizationId, filters = {}, initialLimit 
   const queryClient = useQueryClient();
   const [reverseTarget, setReverseTarget] = useState<DestinationView | null>(null);
   const [correctTarget, setCorrectTarget] = useState<DestinationView | null>(null);
+  const [proofTarget, setProofTarget] = useState<DestinationView | null>(null);
+  const [removeProofTarget, setRemoveProofTarget] = useState<DestinationView | null>(null);
   const [limit, setLimit] = useState(initialLimit);
   const filterKey = JSON.stringify(filters);
   // mudar o filtro volta à primeira página (a ordenação é sempre por id decrescente, estável)
@@ -89,20 +92,33 @@ export function DestinationHistory({ organizationId, filters = {}, initialLimit 
                   Revertido: <strong>{d.reversedQuantity} {d.unit}</strong> · ainda reversível: <strong>{d.reversibleQuantity} {d.unit}</strong>
                   {d.reversedQuantity > 0 ? <> (devolvido ao estoque: {d.physicallyReturnedQuantity} · estorno documental: {d.documentallyRevertedQuantity} · correção de quantidade: {d.quantityCorrectedQuantity})</> : null}
                 </p>
+                <div className={styles.proofBox} data-testid="destination-proof">
+                  {d.proof ? (
+                    <>
+                      <span><strong>Comprovante:</strong> {d.proof.name} ({proofSizeLabel(d.proof.sizeBytes)}) · anexado por {d.proof.attachedByDisplayName} em {new Date(d.proof.attachedAt).toLocaleString("pt-BR")}</span>
+                      <a className={styles.proofLink} href={d.proof.downloadUrl} target="_blank" rel="noopener noreferrer" aria-label={`Abrir o comprovante ${d.proof.name}`}>Abrir comprovante</a>
+                    </>
+                  ) : (
+                    <span>Sem comprovante anexado (opcional).</span>
+                  )}
+                </div>
                 {d.events.length > 0 && (
                   <ol className={styles.events} aria-label="Histórico de correções e reversões">
                     {d.events.map((e) => (
                       <li key={e.id}>
-                        <strong>{e.entryType === "reversal" ? (e.reversalKind ? KIND_INFO[e.reversalKind as Kind].label.split(" (")[0] : "Reversão") : "Correção documental"}</strong>
+                        <strong>{e.proof ? (e.proof.action === "anexado" ? "Comprovante anexado" : "Referência ao comprovante removida") : e.entryType === "reversal" ? (e.reversalKind ? KIND_INFO[e.reversalKind as Kind].label.split(" (")[0] : "Reversão") : "Correção documental"}</strong>
+                        {e.proof ? ` (${e.proof.name})` : ""}
                         {e.entryType === "reversal" ? ` de ${e.quantity} ${d.unit}` : ""}
                         {e.entryType === "reversal" ? (e.physicalMovement ? ` — com movimento físico (${e.physicalMovement === "entrada" ? "entrada" : "ajuste"} de estoque)` : " — sem movimento de estoque") : " — sem movimento de estoque"}
-                        {e.entryType === "correction" ? <> — {[e.changes.deliveredOn ? `data: ${fmtDate(e.changes.deliveredOn)}` : null, e.changes.peopleServed !== null ? `pessoas: ${e.changes.peopleServed}` : null, e.changes.notes ? `observações: ${e.changes.notes}` : null].filter(Boolean).join("; ")}</> : null}
+                        {e.entryType === "correction" && !e.proof ? <> — {[e.changes.deliveredOn ? `data: ${fmtDate(e.changes.deliveredOn)}` : null, e.changes.peopleServed !== null ? `pessoas: ${e.changes.peopleServed}` : null, e.changes.notes ? `observações: ${e.changes.notes}` : null].filter(Boolean).join("; ")}</> : null}
                         {" · "}“{e.reason}” · {e.createdByDisplayName} em {new Date(e.createdAt).toLocaleString("pt-BR")}
                       </li>
                     ))}
                   </ol>
                 )}
                 <div className={styles.actions}>
+                  {d.canAttachProof && <Button variant="outline" size="sm" onClick={() => setProofTarget(d)} aria-label={`Anexar comprovante à destinação de ${d.itemName}`}>Anexar comprovante</Button>}
+                  {d.proof && query.data!.canReverse && <Button variant="outline" size="sm" onClick={() => setRemoveProofTarget(d)} aria-label={`Remover o comprovante da destinação de ${d.itemName}`}>Remover comprovante</Button>}
                   <Button variant="outline" size="sm" onClick={() => setCorrectTarget(d)} aria-label={`Corrigir dados da destinação de ${d.itemName}`}>Corrigir dados</Button>
                   {query.data!.canReverse && d.reversibleQuantity > 0 && (
                     <Button variant="outline" size="sm" onClick={() => setReverseTarget(d)} aria-label={`Reverter a destinação de ${d.itemName}`}>Reverter</Button>
@@ -119,6 +135,8 @@ export function DestinationHistory({ organizationId, filters = {}, initialLimit 
         <p className={styles.help}>{Object.values(filters).some((v) => v !== undefined && v !== "") ? "Nenhuma destinação corresponde aos filtros. Ajuste o período, a finalidade ou a situação." : "Nenhuma destinação registrada ainda."}</p>
       )}
       <ReversalDialog organizationId={organizationId} target={reverseTarget} onClose={() => setReverseTarget(null)} onDone={refreshAll} />
+      <AttachProofDialog organizationId={organizationId} target={proofTarget} onClose={() => setProofTarget(null)} onDone={refreshAll} />
+      <RemoveProofDialog organizationId={organizationId} target={removeProofTarget} onClose={() => setRemoveProofTarget(null)} onDone={refreshAll} />
       <CorrectionDialog organizationId={organizationId} target={correctTarget} onClose={() => setCorrectTarget(null)} onDone={refreshAll} />
     </section>
   );
