@@ -5,6 +5,7 @@
  * `handle()` de qualquer endpoint em src/endpoints, exatamente como o
  * server/index.ts real faz.
  */
+import { sql } from "kysely";
 import { randomBytes } from "node:crypto";
 import superjson from "superjson";
 import { db } from "../src/helpers/db";
@@ -203,4 +204,18 @@ export function buildRequest(
 
 export async function parseJson<T>(response: Response): Promise<T> {
   return superjson.parse<T>(await response.text());
+}
+
+/**
+ * Fixture de CONCORRÊNCIA (Fase 99E): um outro escritor consumindo o mesmo estoque sob a trava do item e sem deixar o saldo negativo. A saída real do produto exige destinação (e,
+ * acima de 30% do saldo, segunda aprovação), então testes de corrida do ledger usam este consumo direto para disputar a trava do item. Devolve 200 (consumiu) ou 409 (sem saldo).
+ */
+export async function consumeStockForTest(organizationId: number, userId: number, itemId: number, quantity: number): Promise<{ status: 200 | 409 }> {
+  return db.transaction().execute(async (trx) => {
+    await trx.selectFrom("inventoryItems").select("id").where("id", "=", itemId).forUpdate().executeTakeFirstOrThrow();
+    const row = await trx.selectFrom("stockTransactions").select(sql<string>`COALESCE(SUM(delta), 0)`.as("t")).where("itemId", "=", itemId).executeTakeFirstOrThrow();
+    if (Number(row.t) - quantity < 0) return { status: 409 as const };
+    await trx.insertInto("stockTransactions").values({ organizationId, itemId, type: "saida", delta: String(-quantity), reason: "consumo concorrente de teste", createdByUserId: userId }).execute();
+    return { status: 200 as const };
+  });
 }

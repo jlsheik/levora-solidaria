@@ -29,7 +29,7 @@ relatorios.leia
 organizacao.gerencie
 ```
 
-`organizacao.gerencie` (Fase 99C: também valida conferências, encerra casos e corrige a unidade da doação local na regularização de unidades — `docs/UNIDADES_REGULARIZACAO_99C.md`; a fila de pendências e a conferência usam `logistica.gerencie`; nenhuma permissão nova) (Fase 99B: também autoriza, só para leitura, o diagnóstico de unidades — `GET unit-inventory`, `docs/UNIDADES_INVENTARIO_99B.md`; nenhuma permissão nova) (Fase 21): edita capacidade por categoria, área de
+`inventario.lance` autoriza o registro de saída com destinação (Fase 99E, `docs/DESTINACAO_REGISTRO_99E.md`); `organizacao.gerencie` também autoriza data retroativa (> 7 dias) nesse registro e `aprovacoes.decida` decide as saídas de alto risco (sem permissão nova). `organizacao.gerencie` (Fase 99C: também valida conferências, encerra casos e corrige a unidade da doação local na regularização de unidades — `docs/UNIDADES_REGULARIZACAO_99C.md`; a fila de pendências e a conferência usam `logistica.gerencie`; nenhuma permissão nova) (Fase 99B: também autoriza, só para leitura, o diagnóstico de unidades — `GET unit-inventory`, `docs/UNIDADES_INVENTARIO_99B.md`; nenhuma permissão nova) (Fase 21): edita capacidade por categoria, área de
 atendimento e configuração de logística da própria organização (dados que
 alimentam o motor de matching). Sem `organizacao.leia` correspondente —
 ler essa configuração é aberto a qualquer membro ativo via

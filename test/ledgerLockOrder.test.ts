@@ -244,15 +244,15 @@ describe("Fase 81 — fluxos REAIS contra um recebimento 'no meio' (item travado
     expect(await stock(e.itemId)).toBe(0);
   }, 40000);
 
-  it("needs-status 'atendida' (need FOR UPDATE → item, com baixa de estoque) contra o recebimento no meio: sem 40P01", async () => {
+  it("needs-status 'atendida' (need FOR UPDATE; desde a 99E sem baixa de estoque) contra o recebimento no meio: sem 40P01", async () => {
     const e = await setupEnv(true);
-    await receive(e, 100); // estoque para a baixa (need de 50 kg ligada ao item)
+    await receive(e, 100); // estoque (need de 50 kg ligada ao item; 'atendida' não baixa mais)
     const out = await against(e, () =>
       postNeedsStatus(buildRequest("needs-status", { method: "POST", cookie: e.owner.cookie, body: { organizationId: e.orgId, needId: e.needId, status: "atendida" } }))
     );
     expect(out.holderOutcome).toEqual({ ok: true });
     expect(out.status).toBe(200);
-    expect(await stock(e.itemId)).toBe(50);
+    expect(await stock(e.itemId)).toBe(100); // sem baixa automática (Fase 99E);
   }, 30000);
 });
 

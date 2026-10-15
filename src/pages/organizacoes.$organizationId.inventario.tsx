@@ -32,6 +32,7 @@ import { Button } from "../components/Button";
 import { Badge } from "../components/Badge";
 import { UnitText } from "../components/UnitText";
 import { UnitSelect } from "../components/UnitSelect";
+import { DestinationDialog, type DestinationItem } from "../components/DestinationDialog";
 import { Skeleton } from "../components/Skeleton";
 import {
   Select,
@@ -59,7 +60,7 @@ const newItemSchema = z.object({
 });
 
 const movementSchema = z.object({
-  type: z.enum(StockTransactionTypeArrayValues),
+  type: z.enum(["entrada", "ajuste"]), // saída física: registro de destinação (Fase 99E)
   quantity: z.coerce.number().refine((v) => v !== 0, "Informe uma quantidade diferente de zero"),
   reason: z.string().min(2, "Descreva o motivo"),
 });
@@ -104,6 +105,9 @@ export default function InventoryPage() {
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Falha ao cadastrar item"),
   });
+
+  const [destinationItem, setDestinationItem] = useState<DestinationItem | null>(null);
+  const canAuthorizeLate = org?.myRole === "proprietario" || org?.myRole === "administrador";
 
   const movementMutation = useMutation({
     mutationFn: (data: z.infer<typeof movementSchema>) =>
@@ -287,7 +291,12 @@ export default function InventoryPage() {
                     movementForm.setValues({ type: "entrada", quantity: 0, reason: "" } as any);
                   }}
                 >
-                  Lançar movimentação
+                  Entrada ou ajuste
+                </Button>
+              )}
+              {canManage && (
+                <Button variant="primary" size="sm" onClick={() => setDestinationItem({ id: item.id, name: item.name, unit: item.unit, currentStock: item.currentStock })}>
+                  Registrar destinação
                 </Button>
               )}
             </div>
@@ -356,6 +365,8 @@ export default function InventoryPage() {
         )}
       </section>
 
+      <DestinationDialog organizationId={organizationId} item={destinationItem} canAuthorizeLate={!!canAuthorizeLate} onClose={() => setDestinationItem(null)} />
+
       <Dialog open={!!movementItem} onOpenChange={(open) => !open && setMovementItem(null)}>
         <DialogContent>
           <DialogHeader>
@@ -382,7 +393,6 @@ export default function InventoryPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="entrada">Entrada</SelectItem>
-                      <SelectItem value="saida">Saída</SelectItem>
                       <SelectItem value="ajuste">Ajuste (pode ser negativo)</SelectItem>
                     </SelectContent>
                   </Select>

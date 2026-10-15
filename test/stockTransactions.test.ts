@@ -1,3 +1,5 @@
+import { handle as postDestination } from "../src/endpoints/stock-destinations_POST";
+import { businessDateOf } from "../src/helpers/businessDate";
 import { describe, it, expect, beforeEach } from "vitest";
 import { db } from "../src/helpers/db";
 import { handle as postStockTransaction } from "../src/endpoints/stock-transactions_POST";
@@ -38,20 +40,21 @@ describe("POST /stock-transactions", () => {
     expect(data.transaction.delta).toBe(50);
   });
 
-  it("bloqueia saída que deixaria o saldo negativo (409)", async () => {
+  it("Fase 99E: a saída física NÃO é lançada aqui (400, orienta para a destinação) e a saída que deixaria o saldo negativo é bloqueada (409) no registro de destinação", async () => {
     await postStockTransaction(
-      buildRequest("stock-transactions", {
-        method: "POST",
-        cookie: owner.cookie,
-        body: { organizationId: orgId, itemId, type: "entrada", quantity: 10, reason: "Entrada inicial" },
-      })
+      buildRequest("stock-transactions", { method: "POST", cookie: owner.cookie, body: { organizationId: orgId, itemId, type: "entrada", quantity: 10, reason: "Entrada inicial" } })
     );
 
-    const response = await postStockTransaction(
-      buildRequest("stock-transactions", {
+    const old = await postStockTransaction(
+      buildRequest("stock-transactions", { method: "POST", cookie: owner.cookie, body: { organizationId: orgId, itemId, type: "saida", quantity: 5, reason: "Distribuição" } })
+    );
+    expect(old.status).toBe(400);
+
+    const response = await postDestination(
+      buildRequest("stock-destinations", {
         method: "POST",
         cookie: owner.cookie,
-        body: { organizationId: orgId, itemId, type: "saida", quantity: 20, reason: "Distribuição" },
+        body: { organizationId: orgId, itemId, quantity: 20, destinationType: "distribuicao_familias", deliveredOn: businessDateOf(new Date()), idempotencyKey: "chave-teste-saldo-negativo" },
       })
     );
     expect(response.status).toBe(409);
@@ -61,7 +64,7 @@ describe("POST /stock-transactions", () => {
       .select((eb) => eb.fn.sum("delta").as("total"))
       .where("itemId", "=", itemId)
       .executeTakeFirst();
-    expect(Number(stockRow?.total ?? 0)).toBe(10); // a tentativa bloqueada não deixou rastro
+    expect(Number(stockRow?.total ?? 0)).toBe(10); // as tentativas bloqueadas não deixaram rastro
   });
 
   it("exige segunda aprovação para ajuste negativo de alto risco em vez de aplicar direto", async () => {

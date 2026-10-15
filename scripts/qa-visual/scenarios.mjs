@@ -45,6 +45,9 @@ const UNITS_EMPTY = "/organizacoes/2/unidades";
 const REGULARIZATION = "/organizacoes/1/regularizacao";
 const REGULARIZATION_EMPTY = "/organizacoes/2/regularizacao";
 const openConfer = { click: { css: "button", text: "^Conferir quantidade" } };
+// Fase 99E: diálogo de registro de saída com destinação (inventário). O saldo semeado do primeiro item é pequeno: 9999 é "saldo insuficiente".
+const openDestination = { click: { css: "button", text: "^Registrar destinação" } };
+const inDialog = (css) => ({ css, within: '[role="dialog"]' });
 const editNeed = { click: { css: 'button[class*="_ghost_"]', text: "^Editar a necessidade" } };
 const openReceive = { click: { css: "button", text: "^Registrar recebimento direto" } };
 // arquivo sintético que o FileDropzone RECUSA (a lista aceita é image/jpeg, image/png, image/webp): provoca o estado de erro real
@@ -67,6 +70,8 @@ export const CI_PROFILE_IDS = [
   // Fase 99B: tela de diagnóstico de unidades (classificadas, desconhecidas/ambíguas, vazio, erro, filtros; os 4 viewports incluem o móvel)
   // Fase 99C: fila de pendências de unidade (caso aberto, vazio, erro, filtros, diálogo de conferência, aviso na atribuição)
   "regularization-status-open", "regularization-empty", "regularization-error", "regularization-filter-select", "regularization-filter-no-results", "regularization-confer-qty", "regularization-confer-reason", "regularization-allocation-notice",
+  // Fase 99E: registro de saída com destinação (botão, campos, finalidades, saldo insuficiente, aprovação por risco, necessidade)
+  "destination-primary-button", "destination-qty", "destination-type-select", "destination-notes", "destination-insufficient", "destination-approval-notice", "destination-need-select",
   "units-badge-canonical", "units-badge-unknown", "units-badge-ambiguous", "units-empty", "units-error", "units-filter-select", "units-filter-input", "units-filtered-unknown", "units-filter-no-results", "units-inventory-pending-marker",
 ];
 
@@ -90,7 +95,7 @@ export const SCENARIOS = [
   { id: "matching-ghost-delete-icon", user: "owner", path: MATCHING, steps: [], target: { css: 'button[class*="_ghost_"]', text: "^Excluir capacidade" }, measure: "button", variant: "ghost (ícone)", states: ALL4 },
   { id: "matching-destructive-confirm", user: "owner", path: MATCHING, steps: [{ click: { css: 'button[class*="_ghost_"]', text: "^Excluir capacidade" } }], target: { css: 'button[class*="_destructive_"]', text: "^Excluir", within: '[role="dialog"]' }, measure: "button", variant: "destructive", states: ALL4 },
   { id: "matching-switch", user: "owner", path: MATCHING, steps: [], target: { css: '[role="switch"]' }, measure: "switch", variant: "Switch", states: ["off", "off-focus", "on", "on-focus"] },
-  { id: "inventory-secondary-movement", user: "owner", path: INVENTORY, steps: [], target: { css: 'button[class*="_secondary_"]', text: "^Lançar movimentação" }, measure: "button", variant: "secondary", states: ALL4 },
+  { id: "inventory-secondary-movement", user: "owner", path: INVENTORY, steps: [], target: { css: 'button[class*="_secondary_"]', text: "^Entrada ou ajuste" }, measure: "button", variant: "secondary", states: ALL4 },
 
   // ---- inventário: variação de estoque (saída de 1 kg semeada) — sinal, cor e contenção
   { id: "inventory-delta-negative", user: "owner", path: INVENTORY, steps: [], target: { css: '[class*="_deltaNegative_"]' }, measure: "text", variant: "Inventário: variação negativa", sign: "^[-−]\\s?\\d" },
@@ -126,6 +131,15 @@ export const SCENARIOS = [
   { id: "regularization-confer-qty", user: "owner", path: REGULARIZATION, steps: [openConfer], target: { css: "input#reg-qty", within: '[role="dialog"]' }, measure: "field", variant: "Regularização: diálogo (quantidade)", expect: { height: 40 } },
   { id: "regularization-confer-reason", user: "owner", path: REGULARIZATION, steps: [openConfer], target: { css: "textarea#reg-reason", within: '[role="dialog"]' }, measure: "field", variant: "Regularização: diálogo (motivo)", expect: { minHeight: 96 } },
   { id: "regularization-allocation-notice", user: "owner", path: ATTRIBUTIONS, steps: [], target: { css: 'p[role="status"]', text: "^Recebimento pendente de regularização" }, measure: "text", variant: "Regularização: aviso na atribuição" },
+
+  // ---- Fase 99E: registro de saída com destinação (o servidor é a autoridade; aqui só a interface renderizada)
+  { id: "destination-primary-button", user: "owner", path: INVENTORY, steps: [], target: { css: 'button[class*="_primary_"]', text: "^Registrar destinação" }, measure: "button", variant: "Destinação: botão primário", states: ALL4 },
+  { id: "destination-qty", user: "owner", path: INVENTORY, steps: [openDestination], target: inDialog("input#dest-qty"), measure: "field", variant: "Destinação: quantidade", expect: { height: 40 } },
+  { id: "destination-type-select", user: "owner", path: INVENTORY, steps: [openDestination], target: inDialog("select#dest-type"), measure: "field", variant: "Destinação: finalidade", expect: { height: 40 } },
+  { id: "destination-notes", user: "owner", path: INVENTORY, steps: [openDestination], target: inDialog("textarea#dest-notes"), measure: "field", variant: "Destinação: observações", expect: { minHeight: 96 } },
+  { id: "destination-insufficient", user: "owner", path: INVENTORY, steps: [openDestination, { type: { css: "input#dest-qty", text: "9999" } }], target: { css: "#dest-problems li", text: "^Saldo insuficiente", within: '[role="dialog"]' }, measure: "text", variant: "Destinação: saldo insuficiente" },
+  { id: "destination-approval-notice", user: "owner", path: INVENTORY, steps: [openDestination, { type: { css: "input#dest-qty", text: "1" } }, { select: { css: "select#dest-type", value: "perda" } }], target: { css: 'p[role="status"]', text: "^Exige segunda aprovação", within: '[role="dialog"]' }, measure: "text", variant: "Destinação: aprovação pendente" },
+  { id: "destination-need-select", user: "owner", path: INVENTORY, steps: [openDestination, { select: { css: "select#dest-type", value: "distribuicao_familias" } }], target: inDialog("select#dest-need"), measure: "field", variant: "Destinação: necessidade", expect: { height: 40 } },
 
   // ---- voluntário: Switch desabilitado
   { id: "matching-switch-disabled", user: "volunteer", path: MATCHING, steps: [], target: { css: '[role="switch"]' }, measure: "switch", variant: "Switch (desabilitado)", states: ["disabled"], info: true },
