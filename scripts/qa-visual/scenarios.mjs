@@ -50,6 +50,7 @@ const openDestination = { click: { css: "button", text: "^Registrar destinação
 const inDialog = (css) => ({ css, within: '[role="dialog"]' });
 // Fase 99F: encerramento de necessidade e leitura do atendimento derivado
 const openClose = { click: { css: 'button[class*="_outline_"]', text: "^Encerrar a necessidade" } };
+const openReverse = { click: { css: 'button[class*="_outline_"]', text: "^Reverter a destinação" } };
 const editNeed = { click: { css: 'button[class*="_ghost_"]', text: "^Editar a necessidade" } };
 const openReceive = { click: { css: "button", text: "^Registrar recebimento direto" } };
 // arquivo sintético que o FileDropzone RECUSA (a lista aceita é image/jpeg, image/png, image/webp): provoca o estado de erro real
@@ -73,6 +74,7 @@ export const CI_PROFILE_IDS = [
   // Fase 99C: fila de pendências de unidade (caso aberto, vazio, erro, filtros, diálogo de conferência, aviso na atribuição)
   "regularization-status-open", "regularization-empty", "regularization-error", "regularization-filter-select", "regularization-filter-no-results", "regularization-confer-qty", "regularization-confer-reason", "regularization-allocation-notice",
   // Fase 99E: registro de saída com destinação (botão, campos, finalidades, saldo insuficiente, aprovação por risco, necessidade)
+  "destination-history-numbers", "destination-history-event", "destination-history-reverse-button", "destination-reversal-kind", "destination-reversal-consequence", "destination-reversal-reason",
   "needs-close-button", "needs-close-dialog-reason", "needs-close-dialog-description", "needs-attendance-text", "needs-attendance-historical-note", "needs-closure-note",
   "destination-primary-button", "destination-qty", "destination-type-select", "destination-notes", "destination-insufficient", "destination-approval-notice", "destination-need-select",
   "units-badge-canonical", "units-badge-unknown", "units-badge-ambiguous", "units-empty", "units-error", "units-filter-select", "units-filter-input", "units-filtered-unknown", "units-filter-no-results", "units-inventory-pending-marker",
@@ -134,6 +136,14 @@ export const SCENARIOS = [
   { id: "regularization-confer-qty", user: "owner", path: REGULARIZATION, steps: [openConfer], target: { css: "input#reg-qty", within: '[role="dialog"]' }, measure: "field", variant: "Regularização: diálogo (quantidade)", expect: { height: 40 } },
   { id: "regularization-confer-reason", user: "owner", path: REGULARIZATION, steps: [openConfer], target: { css: "textarea#reg-reason", within: '[role="dialog"]' }, measure: "field", variant: "Regularização: diálogo (motivo)", expect: { minHeight: 96 } },
   { id: "regularization-allocation-notice", user: "owner", path: ATTRIBUTIONS, steps: [], target: { css: 'p[role="status"]', text: "^Recebimento pendente de regularização" }, measure: "text", variant: "Regularização: aviso na atribuição" },
+
+  // ---- Fase 99G: histórico de destinações, correções e reversões (inventário)
+  { id: "destination-history-numbers", user: "owner", path: INVENTORY, steps: [], target: { css: '[data-testid="destination-card"] p', text: "^Revertido:" }, measure: "text", variant: "Histórico: saldo reversível" },
+  { id: "destination-history-event", user: "owner", path: INVENTORY, steps: [], target: { css: '[data-testid="destination-card"] ol li', text: "^Estorno documental" }, measure: "text", variant: "Histórico: evento de reversão" },
+  { id: "destination-history-reverse-button", user: "owner", path: INVENTORY, steps: [], target: { css: 'button[class*="_outline_"]', text: "^Reverter a destinação" }, measure: "button", variant: "outline: Reverter", states: ALL4 },
+  { id: "destination-reversal-kind", user: "owner", path: INVENTORY, steps: [openReverse], target: inDialog("select#rev-kind"), measure: "field", variant: "Reversão: tipo", expect: { height: 40 } },
+  { id: "destination-reversal-consequence", user: "owner", path: INVENTORY, steps: [openReverse, { select: { css: "select#rev-kind", value: "devolucao_fisica" } }], target: { css: '[data-testid="reversal-consequence"]', within: '[role="dialog"]' }, measure: "text", variant: "Reversão: consequência física" },
+  { id: "destination-reversal-reason", user: "owner", path: INVENTORY, steps: [openReverse], target: inDialog("textarea#rev-reason"), measure: "field", variant: "Reversão: motivo", expect: { minHeight: 96 } },
 
   // ---- Fase 99F: atendimento derivado das destinações, encerramento com motivo e registro histórico
   { id: "needs-close-button", user: "owner", path: NEEDS, steps: [], target: { css: 'button[class*="_outline_"]', text: "^Encerrar a necessidade" }, measure: "button", variant: "outline: Encerrar necessidade", states: ALL4 },

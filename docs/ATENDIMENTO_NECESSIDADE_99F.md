@@ -57,4 +57,4 @@ Página de necessidades: barra de progresso (`role=progressbar`), atendido/falta
 
 ## Fora do escopo (próximas subfases)
 
-Correções, reversões e devolução física (99G, que terá de reavaliar `atendida` quando um atendimento for revertido); relatórios (99H); histórico/prestação de contas na interface (99I); comprovantes e privacidade (99J); validação de ponta a ponta (99K).
+Correções, reversões e devolução física — implementadas na 99G (`docs/DESTINACAO_CORRECOES_99G.md`), que reavalia `atendida` na mesma transação da reversão; relatórios (99H); histórico/prestação de contas na interface (99I); comprovantes e privacidade (99J); validação de ponta a ponta (99K).
