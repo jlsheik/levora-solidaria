@@ -30,7 +30,7 @@ export interface RegularizationCaseRow {
   allocationId: number | null;
   donationOpportunityId: number | null;
   itemId: number;
-  divergenceKind: "unidade_diferente" | "unidade_nao_classificada";
+  divergenceKind: "unidade_ausente" | "unidade_diferente" | "unidade_nao_classificada";
   offeredQuantity: string | null;
   offeredUnit: string | null;
   informedQuantity: string;
@@ -91,7 +91,7 @@ export interface OpenCaseInput {
   informedQuantity: number;
   itemUnit: string;
   receiptNotes: string | null;
-  divergenceKind: "unidade_diferente" | "unidade_nao_classificada";
+  divergenceKind: "unidade_ausente" | "unidade_diferente" | "unidade_nao_classificada";
   userId: number;
 }
 

@@ -43,7 +43,7 @@ async function setup(needQuantity = 300): Promise<Env> {
 }
 
 async function allocation(e: Env, quantityAllocated: number, needId: number | null = e.needId) {
-  const opp = await createTestOpportunityRegistry(e.sourceId, e.platformId, { status: "reservada" });
+  const opp = await createTestOpportunityRegistry(e.sourceId, e.platformId, { unit: "kg", status: "reservada" });
   return (await db.insertInto("opportunityAllocations").values({ opportunityRegistryId: opp.id, organizationId: e.orgId, quantityAllocated: String(quantityAllocated), status: "aceita", needId }).returning(["id"]).executeTakeFirstOrThrow()).id;
 }
 const receive = (e: Env, allocationId: number, quantityReceived: number, user = e.owner) =>

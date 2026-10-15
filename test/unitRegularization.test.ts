@@ -104,8 +104,8 @@ describe("recebimento compatível segue o fluxo normal", () => {
     expect(await caseRows(n.allocId)).toHaveLength(0);
   });
 
-  it("alias comprovado (KG/kg; unidades/unidade) e oferta sem unidade são compatíveis", async () => {
-    for (const [offer, item] of [["KG", "kg"], ["unidades", "unidade"], [null, "kg"]] as const) {
+  it("alias comprovado (KG/kg; unidades/unidade) é compatível", async () => {
+    for (const [offer, item] of [["KG", "kg"], ["unidades", "unidade"]] as const) {
       const n = await network({ offerUnit: offer, itemUnit: item });
       expect((await receive(n)).status, `${offer} x ${item}`).toBe(200);
       expect(await caseRows(n.allocId)).toHaveLength(0);
@@ -552,5 +552,92 @@ describe("integridade no banco", () => {
     await correctOfferHandle(post("unit-regularization-correct-offer", n.platform.cookie, { caseId: c.id, newUnit: "kg", reason: "Cadastro da oferta com unidade errada" }));
     expect(await getItemStockBalance(db, n.item.id)).toBe(before);
     expect(await ledgerRows(n.allocId)).toHaveLength(0);
+  });
+});
+
+describe("oferta SEM unidade (NULL, vazia, só espaços) é unidade desconhecida: nunca presumida compatível", () => {
+  it("NULL, vazia e só espaços: 202, caso 'unidade_ausente', sem estoque, ledger, atendimento nem mudança de status; a quantidade original é preservada", async () => {
+    for (const offerUnit of [null, "", "   "]) {
+      const n = await network({ offerUnit, itemUnit: "kg" });
+      const res = await receive(n);
+      expect(res.status, JSON.stringify(offerUnit)).toBe(202);
+      expect(await stockRows(n.item.id)).toHaveLength(0);
+      expect(await ledgerRows(n.allocId)).toHaveLength(0);
+      expect(await allocStatus(n.allocId)).toBe("aceita");
+      const [c] = await caseRows(n.allocId);
+      expect(c).toMatchObject({ status: "aberto", divergenceKind: "unidade_ausente", itemUnit: "kg" });
+      expect(c.offeredUnit === null || c.offeredUnit.trim() === "").toBe(true);
+      expect(Number(c.offeredQuantity)).toBe(10);
+      expect(Number(c.informedQuantity)).toBe(10);
+    }
+  });
+
+  it("fluxo curto: conferir (quantidade sugerida pela informada, mas CONFIRMADA) + validar lança uma vez a quantidade CONFERIDA, não a original; retry durante a regularização não duplica", async () => {
+    const n = await network({ offerUnit: null, itemUnit: "kg" });
+    const second = await createAuthenticatedUser();
+    await addMembership(n.org.id, second.userId, "administrador");
+    expect((await receive(n)).status).toBe(202);
+    expect((await receive(n)).status).toBe(202); // retry durante a regularização
+    const [c] = await caseRows(n.allocId);
+    expect(await caseRows(n.allocId)).toHaveLength(1);
+    expect((await confer(n, c.id, { checkedQuantity: 8.25 })).status).toBe(200);
+    expect((await receive(n)).status).toBe(202); // retry com o caso conferido
+    expect(await stockRows(n.item.id)).toHaveLength(0);
+    expect((await validate(n, c.id, "aprovar", second.cookie)).status).toBe(200);
+    const stock = await stockRows(n.item.id);
+    expect(stock).toHaveLength(1);
+    expect(Number(stock[0].delta)).toBe(8.25); // a quantidade original (10) NÃO é reinterpretada
+    const ledger = await ledgerRows(n.allocId);
+    expect(ledger).toHaveLength(1);
+    expect(Number(ledger[0].quantity)).toBe(8.25);
+    expect(ledger[0].unit).toBe("kg");
+    const [row] = await caseRows(n.allocId);
+    expect(Number(row.offeredQuantity)).toBe(10);
+    expect(Number(row.checkedQuantity)).toBe(8.25);
+  });
+
+  it("único proprietário/administrador ativo: confere e valida no mesmo ato; a exceção fica registrada no caso e na auditoria", async () => {
+    const n = await network({ offerUnit: null, itemUnit: "kg" });
+    const c = await openCaseFor(n);
+    const done = await confer(n, c.id, { validateNow: true, checkedQuantity: 7 });
+    expect((await parseJson<{ status: string }>(done)).status).toBe("resolvido");
+    const [row] = await caseRows(n.allocId);
+    expect(row.withoutSecondValidation).toBe(true);
+    const events = await db.selectFrom("unitRegularizationEvents").select(["eventType", "reason"]).where("caseId", "=", c.id).orderBy("id").execute();
+    expect(events.at(-1)!.reason).toContain("sem segunda validação");
+    expect((await audits("regularizacao.resolvida", c.id))[0].metadata).toMatchObject({ semSegundaValidacao: true, quantidadeConferida: 7 });
+  });
+
+  it("falha de auditoria na abertura do caso por unidade ausente: nada fica gravado, o retry funciona; outra organização não enxerga nem resolve o caso", async () => {
+    const n = await network({ offerUnit: null, itemUnit: "kg" });
+    await installAuditFailure("regularizacao.caso_aberto");
+    try {
+      expect((await receive(n)).status).toBeGreaterThanOrEqual(500);
+      expect(await caseRows(n.allocId)).toHaveLength(0);
+      expect(await stockRows(n.item.id)).toHaveLength(0);
+    } finally {
+      await removeAuditFailure();
+    }
+    expect((await receive(n)).status).toBe(202);
+    const [c] = await caseRows(n.allocId);
+    const stranger = await createAuthenticatedUser();
+    const strangerOrg = await createTestOrganization(stranger.userId);
+    expect((await conferHandle(post("unit-regularization-confer", stranger.cookie, { organizationId: strangerOrg.id, caseId: c.id, checkedQuantity: 1, reason: "tentativa em caso de outra organização" }))).status).toBe(404);
+    expect((await caseRows(n.allocId))[0].status).toBe("aberto");
+  });
+
+  it("oferta com unidade conhecida e compatível continua pelo fluxo normal, e a idempotência do recebimento local (Fase 96) permanece: a segunda tentativa é 409", async () => {
+    const n = await network({ offerUnit: "kg", itemUnit: "kg" });
+    expect((await receive(n)).status).toBe(200);
+    expect((await receive(n)).status).toBe(409);
+    expect(await stockRows(n.item.id)).toHaveLength(1);
+    const owner = await createAuthenticatedUser();
+    const org = await createTestOrganization(owner.userId);
+    const item = await createTestInventoryItem(org.id, owner.userId, { name: "Item", unit: "kg" });
+    const [d] = await db.insertInto("donationOpportunities").values({ organizationId: org.id, title: "Local sem unidade", donorName: "Doador", quantityOffered: "5", createdByUserId: owner.userId }).returning("id").execute();
+    const local = () => receiveLocalHandle(post("opportunities-receive", owner.cookie, { organizationId: org.id, opportunityId: d.id, itemId: item.id, quantityReceived: 5 }));
+    expect((await local()).status).toBe(202); // doação local sem unidade também é desconhecida
+    expect((await db.selectFrom("stockTransactions").select("id").where("itemId", "=", item.id).execute())).toHaveLength(0);
+    expect((await db.selectFrom("donationOpportunities").select("status").where("id", "=", d.id).executeTakeFirstOrThrow()).status).not.toBe("recebida");
   });
 });

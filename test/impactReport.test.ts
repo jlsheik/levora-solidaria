@@ -59,7 +59,7 @@ async function setupEnv(opts: { needQuantity?: number } = {}): Promise<Env> {
 }
 
 async function newAllocation(e: Env, needId: number | null = e.needId, status: "aceita" | "recebida" = "aceita") {
-  const opp = await createTestOpportunityRegistry(e.sourceId, e.platformId, { status: "reservada" });
+  const opp = await createTestOpportunityRegistry(e.sourceId, e.platformId, { unit: "kg", status: "reservada" });
   const [al] = await db
     .insertInto("opportunityAllocations")
     .values({ opportunityRegistryId: opp.id, organizationId: e.orgId, quantityAllocated: "100", status, needId })

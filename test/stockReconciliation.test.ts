@@ -92,7 +92,7 @@ async function runScenario(seed: number, steps: number) {
   for (let step = 0; step < steps; step++) {
     const roll = rand();
     if (roll < 0.3 || allocations.length === 0) {
-      const opp = await createTestOpportunityRegistry(e.sourceId, e.platformId, { status: "reservada" });
+      const opp = await createTestOpportunityRegistry(e.sourceId, e.platformId, { unit: "kg", status: "reservada" });
       const needId = rand() < 0.15 ? null : pick(e.needIds);
       const [al] = await db.insertInto("opportunityAllocations").values({ opportunityRegistryId: opp.id, organizationId: e.orgId, quantityAllocated: "100", status: "aceita", needId }).returning(["id"]).execute();
       const quantity = 10 + Math.floor(rand() * 90);

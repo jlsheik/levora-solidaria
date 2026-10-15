@@ -10,7 +10,7 @@ CREATE TABLE unit_regularization_cases (
   allocation_id INTEGER REFERENCES opportunity_allocations(id) ON DELETE RESTRICT,
   donation_opportunity_id INTEGER REFERENCES donation_opportunities(id) ON DELETE RESTRICT,
   item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE RESTRICT,
-  divergence_kind TEXT NOT NULL CONSTRAINT unit_regularization_cases_divergence_chk CHECK (divergence_kind IN ('unidade_diferente', 'unidade_nao_classificada')),
+  divergence_kind TEXT NOT NULL CONSTRAINT unit_regularization_cases_divergence_chk CHECK (divergence_kind IN ('unidade_ausente', 'unidade_diferente', 'unidade_nao_classificada')),
   offered_quantity NUMERIC(12,3) CONSTRAINT unit_regularization_cases_offered_qty_chk CHECK (offered_quantity IS NULL OR offered_quantity > 0),
   offered_unit TEXT,
   informed_quantity NUMERIC(12,3) NOT NULL CONSTRAINT unit_regularization_cases_informed_qty_chk CHECK (informed_quantity > 0),

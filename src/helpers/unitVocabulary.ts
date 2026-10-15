@@ -284,19 +284,21 @@ export function unitsEquivalent(a: string | null | undefined, b: string | null |
 }
 
 export type ReceiptUnitCheck =
-  | { compatible: true; reason: "oferta_sem_unidade" | "mesma_unidade" }
-  | { compatible: false; reason: "unidade_diferente" | "unidade_nao_classificada"; detail: string };
+  | { compatible: true; reason: "mesma_unidade" }
+  | { compatible: false; reason: "unidade_ausente" | "unidade_diferente" | "unidade_nao_classificada"; detail: string };
 
 /**
  * Compatibilidade entre a unidade da OFERTA e a unidade canônica do ITEM no recebimento.
- *  - oferta sem unidade: não há divergência comprovável; a quantidade digitada por quem recebeu é uma observação física na unidade do item que a tela mostra (transição
- *    documentada na 99C: bloquear isso impediria a maior parte dos recebimentos legítimos);
+ *  - oferta SEM unidade (NULL, vazia ou só espaços): a unidade é DESCONHECIDA, nunca presumida compatível. Vira caso de regularização: a quantidade só entra no estoque depois
+ *    de uma conferência física validada na unidade canônica do item (Fase 99C, correção definitiva);
  *  - mesma unidade (canônica/alias ou mesmo texto): segue o fluxo normal;
  *  - qualquer outra coisa: divergência -> caso de regularização. Nunca se tenta converter.
  */
 export function checkOfferUnitAgainstItem(offerUnit: string | null | undefined, itemUnit: string): ReceiptUnitCheck {
   const offer = classifyUnit(offerUnit);
-  if (offer.kind === "ausente") return { compatible: true, reason: "oferta_sem_unidade" };
+  if (offer.kind === "ausente") {
+    return { compatible: false, reason: "unidade_ausente", detail: `A oferta não informa unidade: a quantidade não pode ser presumida em "${itemUnit.trim()}". Confira fisicamente a quantidade na unidade do item.` };
+  }
   if (unitsEquivalent(offerUnit, itemUnit)) return { compatible: true, reason: "mesma_unidade" };
   const item = classifyUnit(itemUnit);
   if (offer.canonicalId && item.canonicalId) {

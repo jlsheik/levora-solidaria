@@ -65,7 +65,7 @@ async function setup(opts: { received?: number; needQuantity?: number; needUnit?
   const item = await createTestInventoryItem(org.id, owner.userId, { unit: opts.itemUnit ?? "kg" });
   const platform = await createAuthenticatedUser();
   const source = await createTestSource(platform.userId);
-  const opportunity = await createTestOpportunityRegistry(source.id, platform.userId, { status: "reservada" });
+  const opportunity = await createTestOpportunityRegistry(source.id, platform.userId, { unit: "kg", status: "reservada" });
   const [allocation] = await db
     .insertInto("opportunityAllocations")
     .values({ opportunityRegistryId: opportunity.id, organizationId: org.id, quantityAllocated: "100", status: "aceita", needId })

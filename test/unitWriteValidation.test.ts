@@ -49,9 +49,8 @@ describe("canonicalizeUnitForWrite (puro)", () => {
     expect(unitsEquivalent(null, "kg")).toBe(false);
   });
 
-  it("compatibilidade oferta × item: oferta sem unidade não tem divergência comprovável; o resto só passa se equivalente", () => {
-    expect(checkOfferUnitAgainstItem(null, "kg")).toEqual({ compatible: true, reason: "oferta_sem_unidade" });
-    expect(checkOfferUnitAgainstItem("  ", "kg")).toEqual({ compatible: true, reason: "oferta_sem_unidade" });
+  it("compatibilidade oferta × item: oferta SEM unidade é desconhecida (nunca compatível); o resto só passa se equivalente", () => {
+    for (const v of [null, undefined, "", "  ", "\t"]) expect(checkOfferUnitAgainstItem(v, "kg"), String(v)).toMatchObject({ compatible: false, reason: "unidade_ausente" });
     expect(checkOfferUnitAgainstItem("KG", "kg")).toEqual({ compatible: true, reason: "mesma_unidade" });
     expect(checkOfferUnitAgainstItem("caixa", "unidade")).toMatchObject({ compatible: false, reason: "unidade_diferente" });
     expect(checkOfferUnitAgainstItem("x", "kg")).toMatchObject({ compatible: false, reason: "unidade_nao_classificada" });

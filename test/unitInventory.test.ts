@@ -50,7 +50,7 @@ async function seedOrg(opts: { units: { item: string[]; need: string[]; capacity
     await db.insertInto("donationOpportunities").values({ organizationId: org.id, title: `Doação ${i}`, donorName: "Doador", unit, createdByUserId: owner.userId }).execute();
   }
   const source = await createTestSource(admin.userId);
-  const registry = await createTestOpportunityRegistry(source.id, admin.userId, { title: "Oferta sigilosa do doador" });
+  const registry = await createTestOpportunityRegistry(source.id, admin.userId, { title: "Oferta sigilosa do doador", unit: opts.units.ledgerItem });
   const allocation = await createTestAllocation(registry.id, org.id, { status: "em_transporte", quantityAllocated: 5 });
   const ledgerItem = await createTestInventoryItem(org.id, owner.userId, { name: "Item do ledger", unit: opts.units.ledgerItem });
   const receive = await receiveHandle(buildRequest("allocations-receive", { method: "POST", cookie: owner.cookie, body: { organizationId: org.id, allocationId: allocation.id, itemId: ledgerItem.id, quantityReceived: 5 } }));

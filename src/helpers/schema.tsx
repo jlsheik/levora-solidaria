@@ -272,7 +272,7 @@ export interface UnitRegularizationCases {
   conferredAt: Timestamp | null;
   conferredByUserId: number | null;
   createdAt: Generated<Timestamp>;
-  divergenceKind: "unidade_diferente" | "unidade_nao_classificada";
+  divergenceKind: "unidade_ausente" | "unidade_diferente" | "unidade_nao_classificada";
   divergenceReason: string | null;
   donationOpportunityId: number | null;
   id: Generated<number>;

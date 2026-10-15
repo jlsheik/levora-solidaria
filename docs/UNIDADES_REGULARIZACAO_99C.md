@@ -41,7 +41,7 @@ Compatibilidade (`checkOfferUnitAgainstItem`): unidade da **oferta** × unidade 
 | Situação | Resultado |
 |---|---|
 | mesma unidade canônica (ou alias) / mesmo texto | **fluxo normal** (200): estoque, ledger e status `recebida` como antes |
-| oferta **sem unidade** | **fluxo normal**. *Transição deliberada:* a quantidade digitada por quem recebeu é uma observação física na unidade do item que a tela mostra; bloquear toda oferta sem unidade (a maioria das ofertas da rede tem unidade NULL) impediria recebimentos legítimos. A ausência é registrada pela própria ausência de unidade na oferta (documentado na seção 10.4 da especificação, que previa o contrário) |
+| oferta **sem unidade** (NULL, vazia ou só espaços) | **caso** `unidade_ausente`. A ausência é **unidade desconhecida, nunca presumida compatível** (correção definitiva da 99C: uma versão anterior deixava essas ofertas seguirem o fluxo normal). Nada é lançado até uma conferência física validada na unidade do item; a tela sugere a quantidade informada ao receber para a pessoa **confirmar ou corrigir** pela contagem (atalho, não presunção), então o caminho curto é: abrir a pendência → conferir → validar (ou, se for o único proprietário/administrador ativo, conferir e validar no mesmo ato, registrado como "sem segunda validação") |
 | unidades diferentes (`caixa` × `unidade`) | **caso** `unidade_diferente` |
 | sem equivalência comprovada (`x` × `kg`, `un` × `unidade`) | **caso** `unidade_nao_classificada` |
 

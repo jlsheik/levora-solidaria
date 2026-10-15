@@ -22,7 +22,7 @@ export type RegularizationCase = {
   statusLabel: string;
   sourceType: "allocation" | "local_donation";
   sourceLabel: string;
-  divergenceKind: "unidade_diferente" | "unidade_nao_classificada";
+  divergenceKind: "unidade_ausente" | "unidade_diferente" | "unidade_nao_classificada";
   divergenceLabel: string;
   category: (typeof categories)[number];
   blockedStage: string;

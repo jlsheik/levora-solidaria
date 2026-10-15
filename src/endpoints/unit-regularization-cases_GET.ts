@@ -107,7 +107,7 @@ export async function handle(request: Request) {
         sourceType: r.sourceType,
         sourceLabel: r.sourceType === "allocation" ? "Atribuição da rede Levora" : "Doação local",
         divergenceKind: r.divergenceKind,
-        divergenceLabel: r.divergenceKind === "unidade_diferente" ? "Unidade diferente da do item" : "Unidade sem equivalência comprovada",
+        divergenceLabel: r.divergenceKind === "unidade_ausente" ? "Oferta sem unidade informada" : r.divergenceKind === "unidade_diferente" ? "Unidade diferente da do item" : "Unidade sem equivalência comprovada",
         category: r.category,
         blockedStage: "Recebimento (nada foi lançado no estoque)",
         resourceTitle: r.registryTitle ?? r.donationTitle ?? "Recurso",

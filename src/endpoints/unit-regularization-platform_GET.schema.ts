@@ -9,7 +9,7 @@ export type OutputType = {
     offeredQuantity: number | null;
     offeredUnit: string | null;
     itemUnit: string;
-    divergenceKind: "unidade_diferente" | "unidade_nao_classificada";
+    divergenceKind: "unidade_ausente" | "unidade_diferente" | "unidade_nao_classificada";
     openedAt: string;
   }>;
 };

@@ -234,7 +234,8 @@ function ActionDialog({ action, organizationId, canManage, onClose, onDone }: { 
   const [validateNow, setValidateNow] = useState(false);
 
   React.useEffect(() => {
-    setText(""); setQty(""); setUnit(""); setDecision("aprovar"); setValidateNow(false); setCategory("informacao_insuficiente");
+    // atalho, não presunção: sugere a quantidade informada ao receber para a pessoa CONFIRMAR (ou corrigir) pela contagem na unidade do item
+    setText(""); setQty(action?.kind === "confer" ? String(action.item.informedQuantity) : ""); setUnit(""); setDecision("aprovar"); setValidateNow(false); setCategory("informacao_insuficiente");
   }, [action?.kind, action?.item.id]);
 
   const done = (message: string) => { toast.success(message); onDone(); };
@@ -285,7 +286,7 @@ function ActionDialog({ action, organizationId, canManage, onClose, onDone }: { 
           {action.kind === "confer" && (
             <>
               <p className={styles.dialogHelp}>Conte ou meça o que chegou <strong>na unidade do item ({c.itemUnit})</strong>. Isto é uma observação física, não uma conversão.</p>
-              <label className={styles.fieldLabel} htmlFor="reg-qty">Quantidade conferida ({c.itemUnit})</label>
+              <label className={styles.fieldLabel} htmlFor="reg-qty">Quantidade conferida ({c.itemUnit}) — sugerida: a informada ao receber; confirme pela contagem ou corrija</label>
               <Input id="reg-qty" inputMode="decimal" required value={qty} onChange={(e) => setQty(e.target.value)} placeholder="ex.: 12,5" />
               <label className={styles.fieldLabel} htmlFor="reg-reason">Motivo da divergência</label>
               <Textarea id="reg-reason" required minLength={10} maxLength={500} value={text} onChange={(e) => setText(e.target.value)} placeholder="Explique por que a unidade ofertada difere e como a quantidade foi conferida." />
