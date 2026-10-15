@@ -110,8 +110,12 @@ describe("unit-inventory_GET — agregação", () => {
     const { owner, org } = await seedOrg({ units: DEFAULTS });
     const result = await inventory(owner, org.id);
     expect(result.sources.map((s) => s.id).sort()).toEqual(UNIT_SOURCES.map((s) => s.id).sort());
-    for (const source of result.sources) expect(source.distinctValues, source.id).toBeGreaterThan(0);
-    expect(result.rows.map((r) => r.source)).toEqual(expect.arrayContaining(UNIT_SOURCES.map((s) => s.id)));
+    // Fase 99D: stock_destinations é inventariada, mas ainda não tem gravação (nenhum registro até a 99E); as demais origens têm dados na semente
+    for (const source of result.sources) {
+      if (source.id === "stock_destinations") expect(source.distinctValues).toBe(0);
+      else expect(source.distinctValues, source.id).toBeGreaterThan(0);
+    }
+    expect(result.rows.map((r) => r.source)).toEqual(expect.arrayContaining(UNIT_SOURCES.map((s) => s.id).filter((id) => id !== "stock_destinations")));
   });
 
   it("14: as contagens agrupadas batem com o banco (valor bruto distinto, sem normalizar)", async () => {

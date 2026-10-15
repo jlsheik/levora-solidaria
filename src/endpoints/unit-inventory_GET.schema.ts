@@ -10,6 +10,7 @@ const sourceValues = [
   "opportunity_registry",
   "organization_capacities",
   "need_fulfillments",
+  "stock_destinations",
 ] as const;
 
 export const schema = z.object({
