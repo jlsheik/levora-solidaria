@@ -28,6 +28,9 @@ const TEST_STORAGE_DIR = path.resolve(process.cwd(), process.env.STORAGE_LOCAL_D
 afterAll(async () => rm(TEST_STORAGE_DIR, { recursive: true, force: true }));
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const EICAR = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+// Capture at module load: earlier tests deliberately delete CLAMD_HOST to verify fail-closed behavior.
+const REAL_CLAMD_HOST = process.env.CLAMD_HOST;
+const REAL_CLAMD_PORT = process.env.CLAMD_PORT;
 const post = (p: string, cookie: string, body: unknown) => buildRequest(p, { method: "POST", cookie, body });
 const key = () => `k-${randomBytes(8).toString("hex")}`;
 
@@ -349,9 +352,9 @@ describe("C. máquina de estados em PostgreSQL real (scanner simulado injetado)"
   });
 });
 
-describe.skipIf(!process.env.CLAMD_HOST)("D. scanner REAL (ClamAV) — só roda com CLAMD_HOST/CLAMD_PORT apontando para um clamd em rede privada", () => {
+describe.skipIf(!REAL_CLAMD_HOST)("D. scanner REAL (ClamAV) — só roda com CLAMD_HOST/CLAMD_PORT apontando para um clamd em rede privada", () => {
   it("reconhece o arquivo de teste EICAR e aprova conteúdo limpo", async () => {
-    const scanner = new ClamdScanner({ host: process.env.CLAMD_HOST!, port: Number(process.env.CLAMD_PORT ?? 3310), timeoutMs: 15000, maxBytes: 25 * 1024 * 1024 });
+    const scanner = new ClamdScanner({ host: REAL_CLAMD_HOST!, port: Number(REAL_CLAMD_PORT ?? 3310), timeoutMs: 15000, maxBytes: 25 * 1024 * 1024 });
     expect(await scanner.scan(Buffer.from(EICAR))).toMatchObject({ status: "infectado", signature: expect.stringMatching(/Eicar/i) });
     expect((await scanner.scan(Buffer.from(PNG, "base64"))).status).toBe("limpo");
   });

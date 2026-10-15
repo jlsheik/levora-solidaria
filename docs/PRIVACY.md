@@ -82,7 +82,7 @@ instruído na seção 13) e controles de acesso extras para esse dado.
 
 ## Destinação de recursos e pessoas atendidas — política APROVADA, controles ainda NÃO implementados
 
-> **Atualização pós-99K (hardening):** arquivos agora passam por análise antimalware obrigatória em produção, com bloqueio de download e de vínculo até a aprovação e falha fechada (`docs/ANTIMALWARE_ARQUIVOS.md`) — **o scanner real ainda não foi provisionado nem testado**. Retenção, exclusão e anonimização seguem **sem política** (`docs/DECISAO_RETENCAO_COMPROVANTES.md`); a conformidade com a LGPD **não** é declarada.
+> **Atualização pós-99K (hardening):** arquivos agora passam por análise antimalware obrigatória em produção, com bloqueio de download e de vínculo até a aprovação e falha fechada (`docs/ANTIMALWARE_ARQUIVOS.md`) — **o teste real local com ClamAV 1.5.4/EICAR passou em 15/10/2026, mas o scanner ainda não está provisionado na infraestrutura de produção**. Retenção, exclusão e anonimização seguem **sem política** (`docs/DECISAO_RETENCAO_COMPROVANTES.md`); a conformidade com a LGPD **não** é declarada.
 >
 > **Atualização 99K:** não existe rotina de exclusão de conta nem de conteúdo de comprovantes; a conciliação somente leitura (`GET /destination-proofs-reconciliation`) lista arquivos pendentes e de referência removida. Antimalware e política de retenção/anonimização continuam ausentes e dependem de decisão (ver `docs/DESTINACAO_VALIDACAO_99K.md`).
 >
