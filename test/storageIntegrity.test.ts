@@ -31,7 +31,7 @@ function snapshot(dir: string): string[] {
   walk(dir); return out.sort();
 }
 const insert = async (r: { organizationId: number; provider: string; key: string }, userId: number) =>
-  (await db.insertInto("files").values({ organizationId: r.organizationId, uploadedByUserId: userId, storageProvider: r.provider, storageKey: r.key, originalFilename: "dado-pessoal.png", contentType: "image/png", sizeBytes: 3, purpose: "comprovante_entrega" }).returning("id").executeTakeFirstOrThrow()).id;
+  (await db.insertInto("files").values({ scanStatus: "legado_nao_analisado", organizationId: r.organizationId, uploadedByUserId: userId, storageProvider: r.provider, storageKey: r.key, originalFilename: "dado-pessoal.png", contentType: "image/png", sizeBytes: 3, purpose: "comprovante_entrega" }).returning("id").executeTakeFirstOrThrow()).id;
 const tableDump = async () => JSON.stringify(await db.selectFrom("files").selectAll().orderBy("id").execute());
 
 beforeAll(async () => { s3 = new FakeS3(); await s3.start(); });
@@ -94,7 +94,7 @@ describe("auditoria em disco (diretório temporário isolado)", () => {
 
   it("o mecanismo é real: numa transação READ ONLY o Postgres recusa o INSERT", async () => {
     const u = await createAuthenticatedUser(); const org = (await createTestOrganization(u.userId)).id;
-    await expect(db.transaction().execute(async (trx) => { await sql`SET TRANSACTION READ ONLY`.execute(trx); await trx.insertInto("files").values({ organizationId: org, uploadedByUserId: u.userId, storageProvider: "local", storageKey: `${org}/${uuid()}`, originalFilename: "x", contentType: "image/png", sizeBytes: 1, purpose: "comprovante_entrega" }).execute(); })).rejects.toThrow(/read-only/i);
+    await expect(db.transaction().execute(async (trx) => { await sql`SET TRANSACTION READ ONLY`.execute(trx); await trx.insertInto("files").values({ scanStatus: "legado_nao_analisado", organizationId: org, uploadedByUserId: u.userId, storageProvider: "local", storageKey: `${org}/${uuid()}`, originalFilename: "x", contentType: "image/png", sizeBytes: 1, purpose: "comprovante_entrega" }).execute(); })).rejects.toThrow(/read-only/i);
   });
 
   it("links simbólicos não são seguidos (nem o conteúdo de fora da raiz é lido) — ficam como não reconhecidos", async () => {

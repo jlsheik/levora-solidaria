@@ -7,10 +7,11 @@
 import { sql, type Kysely, type Transaction } from "kysely";
 import type { DB } from "./schema.js";
 import { recordAuditLogEntry } from "./auditLog.js";
+import { isReleasable } from "./fileScanner.js";
 
 export const PROOF_PURPOSE = "comprovante_destinacao";
 
-export type ProofErrorCode = "destinacao_nao_encontrada" | "arquivo_nao_encontrado" | "arquivo_invalido" | "arquivo_ja_vinculado" | "sem_permissao" | "sem_comprovante_vigente" | "comprovante_diferente_do_vigente";
+export type ProofErrorCode = "destinacao_nao_encontrada" | "arquivo_nao_encontrado" | "arquivo_nao_aprovado" | "arquivo_invalido" | "arquivo_ja_vinculado" | "sem_permissao" | "sem_comprovante_vigente" | "comprovante_diferente_do_vigente";
 export type ProofFailure = { type: "error"; code: ProofErrorCode; status: number; message: string };
 const fail = (code: ProofErrorCode, status: number, message: string): ProofFailure => ({ type: "error", code, status, message });
 
@@ -65,10 +66,11 @@ export async function attachProof(trx: Transaction<DB>, input: { organizationId:
   const dest = await lockDestination(trx, input.organizationId, input.destinationId);
   if (!dest) return fail("destinacao_nao_encontrada", 404, "Destinação não encontrada nesta organização");
   if (!actor.canManage && dest.createdByUserId !== actor.userId) return fail("sem_permissao", 403, "Somente quem registrou a destinação, ou proprietário/administrador, pode anexar o comprovante");
-  const file = await trx.selectFrom("files").select(["id", "organizationId", "purpose", "originalFilename", "contentType", "sizeBytes", "uploadedByUserId"]).where("id", "=", input.fileId).where("organizationId", "=", input.organizationId).forUpdate().executeTakeFirst(); // trava o arquivo: dois anexos simultâneos do mesmo arquivo se serializam
+  const file = await trx.selectFrom("files").select(["id", "organizationId", "purpose", "originalFilename", "contentType", "sizeBytes", "uploadedByUserId", "scanStatus"]).where("id", "=", input.fileId).where("organizationId", "=", input.organizationId).forUpdate().executeTakeFirst(); // trava o arquivo: dois anexos simultâneos do mesmo arquivo se serializam
   if (!file) return fail("arquivo_nao_encontrado", 404, "Arquivo não encontrado nesta organização");
   if (file.purpose !== PROOF_PURPOSE) return fail("arquivo_invalido", 422, "Este arquivo não foi enviado como comprovante de destinação");
   if (!actor.canManage && file.uploadedByUserId !== actor.userId) return fail("sem_permissao", 403, "Você só pode anexar arquivos que você mesmo enviou");
+  if (!isReleasable(file.scanStatus)) return fail("arquivo_nao_aprovado", 409, "Este arquivo ainda não foi liberado pela análise de segurança e não pode ser vinculado como comprovante");
   const linked = await trx.selectFrom("stockDestinations").select("id").where("proofFileId", "=", input.fileId).where("proofRemoved", "is not", true).executeTakeFirst();
   if (linked) return fail("arquivo_ja_vinculado", 409, "Este arquivo já está vinculado a uma destinação. Envie o comprovante novamente se precisar usá-lo de novo");
   const [event] = await trx
@@ -119,6 +121,8 @@ export interface ProofFileListing {
   uploadedByDisplayName: string;
   uploadedAt: string;
   ageHours: number;
+  /** Análise antimalware: só aprovado/dispensado libera o arquivo. */
+  scanStatus: string;
 }
 
 /**
@@ -126,9 +130,9 @@ export interface ProofFileListing {
  * armazenado). Nada é apagado nem alterado: remover é decisão manual, condicionada a uma política de retenção ainda não aprovada. O diagnóstico físico (objeto sem registro / registro sem objeto)
  * continua sendo o de \`storageIntegrity\` (docs/UPLOAD_DE_ARQUIVOS.md).
  */
-export async function listProofFileReconciliation(db: Kysely<DB> | Transaction<DB>, organizationId: number, limit = 200): Promise<{ pendentes: ProofFileListing[]; removidos: ProofFileListing[]; limit: number }> {
-  const rows = await sql<{ id: number; name: string; contentType: string; sizeBytes: string; uploader: string; createdAt: Date; ageHours: string; linked: boolean }>`
-    SELECT f.id, f.original_filename AS name, f.content_type, f.size_bytes, u.display_name AS uploader, f.created_at,
+export async function listProofFileReconciliation(db: Kysely<DB> | Transaction<DB>, organizationId: number, limit = 200): Promise<{ pendentes: ProofFileListing[]; removidos: ProofFileListing[]; retidosPorAnalise: ProofFileListing[]; limit: number }> {
+  const rows = await sql<{ id: number; name: string; contentType: string; sizeBytes: string; uploader: string; createdAt: Date; ageHours: string; linked: boolean; scanStatus: string }>`
+    SELECT f.id, f.scan_status, f.original_filename AS name, f.content_type, f.size_bytes, u.display_name AS uploader, f.created_at,
            extract(epoch FROM (now() - f.created_at)) / 3600 AS age_hours,
            EXISTS (SELECT 1 FROM stock_destinations e WHERE e.organization_id = f.organization_id AND e.proof_file_id = f.id AND e.proof_removed IS NOT TRUE) AS linked
       FROM files f JOIN users u ON u.id = f.uploaded_by_user_id
@@ -136,8 +140,16 @@ export async function listProofFileReconciliation(db: Kysely<DB> | Transaction<D
      ORDER BY f.id DESC LIMIT ${limit * 3}`.execute(db);
   const removed: typeof rows.rows = [];
   for (const r of rows.rows.filter((x) => x.linked)) if ((await getProofState(db, organizationId, r.id)).state === "removido") removed.push(r);
-  const map = (r: (typeof rows.rows)[number]): ProofFileListing => ({ id: r.id, name: r.name, contentType: r.contentType, sizeBytes: Number(r.sizeBytes), uploadedByDisplayName: r.uploader, uploadedAt: r.createdAt.toISOString(), ageHours: Math.round(Number(r.ageHours) * 10) / 10 });
+  const map = (r: (typeof rows.rows)[number]): ProofFileListing => ({ id: r.id, name: r.name, contentType: r.contentType, sizeBytes: Number(r.sizeBytes), uploadedByDisplayName: r.uploader, uploadedAt: r.createdAt.toISOString(), ageHours: Math.round(Number(r.ageHours) * 10) / 10, scanStatus: r.scanStatus });
+  // arquivos de QUALQUER finalidade da organização retidos pela análise antimalware (pendente, indisponível, infectado ou anterior à análise)
+  const held = await sql<(typeof rows.rows)[number]>`
+    SELECT f.id, f.scan_status, f.original_filename AS name, f.content_type, f.size_bytes, u.display_name AS uploader, f.created_at,
+           extract(epoch FROM (now() - f.created_at)) / 3600 AS age_hours, false AS linked
+      FROM files f JOIN users u ON u.id = f.uploaded_by_user_id
+     WHERE f.organization_id = ${organizationId} AND f.scan_status IN ('pendente', 'indisponivel', 'infectado', 'legado_nao_analisado')
+     ORDER BY f.id DESC LIMIT ${limit}`.execute(db);
   return {
+    retidosPorAnalise: held.rows.map(map),
     pendentes: rows.rows.filter((r) => !r.linked).slice(0, limit).map(map),
     removidos: removed.slice(0, limit).map(map),
     limit,

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { postFilesUpload, FILE_MAX_SIZE_BYTES, ALLOWED_CONTENT_TYPES } from "../endpoints/files-upload_POST.schema";
+import { postFilesRescan } from "../endpoints/files-rescan_POST.schema";
 import { postStockDestinationProof } from "../endpoints/stock-destination-proof_POST.schema";
 import type { DestinationView } from "../helpers/destinationCorrections";
 import { Button } from "./Button";
@@ -32,12 +33,14 @@ export const proofSizeLabel = formatSize;
 export function AttachProofDialog({ organizationId, target, onClose, onDone }: { organizationId: number; target: DestinationView | null; onClose: () => void; onDone: () => Promise<void> }) {
   const [file, setFile] = useState<File | null>(null);
   const [uploadedId, setUploadedId] = useState<number | null>(null);
+  // situação da análise de segurança do arquivo enviado: só "aprovado"/"dispensado" permite vincular
+  const [scan, setScan] = useState<{ status: string; message: string } | null>(null);
   const [reason, setReason] = useState("Comprovante da entrega");
   const [error, setError] = useState<string | null>(null);
   const [key, setKey] = useState(newKey);
 
   useEffect(() => {
-    if (target) { setFile(null); setUploadedId(null); setReason("Comprovante da entrega"); setError(null); setKey(newKey()); }
+    if (target) { setFile(null); setUploadedId(null); setScan(null); setReason("Comprovante da entrega"); setError(null); setKey(newKey()); }
   }, [target]);
 
   const mutation = useMutation({
@@ -49,6 +52,13 @@ export function AttachProofDialog({ organizationId, target, onClose, onDone }: {
         const up = await postFilesUpload({ organizationId, purpose: "comprovante_destinacao", fileName: file.name, contentType: file.type as (typeof ALLOWED_CONTENT_TYPES)[number], fileBase64 });
         fileId = up.file.id;
         setUploadedId(fileId);
+        setScan({ status: up.file.scanStatus, message: up.file.scanMessage });
+        if (!["aprovado", "dispensado"].includes(up.file.scanStatus)) throw new Error(up.file.scanMessage);
+      } else if (scan && !["aprovado", "dispensado"].includes(scan.status)) {
+        // arquivo já enviado e ainda retido: pede nova análise ao servidor antes de tentar o vínculo
+        const r = await postFilesRescan({ organizationId, fileId });
+        setScan({ status: r.file.scanStatus, message: r.file.scanMessage });
+        if (!r.file.released) throw new Error(r.file.scanMessage);
       }
       return postStockDestinationProof({ organizationId, destinationId: target!.id, action: "anexar", fileId, reason: reason.trim(), idempotencyKey: key });
     },
@@ -81,7 +91,10 @@ export function AttachProofDialog({ organizationId, target, onClose, onDone }: {
             </DialogDescription>
           </DialogHeader>
           {uploadedId !== null ? (
-            <p className={styles.notice} role="status">Arquivo “{file?.name}” já enviado ao servidor. Falta apenas confirmar o vínculo — tentar de novo é seguro.</p>
+            <p className={styles.notice} role="status" data-testid="proof-scan-state">
+              Arquivo “{file?.name}” já enviado ao servidor.{" "}
+              {scan && !["aprovado", "dispensado"].includes(scan.status) ? `${scan.message} Ele só pode ser vinculado depois de liberado.` : "Falta apenas confirmar o vínculo — tentar de novo é seguro."}
+            </p>
           ) : (
             <FileDropzone
               accept="image/jpeg,image/png,image/webp,application/pdf"
@@ -96,11 +109,11 @@ export function AttachProofDialog({ organizationId, target, onClose, onDone }: {
           <label className={styles.label} htmlFor="proof-reason">Motivo / descrição (obrigatório)</label>
           <Textarea id="proof-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} disabled={mutation.isPending} />
           <div aria-live="polite">{problems.length > 0 && <ul className={styles.problems}>{problems.map((p) => <li key={p}>{p}</li>)}</ul>}</div>
-          {mutation.isPending && <p className={styles.notice} role="status">{uploadedId === null ? "Enviando o arquivo…" : "Confirmando o vínculo…"}</p>}
+          {mutation.isPending && <p className={styles.notice} role="status">{uploadedId === null ? "Enviando e analisando o arquivo…" : "Confirmando o vínculo…"}</p>}
           {error && <p className={styles.error} role="alert">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={mutation.isPending}>Cancelar</Button>
-            <Button type="submit" disabled={!ready || mutation.isPending}>{mutation.isPending ? "Enviando..." : error ? "Tentar de novo" : "Anexar comprovante"}</Button>
+            <Button type="submit" disabled={!ready || mutation.isPending}>{mutation.isPending ? "Enviando..." : scan && !["aprovado", "dispensado"].includes(scan.status) ? "Analisar novamente" : error ? "Tentar de novo" : "Anexar comprovante"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

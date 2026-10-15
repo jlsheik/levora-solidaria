@@ -3,7 +3,7 @@ import superjson from "superjson";
 import type { ProofFileListing } from "../helpers/destinationProofs.js";
 
 export const schema = z.object({ organizationId: z.coerce.number().int().positive() });
-export type OutputType = { pendentes: ProofFileListing[]; removidos: ProofFileListing[]; limit: number };
+export type OutputType = { pendentes: ProofFileListing[]; removidos: ProofFileListing[]; retidosPorAnalise: ProofFileListing[]; limit: number };
 
 export const getProofReconciliation = async (organizationId: number, init?: RequestInit): Promise<OutputType> => {
   const result = await fetch(`/_api/v1/destination-proofs-reconciliation?organizationId=${organizationId}`, { method: "GET", ...init, credentials: "include" });

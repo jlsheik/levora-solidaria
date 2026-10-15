@@ -129,6 +129,10 @@ export interface DonationOpportunities {
 }
 
 export interface Files {
+  scanCheckedAt: Timestamp | null;
+  scanEngine: string | null;
+  scanSignature: string | null;
+  scanStatus: Generated<string>;
   contentType: string;
   createdAt: Generated<Timestamp>;
   id: Generated<number>;

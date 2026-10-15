@@ -7,6 +7,7 @@ import { closeAsCorrectedIfNowCompatible, findActiveCase, openCase } from "../he
 import { schema } from "./allocations-receive_POST.schema.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
+import { isReleasable } from "../helpers/fileScanner.js";
 
 export async function handle(request: Request) {
   try {
@@ -44,12 +45,14 @@ export async function handle(request: Request) {
       if (input.proofFileId) {
         const proofFile = await trx
           .selectFrom("files")
-          .select(["id", "organizationId"])
+          .select(["id", "organizationId", "scanStatus"])
           .where("id", "=", input.proofFileId)
           .executeTakeFirst();
         if (!proofFile || proofFile.organizationId !== input.organizationId) {
           return { type: "proof_file_not_found" as const };
         }
+        // hardening pós-99K: arquivo ainda não liberado pela análise antimalware não vira comprovante do recebimento
+        if (!isReleasable(proofFile.scanStatus)) return { type: "proof_file_not_released" as const };
         proofUrl = `/_api/v1/files-download?fileId=${proofFile.id}`;
       }
 
@@ -130,6 +133,9 @@ export async function handle(request: Request) {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
+    }
+    if (result.type === "proof_file_not_released") {
+      return new Response(superjson.stringify({ message: "O arquivo do comprovante ainda não foi liberado pela análise de segurança", code: "arquivo_nao_liberado" }), { status: 409, headers: { "Content-Type": "application/json" } });
     }
     if (result.type === "invalid_status") {
       return new Response(

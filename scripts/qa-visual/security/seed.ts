@@ -33,7 +33,7 @@ await db.insertInto("memberships").values({ organizationId: org2.id, userId: out
 const legacy = async (name: string, type: string, content: string) => {
   const buffer = Buffer.from(content);
   const stored = await storageAdapter.upload({ organizationId: org.id, buffer, contentType: type });
-  await db.insertInto("files").values({ organizationId: org.id, uploadedByUserId: owner, storageProvider: stored.storageProvider, storageKey: stored.storageKey, originalFilename: name, contentType: type, sizeBytes: buffer.length, purpose: "comprovante_entrega" }).execute();
+  await db.insertInto("files").values({ scanStatus: "legado_nao_analisado", organizationId: org.id, uploadedByUserId: owner, storageProvider: stored.storageProvider, storageKey: stored.storageKey, originalFilename: name, contentType: type, sizeBytes: buffer.length, purpose: "comprovante_entrega" }).execute();
 };
 await legacy("legado.html", "text/html", `<!doctype html><title>legado</title><script>${hitCode(COLLECTOR, "FILE@legacy-html")}</script>`);
 await legacy("legado.svg", "image/svg+xml", `<svg xmlns="http://www.w3.org/2000/svg" onload="${hitCode(COLLECTOR, "FILE@legacy-svg")}"><script>${hitCode(COLLECTOR, "FILE@legacy-svg-script")}</script></svg>`);

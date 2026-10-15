@@ -141,14 +141,15 @@ export default function DestinationsPage() {
           ) : (
             <DestinationHistory organizationId={organizationId} filters={filters} initialLimit={20} showTotals />
           )}
-          {canManage && reconQuery.data && (reconQuery.data.pendentes.length > 0 || reconQuery.data.removidos.length > 0) && (
+          {canManage && reconQuery.data && (reconQuery.data.pendentes.length > 0 || reconQuery.data.removidos.length > 0 || reconQuery.data.retidosPorAnalise.length > 0) && (
             <section className={styles.recon} data-testid="proof-reconciliation" aria-label="Comprovantes sem vínculo vigente">
               <p className={styles.note}>
-                <strong>Comprovantes enviados e não vinculados:</strong> {reconQuery.data.pendentes.length} · <strong>com referência removida:</strong> {reconQuery.data.removidos.length}. Somente leitura: nada é apagado
+                <strong>Comprovantes enviados e não vinculados:</strong> {reconQuery.data.pendentes.length} · <strong>com referência removida:</strong> {reconQuery.data.removidos.length} · <strong>retidos pela análise de segurança:</strong> {reconQuery.data.retidosPorAnalise.length}. Somente leitura: nada é apagado
                 automaticamente (não há política de retenção aprovada). Um arquivo pendente pode ser vinculado por quem o enviou ou por proprietário/administrador.
               </p>
               <ul className={styles.reconList}>
                 {reconQuery.data.pendentes.map((f) => <li key={`p-${f.id}`}>Pendente: {f.name} · enviado por {f.uploadedByDisplayName} há {f.ageHours} h</li>)}
+                {reconQuery.data.retidosPorAnalise.map((f) => <li key={`a-${f.id}`}>Retido pela análise ({f.scanStatus === "infectado" ? "bloqueado por segurança" : f.scanStatus === "indisponivel" ? "análise indisponível" : f.scanStatus === "legado_nao_analisado" ? "anterior à análise" : "aguardando análise"}): {f.name} · enviado por {f.uploadedByDisplayName}</li>)}
                 {reconQuery.data.removidos.map((f) => <li key={`r-${f.id}`}>Referência removida: {f.name} · enviado por {f.uploadedByDisplayName}</li>)}
               </ul>
             </section>

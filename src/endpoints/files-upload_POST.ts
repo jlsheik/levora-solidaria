@@ -5,6 +5,8 @@ import { recordAuditLogEntry } from "../helpers/auditLog.js";
 import { storageAdapter } from "../helpers/storageAdapter.js";
 import { schema, FILE_MAX_SIZE_BYTES } from "./files-upload_POST.schema.js";
 import { detectFileType, isStrictBase64 } from "../helpers/fileSignature.js";
+import { getScanMode } from "../helpers/fileScanner.js";
+import { scanFile, scanMessage } from "../helpers/fileScan.js";
 import { checkRateLimit, rateLimitResponse } from "../helpers/rateLimit.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
@@ -75,8 +77,10 @@ export async function handle(request: Request) {
             contentType: input.contentType,
             sizeBytes: buffer.length,
             purpose: input.purpose,
-          })
-          .returning(["id", "originalFilename", "contentType", "sizeBytes"])
+            // análise obrigatória (produção) = nasce PENDENTE e só é liberado pelo scanner; fora dela, "dispensado" explícito (nunca "aprovado")
+            scanStatus: getScanMode() === "required" ? "pendente" : "dispensado",
+          } as never)
+          .returning(["id", "originalFilename", "contentType", "sizeBytes", "scanStatus"])
           .execute();
 
         await recordAuditLogEntry(
@@ -105,6 +109,16 @@ export async function handle(request: Request) {
       throw dbError;
     }
 
+    // análise antimalware (fora da transação do banco: é uma chamada de rede). Falha/indisponibilidade NÃO libera: o arquivo fica retido e pode ser reanalisado.
+    let scanStatus: string = (file as unknown as { scanStatus: string }).scanStatus;
+    if (scanStatus === "pendente") {
+      try {
+        scanStatus = (await scanFile(file.id, input.organizationId, user.id)).status;
+      } catch (scanError) {
+        console.error(`ANALISE_FALHOU fileId=${file.id} organizationId=${input.organizationId} (${scanError instanceof Error ? scanError.name : "erro"})`);
+      }
+    }
+
     return new Response(
       superjson.stringify({
         file: {
@@ -113,6 +127,8 @@ export async function handle(request: Request) {
           contentType: file.contentType,
           sizeBytes: Number(file.sizeBytes),
           downloadUrl: `/_api/v1/files-download?fileId=${file.id}`,
+          scanStatus,
+          scanMessage: scanMessage(scanStatus),
         },
       }),
       { headers: { "Content-Type": "application/json" } }

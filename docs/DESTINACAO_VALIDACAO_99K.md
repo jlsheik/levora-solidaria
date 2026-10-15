@@ -50,6 +50,8 @@ Nenhum defeito de integridade (estoque, atendimento, isolamento, concorrência, 
 
 **Decisão:** o ciclo de destinação está **validado localmente** de ponta a ponta com os gates abaixo, sem defeito de integridade conhecido. A Fase 99 **não** deve ser declarada pronta para produção enquanto (1) a decisão sobre antimalware/exposição de arquivos de terceiros, (2) a política de retenção/exclusão e (3) a validação oficial do GitHub da cadeia (após retargetar as PRs para `master`, em sequência, quando a integração for autorizada) não estiverem resolvidas.
 
+> **Atualização:** a trilha de hardening pós-99K implementou a análise antimalware no código (sem scanner real executado) e documentou a decisão de retenção como pendente; ver `docs/RISCOS_PRE_PRODUCAO_POS_99K.md`.
+
 ## Critérios de liberação (próximos passos)
 
 1. Integrar 99F→99K em sequência (retargetando cada PR para `master` e conferindo que o diff contém só a fase), com os checks oficiais verdes em cada commit.

@@ -280,3 +280,7 @@ Cinco cenários novos (`proof-box-text`, `proof-attach-button`, `proof-remove-bu
 ## Fase 99K — conciliação de comprovantes
 
 Um cenário novo (`destinations-reconciliation`; total 80; no perfil `ci`, que passa a ter 71): texto do painel somente leitura de comprovantes pendentes/removidos na aba Destinação. A semente envia um segundo comprovante sem vincular.
+
+## Hardening pós-99K
+
+Nenhum cenário novo: o estado da análise aparece só nos diálogos já cobertos e no painel de conciliação (`destinations-reconciliation`). A semente continua usando análise desligada (`dispensado`).

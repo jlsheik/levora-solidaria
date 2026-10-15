@@ -189,7 +189,7 @@ pelo `Content-Disposition`. **Consistência (Fase 94):** o upload compensa a fal
 
 **Chave de armazenamento × organização:** o download só serve o objeto cuja chave tem o formato `<org>/<uuid>` **e** o prefixo da organização do próprio registro (`keyBelongsToOrganization`, revisão do PR #1); o adaptador de disco também exige o formato. Cobertura: `test/storageKeyOrganization.test.ts`.
 no banco era enviada ao S3 com segmentos `..`; corrigido), timeout de inatividade de 30 s (antes um S3 mudo pendurava o download), autorização antes de qualquer leitura no armazenamento e erros sem vazar bucket,
-endpoint, chaves ou assinatura. **Não feito (decisão/infraestrutura):** varredura de malware, reencodar imagens, isolar uploads em outra origem (não há necessidade demonstrada: nenhum tipo renderizável como
+endpoint, chaves ou assinatura. **Atualização (hardening pós-99K):** varredura de malware implementada no código com falha fechada (`docs/ANTIMALWARE_ARQUIVOS.md`), mas **sem scanner provisionado/testado**. **Não feito (decisão/infraestrutura):** reencodar imagens, isolar uploads em outra origem (não há necessidade demonstrada: nenhum tipo renderizável como
 documento ativo é aceito) e compatibilidade com um bucket **real** (AWS/R2/MinIO) — o servidor local não valida assinaturas e não substitui um teste com credenciais de um serviço de verdade.
 
 ## Security headers HTTP (Fase 50)
