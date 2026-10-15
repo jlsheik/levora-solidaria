@@ -35,6 +35,7 @@ export const QA_PASSWORD = "senha-de-qa-123";
 
 const ALL4 = ["normal", "hover", "active", "focus"];
 const NEEDS = "/organizacoes/1/necessidades";
+const IMPACT_REPORT = "/organizacoes/1/prestacao-contas";
 const MATCHING = "/organizacoes/1/matching";
 const INVENTORY = "/organizacoes/1/inventario";
 const ATTRIBUTIONS = "/organizacoes/1/atribuicoes";
@@ -74,6 +75,7 @@ export const CI_PROFILE_IDS = [
   // Fase 99C: fila de pendências de unidade (caso aberto, vazio, erro, filtros, diálogo de conferência, aviso na atribuição)
   "regularization-status-open", "regularization-empty", "regularization-error", "regularization-filter-select", "regularization-filter-no-results", "regularization-confer-qty", "regularization-confer-reason", "regularization-allocation-notice",
   // Fase 99E: registro de saída com destinação (botão, campos, finalidades, saldo insuficiente, aprovação por risco, necessidade)
+  "report-destination-hint", "report-destination-basis", "report-reconciliation-row",
   "destination-history-numbers", "destination-history-event", "destination-history-reverse-button", "destination-reversal-kind", "destination-reversal-consequence", "destination-reversal-reason",
   "needs-close-button", "needs-close-dialog-reason", "needs-close-dialog-description", "needs-attendance-text", "needs-attendance-historical-note", "needs-closure-note",
   "destination-primary-button", "destination-qty", "destination-type-select", "destination-notes", "destination-insufficient", "destination-approval-notice", "destination-need-select",
@@ -136,6 +138,11 @@ export const SCENARIOS = [
   { id: "regularization-confer-qty", user: "owner", path: REGULARIZATION, steps: [openConfer], target: { css: "input#reg-qty", within: '[role="dialog"]' }, measure: "field", variant: "Regularização: diálogo (quantidade)", expect: { height: 40 } },
   { id: "regularization-confer-reason", user: "owner", path: REGULARIZATION, steps: [openConfer], target: { css: "textarea#reg-reason", within: '[role="dialog"]' }, measure: "field", variant: "Regularização: diálogo (motivo)", expect: { minHeight: 96 } },
   { id: "regularization-allocation-notice", user: "owner", path: ATTRIBUTIONS, steps: [], target: { css: 'p[role="status"]', text: "^Recebimento pendente de regularização" }, measure: "text", variant: "Regularização: aviso na atribuição" },
+
+  // ---- Fase 99H: bloco "Destinação" da prestação de contas (leitura)
+  { id: "report-destination-hint", user: "owner", path: IMPACT_REPORT, steps: [], target: { css: '[data-testid="destination-report"] p', text: "^Destinação declarada" }, measure: "text", variant: "Relatório: destinação declarada" },
+  { id: "report-destination-basis", user: "owner", path: IMPACT_REPORT, steps: [], target: { css: 'button[role="combobox"][aria-label="Data usada no bloco de destinação"]' }, measure: "field", variant: "Relatório: data usada", expect: { minHeight: 40 } },
+  { id: "report-reconciliation-row", user: "owner", path: IMPACT_REPORT, steps: [], target: { css: '[data-testid="reconciliation-row"] span', text: "^Arroz" }, measure: "text", variant: "Relatório: conciliação por item" },
 
   // ---- Fase 99G: histórico de destinações, correções e reversões (inventário)
   { id: "destination-history-numbers", user: "owner", path: INVENTORY, steps: [], target: { css: '[data-testid="destination-card"] p', text: "^Revertido:" }, measure: "text", variant: "Histórico: saldo reversível" },

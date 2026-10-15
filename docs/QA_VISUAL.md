@@ -22,7 +22,7 @@ Pré-requisitos: Node 22.x (versão declarada em `package.json`), Edge e/ou Chro
 npm run qa:visual                                    # tudo: cenários × 4 viewports × 2 temas, nos navegadores encontrados (Edge e Chrome)
 npm run qa:visual -- --browser edge --verbose        # só o Edge; mostra também as linhas PASS
 npm run qa:visual -- --viewports 375,1280            # subconjunto de viewports (largura ou WxH)
-npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (55 de 64 cenários; o relatório lista os omitidos)
+npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (58 de 67 cenários; o relatório lista os omitidos)
 npm run qa:visual -- --only needs-primary-new,matching-switch
 npm run qa:visual -- --list                          # lista cenários, viewports e temas
 npm run qa:visual -- --self-test                     # prova que o detector acusa regressões e ausências (ver abaixo)
@@ -131,7 +131,7 @@ não for 22** e registra `node -v`, `google-chrome --version` e `docker --versio
 | | Local (completo) | CI (reduzido) |
 |---|---|---|
 | Navegador | Edge e Chrome | **só o Chrome do runner** (`--browser chrome`; nunca Edge); `QA_BROWSER_NO_SANDBOX=1` por opt-in explícito (AppArmor do runner) |
-| `qa:visual` | 64 cenários × 4 viewports × 2 temas | `--profile ci`: **55 cenários** × os mesmos 4 viewports × 2 temas |
+| `qa:visual` | 67 cenários × 4 viewports × 2 temas | `--profile ci`: **58 cenários** × os mesmos 4 viewports × 2 temas |
 | `qa:security` | 5 partes, 2 navegadores | **as 5 partes** (calibração, CSRF, XSS, uploads, cabeçalhos nginx/Docker), 1 navegador |
 | Duração | ~12 min + ~7 min | alvo ~10 min (limite do job: 40 min) |
 
@@ -264,3 +264,7 @@ Seis cenários novos (`needs-close-button`, `needs-close-dialog-reason`, `needs-
 ## Fase 99G — cenários do histórico de destinações
 
 Seis cenários novos (`destination-history-numbers`, `destination-history-event`, `destination-history-reverse-button`, `destination-reversal-kind`, `destination-reversal-consequence`, `destination-reversal-reason`; total 64; todos no perfil `ci`, que passa a ter 55): texto do saldo reversível, evento de reversão na linha do tempo, botão "Reverter" (4 estados), seletor do tipo (40 px), aviso da consequência física (devolução física cria ENTRADA) e motivo (≥ 96 px). A semente aplica uma correção documental e um estorno documental parcial pelos **endpoints reais**.
+
+## Fase 99H — cenários do relatório de destinação
+
+Três cenários novos (`report-destination-hint`, `report-destination-basis`, `report-reconciliation-row`; total 67; todos no perfil `ci`, que passa a ter 58) na página de prestação de contas: texto "destinação declarada", seletor da data usada (40 px) e linha de conciliação por item. A semente já traz destinações, correção e estorno reais (99G).
