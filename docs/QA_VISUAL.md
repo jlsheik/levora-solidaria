@@ -22,7 +22,7 @@ Pré-requisitos: Node 22.x (versão declarada em `package.json`), Edge e/ou Chro
 npm run qa:visual                                    # tudo: cenários × 4 viewports × 2 temas, nos navegadores encontrados (Edge e Chrome)
 npm run qa:visual -- --browser edge --verbose        # só o Edge; mostra também as linhas PASS
 npm run qa:visual -- --viewports 375,1280            # subconjunto de viewports (largura ou WxH)
-npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (64 de 73 cenários; o relatório lista os omitidos)
+npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (65 de 74 cenários; o relatório lista os omitidos)
 npm run qa:visual -- --only needs-primary-new,matching-switch
 npm run qa:visual -- --list                          # lista cenários, viewports e temas
 npm run qa:visual -- --self-test                     # prova que o detector acusa regressões e ausências (ver abaixo)
@@ -131,7 +131,7 @@ não for 22** e registra `node -v`, `google-chrome --version` e `docker --versio
 | | Local (completo) | CI (reduzido) |
 |---|---|---|
 | Navegador | Edge e Chrome | **só o Chrome do runner** (`--browser chrome`; nunca Edge); `QA_BROWSER_NO_SANDBOX=1` por opt-in explícito (AppArmor do runner) |
-| `qa:visual` | 73 cenários × 4 viewports × 2 temas | `--profile ci`: **64 cenários** × os mesmos 4 viewports × 2 temas |
+| `qa:visual` | 74 cenários × 4 viewports × 2 temas | `--profile ci`: **65 cenários** × os mesmos 4 viewports × 2 temas |
 | `qa:security` | 5 partes, 2 navegadores | **as 5 partes** (calibração, CSRF, XSS, uploads, cabeçalhos nginx/Docker), 1 navegador |
 | Duração | ~12 min + ~7 min | alvo ~10 min (limite do job: 40 min) |
 
@@ -271,4 +271,4 @@ Três cenários novos (`report-destination-hint`, `report-destination-basis`, `r
 
 ## Fase 99I — cenários da aba Destinação
 
-Seis cenários novos (`destinations-filter-basis`, `destinations-filter-type`, `destinations-filter-from`, `destinations-totals`, `destinations-empty-filter`, `destinations-range-error`; total 73; todos no perfil `ci`, que passa a ter 64) na página `/organizacoes/1/destinacoes`: seletores e data (40 px), totais por unidade, filtro sem resultado e erro de intervalo (via parâmetros da URL).
+Sete cenários novos (`destinations-filter-basis`, `destinations-filter-type`, `destinations-filter-from`, `destinations-filter-need`, `destinations-totals`, `destinations-empty-filter`, `destinations-range-error`; total 74; todos no perfil `ci`, que passa a ter 65) na página `/organizacoes/1/destinacoes`: seletores e data (40 px), totais por unidade, filtro sem resultado e erro de intervalo (via parâmetros da URL).

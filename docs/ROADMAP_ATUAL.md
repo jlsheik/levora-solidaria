@@ -473,6 +473,6 @@ Edição de quantidade, unidade, item e status das necessidades; edição de ite
 
 **Fase 99I (aba "Destinação": histórico com filtros) implementada — branch `fase-99i-destination-history-filters`, encadeada sobre a 99H (PR #13) → 99G (PR #12) → 99F (PR #11); nada integrado.** Detalhes: `docs/DESTINACAO_HISTORICO_99I.md`.
 - **Sem migration.** `GET /stock-destinations` ganhou filtros (período por data de registro ou efetiva — calendário de Brasília, limites inclusivos, conversão no banco —, finalidade, situação, item, necessidade), validação (400), keyset estável e `totals` por unidade sobre todo o conjunto filtrado; filtro único em `destinationFilters.tsx`, compartilhado com o relatório da 99H (a data efetiva do relatório passou a considerar correções de data).
-- **Interface:** página `/organizacoes/:id/destinacoes` (aba "Destinação"), filtros na URL, totais, cartões com correções/reversões e ações da 99G; 6 cenários `qa:visual` (perfil `ci`: 64 de 73).
+- **Interface:** página `/organizacoes/:id/destinacoes` (aba "Destinação"), filtros na URL, totais, cartões com correções/reversões e ações da 99G; 7 cenários `qa:visual` (perfil `ci`: 65 de 74), incluindo o filtro por necessidade.
 - **Não implementado:** exportação (a especificação não a atribui a nenhuma fase), visão histórica por data de corte (revertido/situação são acumulados até hoje), administração da plataforma.
 - **Pendente (99J, 99K):** comprovantes e privacidade (99J); validação de ponta a ponta (99K). A Fase 99 **não** está concluída.

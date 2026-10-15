@@ -8,11 +8,11 @@ Já existia antes da 99I: diálogo de destinação (99E), necessidades (99F), co
 
 Fora do escopo (decisão conservadora, a especificação não atribui):
 - **Exportação**: a especificação não a menciona em nenhuma fase; **não foi implementada** (a resposta da API documenta isso). Se for aprovada no futuro, deve usar `destinationWhere` (filtro único) e `destinationTotals`.
-- **Comprovantes** e leitura protegida: 99J. **Validação de ponta a ponta**: 99K. **Administração da plataforma** (item 6 da seção 14) e filtro por necessidade na tela ficam para depois (a API aceita `needId`).
+- **Comprovantes** e leitura protegida: 99J. **Validação de ponta a ponta**: 99K. **Administração da plataforma** (item 6 da seção 14) e administração da plataforma ficam para depois.
 
 ## Contrato (`GET /stock-destinations`, estende o da 99G)
 
-Parâmetros (todos validados no servidor; inválido = 400): `organizationId`; `from`/`to` datas civis `AAAA-MM-DD`, **ambas inclusivas**, calendário `America/Sao_Paulo`, `from ≤ to`, intervalo máximo de 731 dias; `basis` = `registro` (padrão) | `efetiva`; `destinationType` (uma das oito finalidades); `state` = `ativa` | `parcialmente_revertida` | `revertida` | `com_correcao`; `itemId`, `needId`; `limit` (1–100, padrão 30); `beforeId` (keyset).
+Parâmetros (todos validados no servidor; inválido = 400): `organizationId`; `from`/`to` datas civis `AAAA-MM-DD`, **ambas inclusivas**, calendário `America/Sao_Paulo`, `from ≤ to`, intervalo máximo de 731 dias; `basis` = `registro` (padrão) | `efetiva`; `destinationType` (uma das oito finalidades); `state` = `ativa` | `parcialmente_revertida` | `revertida` | `com_correcao`; `itemId`, `needId` (filtro na interface: parâmetro `need` da URL); `limit` (1–100, padrão 30); `beforeId` (keyset).
 
 Resposta: `destinations` (como na 99G), `hasMore`, `canReverse`, `filters` (a base de data efetivamente usada) e `totals` (por **unidade**, sobre **todo** o conjunto filtrado, não só a página: registros, físico, revertido, físico líquido, atendimento, excedente).
 
@@ -40,4 +40,4 @@ Página `/organizacoes/:id/destinacoes` (aba "Destinação" nas demais abas): fi
 
 ## Limitações
 
-Sem exportação; sem visão por data de corte; revertido/situação acumulados até hoje; filtro por necessidade só na API; ordenação só por registro mais recente; Edge: ver relatório de gates (execução dependente do ambiente).
+Sem exportação; sem visão por data de corte; revertido/situação acumulados até hoje; ordenação só por registro mais recente; Edge: ver relatório de gates (execução dependente do ambiente).

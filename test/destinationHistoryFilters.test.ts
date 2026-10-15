@@ -96,6 +96,22 @@ describe("A. período por data de REGISTRO (calendário de Brasília, limites in
   });
 });
 
+describe("A2. coerência 99H–99I da data efetiva com várias correções", () => {
+  it("listagem e relatório usam a MESMA data efetiva (a correção mais recente vence), inclusive com mais de uma correção", async () => {
+    const w = await world();
+    const res = await destHandle(post("stock-destinations", w.admin.cookie, { organizationId: w.org.id, itemId: w.rice.id, quantity: 5, destinationType: "distribuicao_familias", deliveredOn: today(), idempotencyKey: key() }));
+    const id = (await parseJson<{ destination: { id: string } }>(res)).destination.id;
+    const day = (n: number) => businessDateOf(new Date(Date.now() - n * 86400000));
+    for (const n of [3, 1]) expect((await correctHandle(post("stock-destination-correction", w.admin.cookie, { organizationId: w.org.id, destinationId: id, deliveredOn: day(n), reason: "Data corrigida", idempotencyKey: key() }))).status).toBe(200);
+    const win = (d: string) => ({ startDate: new Date(d + "T03:00:00Z"), endDate: new Date(new Date(d + "T03:00:00Z").getTime() + 86400000) });
+    for (const [d, expected] of [[day(3), 0], [day(1), 1], [today(), 0]] as const) {
+      const listed = ((await list(w, "&basis=efetiva&from=" + d + "&to=" + d)).body as OutputType).totals.records;
+      const reported = (await buildImpactReport(db, { organizationId: w.org.id, ...win(d), destinationDateBasis: "efetiva" } as never)).destination.records;
+      expect([listed, reported]).toEqual([expected, expected]);
+    }
+  });
+});
+
 describe("B. finalidade, situação, item e combinações", () => {
   it("filtra por finalidade, por item e combina filtros; vazio devolve lista vazia com totais vazios", async () => {
     const w = await world();
@@ -123,6 +139,29 @@ describe("B. finalidade, situação, item e combinações", () => {
     expect(ids(await list(w, "&state=parcialmente_revertida"))).toEqual([partial]);
     expect(ids(await list(w, "&state=revertida"))).toEqual([full]);
     expect(ids(await list(w, "&state=com_correcao"))).toEqual([corrected]);
+  });
+});
+
+describe("C0. filtro por necessidade", () => {
+  it("needId restringe a lista e os totais ao conjunto da necessidade; combina com outros filtros; necessidade de outra organização não revela nada", async () => {
+    const w = await world();
+    const other = await world();
+    const mkNeed = async (x: W, title: string) => (await db.insertInto("needs").values({ organizationId: x.org.id, itemId: x.rice.id, title, quantityNeeded: "100", unit: "kg", priority: "alta", createdByUserId: x.owner.userId }).returning("id").execute())[0].id;
+    const n1 = await mkNeed(w, "A");
+    const n2 = await mkNeed(w, "B");
+    const foreign = await mkNeed(other, "X");
+    const dest = async (needId: number, qty: number, type = "distribuicao_familias") => (await parseJson<{ destination: { id: string } }>(await destHandle(post("stock-destinations", w.admin.cookie, { organizationId: w.org.id, itemId: w.rice.id, quantity: qty, destinationType: type, needId, deliveredOn: today(), idempotencyKey: key() })))).destination.id;
+    const a = await dest(n1, 4);
+    const b = await dest(n2, 6);
+    const c = await dest(n1, 3, "atendimento_coletivo");
+    expect(ids(await list(w, `&needId=${n1}`)).sort()).toEqual([a, c].sort());
+    expect((await list(w, `&needId=${n1}`)).body as OutputType).toMatchObject({ totals: { records: 2, byUnit: [{ unit: "kg", physical: 7, appliedNet: 7 }] } });
+    expect(ids(await list(w, `&needId=${n2}`))).toEqual([b]);
+    expect(ids(await list(w, `&needId=${n1}&destinationType=atendimento_coletivo`))).toEqual([c]);
+    const crossed = await list(w, `&needId=${foreign}`);
+    expect(ids(crossed)).toEqual([]);
+    expect((crossed.body as OutputType).totals.records).toBe(0);
+    expect((await list(w, "&needId=abc")).status).toBe(400);
   });
 });
 

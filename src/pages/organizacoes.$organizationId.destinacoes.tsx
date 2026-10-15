@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ShieldAlert } from "lucide-react";
 import { getOrganizations } from "../endpoints/organizations_GET.schema";
 import { getInventoryItems } from "../endpoints/inventory-items_GET.schema";
+import { getNeeds } from "../endpoints/needs_GET.schema";
 import { DestinationHistory, type HistoryFilters } from "../components/DestinationHistory";
 import { Input } from "../components/Input";
 import { Button } from "../components/Button";
@@ -35,6 +36,8 @@ export default function DestinationsPage() {
   const canView = !!org && ["proprietario", "administrador", "operador"].includes(org.myRole);
   const itemsQuery = useQuery({ queryKey: ["inventory-items", organizationId], queryFn: () => getInventoryItems({ organizationId }), enabled: Number.isFinite(organizationId) && canView });
 
+  const needsQuery = useQuery({ queryKey: ["needs", organizationId], queryFn: () => getNeeds({ organizationId }), enabled: Number.isFinite(organizationId) && canView });
+
   const from = get("from");
   const to = get("to");
   const rangeError = validateDateRange(from || null, to || null);
@@ -46,8 +49,9 @@ export default function DestinationsPage() {
     destinationType: (DESTINATION_TYPES as readonly string[]).includes(get("type")) ? (get("type") as DestinationType) : undefined,
     state: (DESTINATION_STATES as readonly string[]).includes(get("state")) ? (get("state") as HistoryFilters["state"]) : undefined,
     itemId: get("item") && Number(get("item")) > 0 ? Number(get("item")) : undefined,
+    needId: get("need") && Number(get("need")) > 0 ? Number(get("need")) : undefined,
   };
-  const hasFilters = ["from", "to", "type", "state", "item", "basis"].some((k) => get(k) !== "");
+  const hasFilters = ["from", "to", "type", "state", "item", "need", "basis"].some((k) => get(k) !== "");
 
   return (
     <div className={styles.page}>
@@ -111,6 +115,13 @@ export default function DestinationsPage() {
               <select id="f-item" className={`${inputStyles.input} ${styles.select}`} value={get("item")} onChange={(e) => set("item", e.target.value)}>
                 <option value="">Todos os itens</option>
                 {(itemsQuery.data?.items ?? []).map((i) => <option key={i.id} value={String(i.id)}>{i.name} ({i.unit})</option>)}
+              </select>
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="f-need">Necessidade</label>
+              <select id="f-need" className={`${inputStyles.input} ${styles.select}`} value={get("need")} onChange={(e) => set("need", e.target.value)}>
+                <option value="">Todas as necessidades</option>
+                {(needsQuery.data?.needs ?? []).map((n) => <option key={n.id} value={String(n.id)}>{n.title}</option>)}
               </select>
             </div>
             <div className={styles.field}>
