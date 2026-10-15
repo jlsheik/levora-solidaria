@@ -41,7 +41,7 @@ describe("need_fulfillments — ledger de atendimento", () => {
     await db.insertInto("organizationMatchingSettings").values({ organizationId: org.id, realizaColeta: true }).execute();
     await db.insertInto("organizationServiceAreas").values({ organizationId: org.id, city: "Belo Horizonte", state: "MG" }).execute();
 
-    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { title: "Doação de alimentos não perecíveis", status: "aguardando_destinacao" });
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { unit: "kg", title: "Doação de alimentos não perecíveis", status: "aguardando_destinacao" });
     await db.updateTable("opportunityRegistry").set({ category: "Alimentos", unit: "kg", quantity: "20", locationCity: "Belo Horizonte", locationState: "MG" }).where("id", "=", opportunity.id).execute();
 
     const result = await runMatchingForOpportunity(opportunity.id, admin.userId);
@@ -75,7 +75,7 @@ describe("need_fulfillments — ledger de atendimento", () => {
     const item = await createTestInventoryItem(org.id, owner.userId, { name: "Feijão", unit: "kg" });
     const admin = await createAuthenticatedUser();
     const source = await createTestSource(admin.userId);
-    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { status: "atribuida" });
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { unit: "kg", status: "atribuida" });
     const allocation = await createTestAllocation(opportunity.id, org.id, { status: "aceita", quantityAllocated: 50 });
 
     const noEvaluation = await db.selectFrom("matchEvaluations").select(["id"]).where("allocationId", "=", allocation.id).executeTakeFirst();
@@ -95,7 +95,7 @@ describe("need_fulfillments — ledger de atendimento", () => {
     const item = await createTestInventoryItem(org.id, owner.userId, { name: "Óleo", unit: "kg" });
     const admin = await createAuthenticatedUser();
     const source = await createTestSource(admin.userId);
-    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { status: "atribuida" });
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { unit: "kg", status: "atribuida" });
     const allocation = await createTestAllocation(opportunity.id, org.id, { status: "aceita", quantityAllocated: 200 });
 
     const receiveRes = await receiveHandle(buildRequest("allocations-receive", { method: "POST", cookie: owner.cookie, body: { organizationId: org.id, allocationId: allocation.id, itemId: item.id, quantityReceived: 150 } }));
@@ -111,7 +111,7 @@ describe("need_fulfillments — ledger de atendimento", () => {
     const item = await createTestInventoryItem(org.id, owner.userId, { name: "Açúcar", unit: "kg" });
     const admin = await createAuthenticatedUser();
     const source = await createTestSource(admin.userId);
-    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { status: "atribuida" });
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { unit: "kg", status: "atribuida" });
     const allocation = await createTestAllocation(opportunity.id, org.id, { status: "aceita", quantityAllocated: 200 });
 
     const receiveRes = await receiveHandle(buildRequest("allocations-receive", { method: "POST", cookie: owner.cookie, body: { organizationId: org.id, allocationId: allocation.id, itemId: item.id, quantityReceived: 250 } }));
@@ -136,7 +136,7 @@ describe("need_fulfillments — ledger de atendimento", () => {
     await db.insertInto("organizationMatchingSettings").values({ organizationId: org.id, realizaColeta: true }).execute();
     await db.insertInto("organizationServiceAreas").values({ organizationId: org.id, city: "Belo Horizonte", state: "MG" }).execute();
 
-    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { title: "Doação de alimentos não perecíveis", status: "aguardando_destinacao" });
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { unit: "kg", title: "Doação de alimentos não perecíveis", status: "aguardando_destinacao" });
     await db.updateTable("opportunityRegistry").set({ category: "Alimentos", unit: "kg", quantity: "20", locationCity: "Belo Horizonte", locationState: "MG" }).where("id", "=", opportunity.id).execute();
     await runMatchingForOpportunity(opportunity.id, admin.userId);
     const allocation = await db.selectFrom("opportunityAllocations").selectAll().where("opportunityRegistryId", "=", opportunity.id).executeTakeFirstOrThrow();
@@ -164,7 +164,7 @@ describe("need_fulfillments — ledger de atendimento", () => {
     await db.insertInto("organizationMatchingSettings").values({ organizationId: org.id, realizaColeta: true }).execute();
     await db.insertInto("organizationServiceAreas").values({ organizationId: org.id, city: "Belo Horizonte", state: "MG" }).execute();
 
-    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { title: "Doação de alimentos não perecíveis", status: "aguardando_destinacao" });
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { unit: "kg", title: "Doação de alimentos não perecíveis", status: "aguardando_destinacao" });
     await db.updateTable("opportunityRegistry").set({ category: "Alimentos", unit: "kg", quantity: "20", locationCity: "Belo Horizonte", locationState: "MG" }).where("id", "=", opportunity.id).execute();
     await runMatchingForOpportunity(opportunity.id, admin.userId);
     const allocation = await db.selectFrom("opportunityAllocations").selectAll().where("opportunityRegistryId", "=", opportunity.id).executeTakeFirstOrThrow();
@@ -172,7 +172,9 @@ describe("need_fulfillments — ledger de atendimento", () => {
     const evaluation = await db.selectFrom("matchEvaluations").select(["needId"]).where("allocationId", "=", allocation.id).executeTakeFirstOrThrow();
     expect(evaluation.needId).toBe(need.id); // a relação existe...
 
-    // ...mas o item escolhido no recebimento tem unidade diferente da need.
+    // ...mas o item escolhido no recebimento tem unidade diferente da need. (Fase 99C: este teste é do LEDGER; a oferta passa a ter a unidade do item para o recebimento seguir o fluxo normal — a
+    // divergência entre a unidade da oferta e a do item é coberta por test/unitRegularization*.test.ts.)
+    await db.updateTable("opportunityRegistry").set({ unit: "unidade" }).where("id", "=", opportunity.id).execute();
     const receiveRes = await receiveHandle(buildRequest("allocations-receive", { method: "POST", cookie: owner.cookie, body: { organizationId: org.id, allocationId: allocation.id, itemId: item.id, quantityReceived: 20 } }));
     expect(receiveRes.status).toBe(200);
 
@@ -192,7 +194,7 @@ describe("need_fulfillments — ledger de atendimento", () => {
     const item = await createTestInventoryItem(org.id, owner.userId, { name: "Leite", unit: "litro" });
     const admin = await createAuthenticatedUser();
     const source = await createTestSource(admin.userId);
-    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { status: "atribuida" });
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { unit: "litro", status: "atribuida" });
     const allocation = await createTestAllocation(opportunity.id, org.id, { status: "aceita", quantityAllocated: 30 });
 
     const req1 = buildRequest("allocations-receive", { method: "POST", cookie: owner.cookie, body: { organizationId: org.id, allocationId: allocation.id, itemId: item.id, quantityReceived: 30 } });
@@ -222,7 +224,7 @@ describe("need_fulfillments — ledger de atendimento", () => {
     const orgB = await createTestOrganization(ownerB.userId, { city: "Belo Horizonte", state: "MG" });
     await db.insertInto("needs").values({ organizationId: orgB.id, title: "Alimentos não perecíveis para doação", quantityNeeded: "20", unit: "kg", priority: "baixa", status: "aberta", createdByUserId: ownerB.userId }).execute();
 
-    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { title: "Doação de alimentos não perecíveis", status: "aguardando_destinacao" });
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { unit: "kg", title: "Doação de alimentos não perecíveis", status: "aguardando_destinacao" });
     await db.updateTable("opportunityRegistry").set({ category: "Alimentos", unit: "kg", quantity: "20", locationCity: "Belo Horizonte", locationState: "MG" }).where("id", "=", opportunity.id).execute();
     await runMatchingForOpportunity(opportunity.id, admin.userId);
 
@@ -242,7 +244,7 @@ describe("need_fulfillments — ledger de atendimento", () => {
     const item = await createTestInventoryItem(org.id, owner.userId, { name: "Item X", unit: "kg" });
     const admin = await createAuthenticatedUser();
     const source = await createTestSource(admin.userId);
-    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { status: "atribuida" });
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { unit: "kg", status: "atribuida" });
     const allocation = await createTestAllocation(opportunity.id, org.id, { status: "aceita", quantityAllocated: 10 });
     await receiveHandle(buildRequest("allocations-receive", { method: "POST", cookie: owner.cookie, body: { organizationId: org.id, allocationId: allocation.id, itemId: item.id, quantityReceived: 10 } }));
 
@@ -270,7 +272,7 @@ describe("need_fulfillments — FKs RESTRICT (achado de auditoria corrigido: app
       .execute();
     const admin = await createAuthenticatedUser();
     const source = await createTestSource(admin.userId);
-    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { status: "atribuida" });
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { unit: "kg", status: "atribuida" });
     const allocation = await createTestAllocation(opportunity.id, org.id, { status: "aceita", quantityAllocated: 10 });
 
     // Vincula manualmente um needId (não passa pelo motor, só para isolar
@@ -331,7 +333,7 @@ describe("need_fulfillments — Modelo B: ledger de eventos (entry_type/is_count
     const item = await createTestInventoryItem(org.id, owner.userId, { name: "Item Modelo B", unit: "kg" });
     const admin = await createAuthenticatedUser();
     const source = await createTestSource(admin.userId);
-    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { status: "atribuida" });
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { unit: "kg", status: "atribuida" });
     const allocation = await createTestAllocation(opportunity.id, org.id, { status: "aceita", quantityAllocated: quantity });
 
     const receiveRes = await receiveHandle(buildRequest("allocations-receive", { method: "POST", cookie: owner.cookie, body: { organizationId: org.id, allocationId: allocation.id, itemId: item.id, quantityReceived: quantity } }));
@@ -471,7 +473,7 @@ describe("need_fulfillments — Modelo B: ledger de eventos (entry_type/is_count
     const org = await createTestOrganization(owner.userId);
     const admin = await createAuthenticatedUser();
     const source = await createTestSource(admin.userId);
-    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { status: "atribuida" });
+    const opportunity = await createTestOpportunityRegistry(source.id, admin.userId, { unit: "kg", status: "atribuida" });
     const allocation = await createTestAllocation(opportunity.id, org.id, { status: "aceita", quantityAllocated: 10 });
     const item = await createTestInventoryItem(org.id, owner.userId, { name: "Item legado", unit: "kg" });
     const [tx] = await db.insertInto("stockTransactions").values({ organizationId: org.id, itemId: item.id, type: "entrada", delta: "10", createdByUserId: owner.userId }).returning(["id"]).execute();

@@ -43,11 +43,11 @@ async function base() {
 type Base = Awaited<ReturnType<typeof base>>;
 
 async function newDonationOpportunity(b: Base) {
-  const [o] = await db.insertInto("donationOpportunities").values({ organizationId: b.orgId, title: "Oferta de teste", donorName: "Doador", createdByUserId: b.owner.userId }).returning(["id", "status"]).execute();
+  const [o] = await db.insertInto("donationOpportunities").values({ organizationId: b.orgId, title: "Oferta de teste", donorName: "Doador", unit: "kg", createdByUserId: b.owner.userId }).returning(["id", "status"]).execute();
   return o.id;
 }
 async function newRegistryOpportunity(b: Base, quantity: string | null = "999999999.999") {
-  const opp = await createTestOpportunityRegistry(b.sourceId, b.admin.userId, { status: "validada" });
+  const opp = await createTestOpportunityRegistry(b.sourceId, b.admin.userId, { unit: "kg", status: "validada" });
   await db.updateTable("opportunityRegistry").set({ quantity }).where("id", "=", opp.id).execute();
   return opp.id;
 }

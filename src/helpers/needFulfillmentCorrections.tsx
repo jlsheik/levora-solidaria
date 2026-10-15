@@ -8,6 +8,7 @@ import { recordAuditLogEntry } from "./auditLog.js";
 import { createApprovalRequest } from "./approvals.js";
 import { getItemStockBalance } from "./stockBalance.js";
 import superjson from "superjson";
+import { unitsEquivalent } from "./unitVocabulary.js";
 
 /**
  * Ciclo de correção/estorno do ledger de atendimento (Fase 78, Fatia 1).
@@ -302,7 +303,7 @@ export async function lockAndPlanLedgerOperation(
     saldoFisicoAllocation = Number(sumRow?.total ?? 0);
   }
   // Só há significado físico quando a unidade da linha é a do item (sem conversão).
-  const unitMatchesItem = (lineUnit: string) => item !== null && normalize(lineUnit) === normalize(item.unit);
+  const unitMatchesItem = (lineUnit: string) => item !== null && unitsEquivalent(lineUnit, item.unit);
   const round3 = (n: number) => Math.round(n * QUANTITY_SCALE) / QUANTITY_SCALE;
   const buildStock = async (delta: number, carrier: "correction" | "reversal"): Promise<{ stock: LedgerStockEffect } | LedgerPlanError> => {
     const balance = await getItemStockBalance(trx, (item as { id: number }).id);
@@ -369,7 +370,7 @@ export async function lockAndPlanLedgerOperation(
 
   const quantidadeNova = qtyChanged ? (quantity as number) : head.quantity;
   const unidadeNova = unitChanged ? (unit as string).trim() : head.unit;
-  const isCountableNova = unitChanged ? (need ? normalize(unidadeNova) === normalize(need.unit) : true) : head.isCountable;
+  const isCountableNova = unitChanged ? (need ? unitsEquivalent(unidadeNova, need.unit) : true) : head.isCountable;
   const countsNova = isCountableNova && needId !== null;
 
   // Efeito contado ANTES: zero quando a cadeia está estornada (já anulada).

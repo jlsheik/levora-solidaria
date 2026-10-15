@@ -42,6 +42,12 @@ export async function handle(request: Request) {
         return { type: "invalid_transition" as const, from: allocation.status };
       }
 
+      // Fase 99C: o recurso foi apresentado e aguarda regularização de unidade; cancelar a atribuição agora esconderia um recebimento físico. Resolva ou encerre o caso antes.
+      if (input.eventType === "cancelado") {
+        const pending = await trx.selectFrom("unitRegularizationCases").select("id").where("allocationId", "=", allocation.id).where("status", "in", ["aberto", "conferido"]).executeTakeFirst();
+        if (pending) return { type: "pending_regularization" as const };
+      }
+
       if (nextStatus !== allocation.status) {
         await trx
           .updateTable("opportunityAllocations")
@@ -134,6 +140,12 @@ export async function handle(request: Request) {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
+    }
+    if (result.type === "pending_regularization") {
+      return new Response(
+        superjson.stringify({ message: "Esta atribuição tem um recebimento pendente de regularização de unidade. Resolva ou encerre o caso na fila de pendências antes de cancelar." }),
+        { status: 409, headers: { "Content-Type": "application/json" } }
+      );
     }
     if (result.type === "invalid_transition") {
       return new Response(

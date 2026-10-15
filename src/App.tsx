@@ -33,6 +33,8 @@ import OrganizationMatchingSettingsPage from "./pages/organizacoes.$organization
 import organizationMatchingSettingsPageLayout from "./pages/organizacoes.$organizationId.matching.pageLayout";
 import OrganizationUnitsPage from "./pages/organizacoes.$organizationId.unidades";
 import organizationUnitsPageLayout from "./pages/organizacoes.$organizationId.unidades.pageLayout";
+import OrganizationRegularizationPage from "./pages/organizacoes.$organizationId.regularizacao";
+import organizationRegularizationPageLayout from "./pages/organizacoes.$organizationId.regularizacao.pageLayout";
 
 import PlatformPage from "./pages/plataforma";
 import platformPageLayout from "./pages/plataforma.pageLayout";
@@ -106,6 +108,10 @@ const router = createBrowserRouter([
       {
         path: "/organizacoes/:organizationId/unidades",
         element: <>{withPageLayout(organizationUnitsPageLayout, OrganizationUnitsPage)}</>,
+      },
+      {
+        path: "/organizacoes/:organizationId/regularizacao",
+        element: <>{withPageLayout(organizationRegularizationPageLayout, OrganizationRegularizationPage)}</>,
       },
       {
         path: "/plataforma",

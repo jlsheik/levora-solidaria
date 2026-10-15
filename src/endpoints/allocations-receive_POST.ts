@@ -1,13 +1,11 @@
 import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
-import { recordAuditLogEntry } from "../helpers/auditLog.js";
-import { getItemStockBalance } from "../helpers/stockBalance.js";
-import { concludeOpportunityIfAllTerminalAndReceived } from "../helpers/concludeOpportunity.js";
-import { computeNeedProgress, createNeedFulfillment, getNeedFulfillmentBalance } from "../helpers/needFulfillment.js";
+import { postAllocationReceipt } from "../helpers/receiptPosting.js";
+import { checkOfferUnitAgainstItem } from "../helpers/unitVocabulary.js";
+import { closeAsCorrectedIfNowCompatible, findActiveCase, openCase } from "../helpers/unitRegularization.js";
 import { schema } from "./allocations-receive_POST.schema.js";
 import superjson from "superjson";
-import { roundQuantity } from "../helpers/quantityRules.js";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
 
 export async function handle(request: Request) {
@@ -55,133 +53,47 @@ export async function handle(request: Request) {
         proofUrl = `/_api/v1/files-download?fileId=${proofFile.id}`;
       }
 
-      const opportunity = await trx
-        .selectFrom("opportunityRegistry")
-        .select(["id", "title"])
-        .where("id", "=", allocation.opportunityRegistryId)
-        .executeTakeFirst();
-
-      const [tx] = await trx
-        .insertInto("stockTransactions")
-        .values({
+      // Fase 99C: unidade da oferta × unidade canônica do item. Sem equivalência comprovada NADA é lançado (nem estoque, nem ledger, nem atendimento): o recebimento vira (ou
+      // reaproveita) um caso de regularização, de forma atômica e idempotente (um só caso ativo por atribuição, garantido por índice único parcial). Ordem de travas:
+      // atribuição → item → caso → oferta da rede → auditoria.
+      const registry = await trx.selectFrom("opportunityRegistry").select(["id", "unit"]).where("id", "=", allocation.opportunityRegistryId).executeTakeFirst();
+      let activeCase = await findActiveCase(trx, { allocationId: allocation.id });
+      if (activeCase && (await closeAsCorrectedIfNowCompatible(trx, activeCase, registry?.unit ?? null, user.id))) activeCase = undefined;
+      if (activeCase) {
+        return { type: "pending_regularization" as const, caseId: activeCase.id, status: activeCase.status, created: false };
+      }
+      const unitCheck = checkOfferUnitAgainstItem(registry?.unit ?? null, item.unit);
+      if (!unitCheck.compatible) {
+        const created = await openCase(trx, {
           organizationId: input.organizationId,
-          itemId: input.itemId,
-          type: "entrada",
-          delta: input.quantityReceived,
-          reason: `Recebimento da atribuição da rede Levora — oportunidade "${opportunity?.title ?? allocation.opportunityRegistryId}"${input.notes ? ` — ${input.notes}` : ""}`,
-          createdByUserId: user.id,
-        })
-        .returning(["id"])
-        .execute();
+          allocationId: allocation.id,
+          itemId: item.id,
+          offeredQuantity: Number(allocation.quantityAllocated),
+          offeredUnit: registry?.unit ?? null,
+          informedQuantity: input.quantityReceived,
+          itemUnit: item.unit,
+          receiptNotes: input.notes ?? null,
+          divergenceKind: unitCheck.reason,
+          userId: user.id,
+        });
+        return { type: "pending_regularization" as const, caseId: created.id, status: created.status, created: true };
+      }
 
-      await trx
-        .updateTable("opportunityAllocations")
-        .set({ status: "recebida", updatedAt: new Date() })
-        .where("id", "=", input.allocationId)
-        .execute();
-
-      // Ledger de atendimento (Fase 29) — registra o fato físico do
-      // recebimento, resolvendo needId pela relação real com
-      // match_evaluations quando a allocation veio do motor (ver
-      // needFulfillment.tsx). organizationId vem sempre da própria
-      // allocation já validada acima, nunca de um valor separado — não há
-      // como uma organização criar um fulfillment associado a outra.
-      await createNeedFulfillment(trx, {
+      const posted = await postAllocationReceipt(trx, {
         organizationId: input.organizationId,
-        allocationId: input.allocationId,
-        stockTransactionId: tx.id,
-        quantity: input.quantityReceived,
-        unit: item.unit,
-        createdByUserId: user.id,
+        allocation,
+        item,
+        quantityReceived: input.quantityReceived,
+        userId: user.id,
+        notes: input.notes ?? null,
+        proofUrl,
       });
-
-      await trx
-        .insertInto("logisticsEvents")
-        .values({
-          opportunityAllocationId: input.allocationId,
-          organizationId: input.organizationId,
-          eventType: "entrega_confirmada",
-          notes: input.notes ?? null,
-          proofUrl,
-          actorUserId: user.id,
-        })
-        .execute();
-
-      // Achado de auditoria corrigido: chamado ANTES de qualquer
-      // recordAuditLogEntry desta transação (que trava o advisory lock
-      // GLOBAL da cadeia de auditoria até o commit) — travar a linha da
-      // oportunidade primeiro e o audit log por último é a mesma ordem
-      // usada nos outros 3 caminhos que também podem concluir a
-      // oportunidade, evitando o deadlock que a Fase 27 encontrou quando
-      // essa ordem ficou invertida em algum caminho.
-      const concluded = await concludeOpportunityIfAllTerminalAndReceived(trx, allocation.opportunityRegistryId);
-
-      // Política de excedentes (decisão do dono): receber MAIS que o alocado/necessário é PERMITIDO (a realidade física manda; o ledger
-      // guarda o valor realmente recebido, sem corte). O excedente fica IDENTIFICÁVEL na auditoria, só com ids e números.
-      const allocated = Number(allocation.quantityAllocated);
-      const overAllocation = Math.max(0, roundQuantity(input.quantityReceived - allocated));
-      const ledgerRow = await trx
-        .selectFrom("needFulfillments as nf")
-        .leftJoin("needs as n", "n.id", "nf.needId")
-        .select(["nf.needId", "nf.isCountable", "n.quantityNeeded"])
-        .where("nf.allocationId", "=", input.allocationId)
-        .where("nf.entryType", "=", "original")
-        .executeTakeFirst();
-      let needProgress: { fulfilled: number; requiredRemaining: number; surplus: number } | null = null;
-      let overNeed = 0;
-      if (ledgerRow?.needId != null && ledgerRow.quantityNeeded != null) {
-        const needed = Number(ledgerRow.quantityNeeded);
-        const fulfilledAfter = await getNeedFulfillmentBalance(trx, ledgerRow.needId);
-        needProgress = computeNeedProgress(needed, fulfilledAfter);
-        // quanto do excedente da necessidade ESTE recebimento causou (0 se a unidade divergiu e a linha não conta)
-        const fulfilledBefore = ledgerRow.isCountable ? roundQuantity(fulfilledAfter - input.quantityReceived) : fulfilledAfter;
-        overNeed = roundQuantity(needProgress.surplus - computeNeedProgress(needed, fulfilledBefore).surplus);
-      }
-
-      await recordAuditLogEntry(
-        {
-          organizationId: input.organizationId,
-          actorUserId: user.id,
-          action: "atribuicao.recebida",
-          entityType: "opportunity_allocation",
-          entityId: String(input.allocationId),
-          metadata: {
-            itemId: input.itemId,
-            itemName: item.name,
-            quantityReceived: input.quantityReceived,
-            stockTransactionId: String(tx.id),
-            needId: ledgerRow?.needId ?? null,
-            quantidadeAlocada: allocated,
-            acimaDaAlocacao: overAllocation > 0,
-            excedenteAlocacao: overAllocation,
-            excedenteNecessidade: overNeed,
-            progressoNecessidade: needProgress,
-          },
-        },
-        trx
-      );
-
-      if (concluded) {
-        await recordAuditLogEntry(
-          {
-            organizationId: null,
-            actorUserId: user.id,
-            action: "descoberta_central.concluida",
-            entityType: "opportunity_registry",
-            entityId: String(allocation.opportunityRegistryId),
-            metadata: {},
-          },
-          trx
-        );
-      }
-
-      const newStock = await getItemStockBalance(trx, input.itemId);
 
       return {
         type: "success" as const,
         allocation: { id: input.allocationId, status: "recebida" },
-        stockTransactionId: String(tx.id),
-        newStock,
+        stockTransactionId: posted.stockTransactionId,
+        newStock: posted.newStock,
       };
     });
 
@@ -190,6 +102,22 @@ export async function handle(request: Request) {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
+    }
+    if (result.type === "pending_regularization") {
+      // 202: o recebimento FOI apresentado, mas nada foi lançado — há uma regularização de unidade pendente (a mesma resposta serve para o retry).
+      return new Response(
+        superjson.stringify({
+          allocation: { id: input.allocationId, status: "pendente_de_regularizacao" },
+          pendingRegularization: {
+            caseId: result.caseId,
+            status: result.status,
+            created: result.created,
+            message:
+              "O recebimento não foi lançado no estoque: a unidade da oferta não tem equivalência comprovada com a unidade do item. Regularize o caso na fila de pendências de unidade.",
+          },
+        }),
+        { status: 202, headers: { "Content-Type": "application/json" } }
+      );
     }
     if (result.type === "item_not_found") {
       return new Response(superjson.stringify({ message: "Item de inventário não encontrado nesta organização" }), {

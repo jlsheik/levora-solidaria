@@ -60,7 +60,7 @@ async function setupEnv(opts: { itemUnit?: string; needUnit?: string } = {}): Pr
 async function receive(e: Env, quantity = 100): Promise<Alloc> {
   const platform = await createAuthenticatedUser();
   const source = await createTestSource(platform.userId);
-  const opp = await createTestOpportunityRegistry(source.id, platform.userId, { status: "reservada" });
+  const opp = await createTestOpportunityRegistry(source.id, platform.userId, { unit: "kg", status: "reservada" });
   const [al] = await db
     .insertInto("opportunityAllocations")
     .values({ opportunityRegistryId: opp.id, organizationId: e.orgId, quantityAllocated: "100", status: "aceita", needId: e.needId })
@@ -503,7 +503,7 @@ describe("Fase 80 — concorrência física (Postgres real, Promise.all)", () =>
     const id = await pendingId(await correct(e, a, e.operador, { expectedVigenteFulfillmentId: await tok(e, a), quantity: 80 }));
     const platform = await createAuthenticatedUser();
     const source = await createTestSource(platform.userId);
-    const opp = await createTestOpportunityRegistry(source.id, platform.userId, { status: "reservada" });
+    const opp = await createTestOpportunityRegistry(source.id, platform.userId, { unit: "kg", status: "reservada" });
     const [al2] = await db.insertInto("opportunityAllocations").values({ opportunityRegistryId: opp.id, organizationId: e.orgId, quantityAllocated: "30", status: "aceita", needId: e.needId }).returning(["id"]).execute();
     const [dec, rec] = await Promise.all([
       decide(e, e.admin, id),
@@ -554,7 +554,7 @@ describe("Fase 80 — concorrência física (Postgres real, Promise.all)", () =>
       const id = await pendingId(await correct(e, a, e.operador, { expectedVigenteFulfillmentId: await tok(e, a), quantity: 80 }));
       const platform = await createAuthenticatedUser();
       const source = await createTestSource(platform.userId);
-      const opp = await createTestOpportunityRegistry(source.id, platform.userId, { status: "reservada" });
+      const opp = await createTestOpportunityRegistry(source.id, platform.userId, { unit: "kg", status: "reservada" });
       const [al2] = await db.insertInto("opportunityAllocations").values({ opportunityRegistryId: opp.id, organizationId: e.orgId, quantityAllocated: "30", status: "aceita", needId: e.needId }).returning(["id"]).execute();
       const [dec, rec] = await Promise.all([
         decide(e, e.admin, id),

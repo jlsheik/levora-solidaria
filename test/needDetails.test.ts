@@ -228,7 +228,7 @@ describe("atomicidade e concorrência", () => {
     for (let round = 0; round < 3; round++) {
       const platform = await createAuthenticatedUser();
       const source = await createTestSource(platform.userId);
-      const opp = await createTestOpportunityRegistry(source.id, platform.userId, { status: "reservada" });
+      const opp = await createTestOpportunityRegistry(source.id, platform.userId, { unit: "kg", status: "reservada" });
       const al = await db.insertInto("opportunityAllocations").values({ opportunityRegistryId: opp.id, organizationId: e.orgId, quantityAllocated: "100", status: "aceita", needId: e.needId }).returning("id").executeTakeFirstOrThrow();
       const [d, r] = await Promise.all([
         edit(e.owner.cookie, { organizationId: e.orgId, needId: e.needId, title: `Título durante recebimento ${round}`, description: `desc ${round}` }),
@@ -262,7 +262,7 @@ describe("matching: lê a necessidade VIVA na próxima avaliação; avaliações
     const need = await db.insertInto("needs").values({ organizationId: org.id, title: "Alimentos não perecíveis", quantityNeeded: "50", unit: "kg", priority: "baixa", status: "aberta", createdByUserId: owner.userId }).returning("id").executeTakeFirstOrThrow();
     const platform = await createAuthenticatedUser();
     const source = await createTestSource(platform.userId);
-    const opp = await createTestOpportunityRegistry(source.id, platform.userId, { status: "aguardando_destinacao" });
+    const opp = await createTestOpportunityRegistry(source.id, platform.userId, { unit: "kg", status: "aguardando_destinacao" });
     await db.updateTable("opportunityRegistry").set({ title: "Alimentos diversos de mercado", category: "Alimentos", quantity: "5", unit: "kg" }).where("id", "=", opp.id).execute();
 
     const evalRows = () => db.selectFrom("matchEvaluations").select(["id", "needId", "criteria", "decision", "algorithmVersion"]).where("opportunityRegistryId", "=", opp.id).orderBy("id").execute();

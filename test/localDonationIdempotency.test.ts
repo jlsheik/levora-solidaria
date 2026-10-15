@@ -268,7 +268,7 @@ describe("atomicidade, validação, autorização e isolamento", () => {
 
   it("recebimentos de ofertas DIFERENTES (mesma organização, mesmo item) continuam independentes e somam", async () => {
     const s = await setup();
-    const [opp2] = await db.insertInto("donationOpportunities").values({ organizationId: s.org.id, title: "Outra oferta", donorName: "Padaria", createdByUserId: s.owner.userId }).returning("id").execute();
+    const [opp2] = await db.insertInto("donationOpportunities").values({ organizationId: s.org.id, title: "Outra oferta", donorName: "Padaria", unit: "kg", createdByUserId: s.owner.userId }).returning("id").execute();
     const [a, b] = await withItemsHeld([s.itemA.id], 2, () => Promise.all([receive(s, { quantityReceived: 10 }), receive(s, { opportunityId: opp2.id, quantityReceived: 4 })]));
     expect([a.status, b.status]).toEqual([200, 200]);
     expect(await getItemStockBalance(db, s.itemA.id)).toBe(14);

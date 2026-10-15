@@ -127,7 +127,9 @@ export default function OrganizationAllocationsPage() {
       queryClient.invalidateQueries({ queryKey: ["organization-allocations", organizationId] });
       queryClient.invalidateQueries({ queryKey: ["inventory-items", organizationId] });
       queryClient.invalidateQueries({ queryKey: ["stock-transactions", organizationId] });
-      toast.success(`Recebimento registrado. Novo saldo do item: ${result.newStock}`);
+      queryClient.invalidateQueries({ queryKey: ["unit-regularization-cases", organizationId] });
+      if (result.pendingRegularization) toast.warning(result.pendingRegularization.message, { duration: 12000 });
+      else toast.success(`Recebimento registrado. Novo saldo do item: ${result.newStock}`);
       setReceiveTarget(null);
       setUploadedProof(null);
     },
@@ -167,6 +169,11 @@ export default function OrganizationAllocationsPage() {
         {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
           <Link to={`/organizacoes/${organizationId}/unidades`} className={styles.tabNavItem}>
             Unidades
+          </Link>
+        )}
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador" || org?.myRole === "operador") && (
+          <Link to={`/organizacoes/${organizationId}/regularizacao`} className={styles.tabNavItem}>
+            Pendências de unidade
           </Link>
         )}
       </nav>
@@ -265,7 +272,13 @@ export default function OrganizationAllocationsPage() {
                   <Button size="sm" variant="secondary" onClick={() => decideMutation.mutate({ allocationId: a.id, decision: "recusada" })}>Recusar</Button>
                 </div>
               )}
-              {canManage && a.status === "aceita" && (
+              {a.pendingRegularizationCaseId !== null && (
+                <p className={styles.meta} role="status">
+                  <strong>Recebimento pendente de regularização de unidade.</strong> O recurso foi apresentado, mas nada foi lançado no estoque.{" "}
+                  <Link to={`/organizacoes/${organizationId}/regularizacao`}>Abrir a fila de pendências</Link>
+                </p>
+              )}
+              {canManage && a.status === "aceita" && a.pendingRegularizationCaseId === null && (
                 <div className={styles.actions}>
                   <Button size="sm" variant="secondary" onClick={() => logisticsMutation.mutate({ allocationId: a.id, eventType: "coleta_agendada" })}>Agendar coleta</Button>
                   <Button size="sm" variant="secondary" onClick={() => { setReceiveTarget({ id: a.id, title: a.opportunityTitle }); receiveForm.setValues({ quantityReceived: 0, notes: "", proofUrl: "" } as any); setUploadedProof(null); }}>
@@ -273,13 +286,13 @@ export default function OrganizationAllocationsPage() {
                   </Button>
                 </div>
               )}
-              {canManage && a.status === "em_coleta" && (
+              {canManage && a.status === "em_coleta" && a.pendingRegularizationCaseId === null && (
                 <div className={styles.actions}>
                   <Button size="sm" variant="secondary" onClick={() => logisticsMutation.mutate({ allocationId: a.id, eventType: "coleta_concluida" })}>Marcar coleta concluída</Button>
                   <Button size="sm" variant="secondary" onClick={() => logisticsMutation.mutate({ allocationId: a.id, eventType: "transporte_iniciado" })}>Iniciar transporte</Button>
                 </div>
               )}
-              {canManage && (a.status === "aceita" || a.status === "em_coleta" || a.status === "em_transporte") && (
+              {canManage && (a.status === "aceita" || a.status === "em_coleta" || a.status === "em_transporte") && a.pendingRegularizationCaseId === null && (
                 <div className={styles.actions}>
                   {a.status === "em_transporte" && (
                     <Button size="sm" onClick={() => { setReceiveTarget({ id: a.id, title: a.opportunityTitle }); receiveForm.setValues({ quantityReceived: 0, notes: "", proofUrl: "" } as any); setUploadedProof(null); }}>

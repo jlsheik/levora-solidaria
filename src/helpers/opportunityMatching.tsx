@@ -9,6 +9,7 @@ import { roundQuantity } from "./quantityRules.js";
 import { createHash } from "node:crypto";
 import { getRefusingOrganizationIds, getReassignmentPausedOrganizationIds } from "./allocationRefusals.js";
 import { getResponseDeadlineHours } from "./assignmentSettings.js";
+import { unitsEquivalent } from "./unitVocabulary.js";
 
 /**
  * Motor de correspondência — determinístico + IA como apoio, nunca como
@@ -364,7 +365,7 @@ export async function runMatchingForOpportunity(
       // `opportunity.quantity === null` ("quantidade não informada") é
       // distinto e não é afetado por esta regra — continua com score fixo
       // 70, comportamento pré-existente inalterado.
-      const unitsIncompatible = opportunity.quantity !== null && (opportunity.unit === null || normalize(opportunity.unit) !== normalize(c.needUnit));
+      const unitsIncompatible = opportunity.quantity !== null && (opportunity.unit === null || !unitsEquivalent(opportunity.unit, c.needUnit));
       const quantidadeCriterion: CriterionResult = opportunity.quantity === null
         ? { score: 70, weight: 0.15, detail: "quantidade da oportunidade não informada" }
         : unitsIncompatible
@@ -403,7 +404,7 @@ export async function runMatchingForOpportunity(
       const orgCapacities = capacitiesByOrg.get(c.organizationId) ?? [];
       const matchingCapacity = opportunity.category && opportunity.unit
         ? orgCapacities.find(
-            (cap) => normalize(cap.category) === normalize(opportunity.category!) && normalize(cap.unit) === normalize(opportunity.unit!)
+            (cap) => normalize(cap.category) === normalize(opportunity.category!) && unitsEquivalent(cap.unit, opportunity.unit!)
           )
         : undefined;
       const capacidadeArmazenamento: CriterionResult =

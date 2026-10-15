@@ -29,6 +29,7 @@ import { Textarea } from "../components/Textarea";
 import { Button } from "../components/Button";
 import { Badge } from "../components/Badge";
 import { UnitText } from "../components/UnitText";
+import { UnitSelect } from "../components/UnitSelect";
 import { Skeleton } from "../components/Skeleton";
 import {
   Select,
@@ -155,6 +156,11 @@ export default function NeedsPage() {
             Unidades
           </Link>
         )}
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador" || org?.myRole === "operador") && (
+          <Link to={`/organizacoes/${organizationId}/regularizacao`} className={styles.tabNavItem}>
+            Pendências de unidade
+          </Link>
+        )}
       </nav>
 
       <div className={styles.titleRow}>
@@ -224,11 +230,7 @@ export default function NeedsPage() {
                     <FormItem name="unit" className={styles.formRowItem}>
                       <FormLabel>Unidade</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="cestas, kg, unidades..."
-                          value={form.values.unit || ""}
-                          onChange={(e) => form.setValues((p: any) => ({ ...p, unit: e.target.value }))}
-                        />
+                        <UnitSelect value={form.values.unit || ""} onChange={(v) => form.setValues((p: any) => ({ ...p, unit: v }))} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

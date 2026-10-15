@@ -80,7 +80,7 @@ describe("configuração de organização para matching (capacidade, logística,
       await addMembership(orgId, volunteer.userId, "voluntario");
 
       const response = await postCapacity(
-        buildRequest("organization-capacities", { method: "POST", cookie: volunteer.cookie, body: { organizationId: orgId, category: "Roupas", unit: "peça", maxCapacity: 50 } })
+        buildRequest("organization-capacities", { method: "POST", cookie: volunteer.cookie, body: { organizationId: orgId, category: "Roupas", unit: "unidade", maxCapacity: 50 } })
       );
       expect(response.status).toBe(403);
     });

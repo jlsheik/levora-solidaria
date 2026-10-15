@@ -7,6 +7,7 @@ import { db } from "../../src/helpers/db";
 import { generatePasswordHash } from "../../src/helpers/generatePasswordHash";
 import { buildRequest, createSessionCookie } from "../../test/helpers";
 import { handle as stockTransaction } from "../../src/endpoints/stock-transactions_POST";
+import { handle as receiveAllocation } from "../../src/endpoints/allocations-receive_POST";
 
 // vem do orquestrador (scenarios.mjs), para a semente e o login do navegador nunca divergirem
 const QA_PASSWORD = process.env.QA_PASSWORD ?? "";
@@ -52,6 +53,12 @@ const source = await db.insertInto("sources").values({ name: "Fonte QA", type: "
 const opp = await db.insertInto("opportunityRegistry").values({ sourceId: source.id, title: "Doação sintética aceita", status: "validada", quantity: "10", unit: "kg", discoveredByUserId: owner }).returning("id").executeTakeFirstOrThrow();
 // Fase 98: é uma atribuição AUTOMÁTICA com prazo próximo do vencimento (5 h), para a tela renderizar a seção de pendências no estado "vence em breve".
 await db.insertInto("opportunityAllocations").values({ opportunityRegistryId: opp.id, organizationId: org.id, status: "aceita", quantityAllocated: "5", autoMatched: true, responseDueAt: sql<Date>`now() + interval '5 hours'` }).execute();
+
+// Fase 99C: uma atribuição ACEITA cuja oferta está em "caixa" e o item em "kg": o recebimento pelo endpoint real vira um caso de regularização de unidade (fila de pendências).
+const opp2 = await db.insertInto("opportunityRegistry").values({ sourceId: source.id, title: "Doação sintética em caixas", status: "validada", quantity: "4", unit: "caixa", discoveredByUserId: owner }).returning("id").executeTakeFirstOrThrow();
+const alloc2 = await db.insertInto("opportunityAllocations").values({ opportunityRegistryId: opp2.id, organizationId: org.id, status: "aceita", quantityAllocated: "4" }).returning("id").executeTakeFirstOrThrow();
+const pendingRes = await receiveAllocation(buildRequest("allocations-receive", { method: "POST", cookie, body: { organizationId: org.id, allocationId: alloc2.id, itemId: item.id, quantityReceived: 4 } }));
+if (pendingRes.status !== 202) throw new Error(`o recebimento divergente da semente deveria abrir um caso (202), veio ${pendingRes.status}`);
 
 await db.destroy();
 console.log("semente QA aplicada");

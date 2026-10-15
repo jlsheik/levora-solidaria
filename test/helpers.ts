@@ -140,7 +140,7 @@ export async function createTestSource(createdByUserId: number, overrides: { nam
 export async function createTestOpportunityRegistry(
   sourceId: number,
   discoveredByUserId: number,
-  overrides: { title?: string; status?: "descoberta" | "validada" | "aguardando_destinacao" | "reservada" } = {}
+  overrides: { title?: string; status?: "descoberta" | "validada" | "aguardando_destinacao" | "reservada"; unit?: string | null } = {}
 ) {
   const [opportunity] = await db
     .insertInto("opportunityRegistry")
@@ -149,7 +149,8 @@ export async function createTestOpportunityRegistry(
       title: overrides.title ?? "Doação de teste no registro central",
       status: overrides.status ?? "validada",
       quantity: "10",
-      unit: "unidade",
+      // Fase 99C: unidade "unidade" por padrão (a mesma do item de teste padrão); oferta SEM unidade é divergência (caso de regularização), então os testes que a querem informam unit: null.
+      unit: overrides.unit === undefined ? "unidade" : overrides.unit,
       discoveredByUserId,
     })
     .returning(["id", "title", "status"])

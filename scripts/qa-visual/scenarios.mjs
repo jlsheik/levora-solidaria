@@ -41,6 +41,10 @@ const ATTRIBUTIONS = "/organizacoes/1/atribuicoes";
 // Fase 99B: diagnóstico de unidades. A organização 1 tem valores canônicos, alias, ambíguos, desconhecidos e ausentes; a 2 (do mesmo dono) não tem nenhum.
 const UNITS = "/organizacoes/1/unidades";
 const UNITS_EMPTY = "/organizacoes/2/unidades";
+// Fase 99C: fila de pendências de unidade. A organização 1 tem um caso aberto (oferta em caixa × item em kg); a 2 não tem nenhum.
+const REGULARIZATION = "/organizacoes/1/regularizacao";
+const REGULARIZATION_EMPTY = "/organizacoes/2/regularizacao";
+const openConfer = { click: { css: "button", text: "^Conferir quantidade" } };
 const editNeed = { click: { css: 'button[class*="_ghost_"]', text: "^Editar a necessidade" } };
 const openReceive = { click: { css: "button", text: "^Registrar recebimento direto" } };
 // arquivo sintético que o FileDropzone RECUSA (a lista aceita é image/jpeg, image/png, image/webp): provoca o estado de erro real
@@ -61,6 +65,8 @@ export const CI_PROFILE_IDS = [
   "inventory-secondary-movement", "inventory-delta-negative",
   "dropzone-border", "dropzone-keyboard-focus", "dropzone-error-text", "needs-primary-new",
   // Fase 99B: tela de diagnóstico de unidades (classificadas, desconhecidas/ambíguas, vazio, erro, filtros; os 4 viewports incluem o móvel)
+  // Fase 99C: fila de pendências de unidade (caso aberto, vazio, erro, filtros, diálogo de conferência, aviso na atribuição)
+  "regularization-status-open", "regularization-empty", "regularization-error", "regularization-filter-select", "regularization-filter-no-results", "regularization-confer-qty", "regularization-confer-reason", "regularization-allocation-notice",
   "units-badge-canonical", "units-badge-unknown", "units-badge-ambiguous", "units-empty", "units-error", "units-filter-select", "units-filter-input", "units-filtered-unknown", "units-filter-no-results", "units-inventory-pending-marker",
 ];
 
@@ -110,6 +116,16 @@ export const SCENARIOS = [
   { id: "units-filtered-unknown", user: "owner", path: UNITS, steps: [{ select: { css: "select#filtro-classe", value: "desconhecida" } }], target: { css: 'td [data-kind="desconhecida"]', text: "^Desconhecida" }, measure: "text", variant: "Unidades: filtros aplicados" },
   { id: "units-filter-no-results", user: "owner", path: UNITS, steps: [{ type: { css: "input#filtro-valor", text: "zzz-sem-resultado" } }], target: { css: 'p[role="status"]', text: "^Nenhum valor corresponde" }, measure: "text", variant: "Unidades: filtros sem resultado" },
   { id: "units-inventory-pending-marker", user: "owner", path: INVENTORY, steps: [], target: { css: 'span[class*="_pending_"]', text: "a classificar" }, measure: "text", variant: "Inventário: unidade a classificar" },
+
+  // ---- Fase 99C: fila de pendências de unidade (regularização do recebimento). Estados: caso aberto, lista vazia, erro de carregamento, filtros, diálogo e aviso na atribuição.
+  { id: "regularization-status-open", user: "owner", path: REGULARIZATION, steps: [], target: { css: '[data-status="aberto"]', text: "^Aberto" }, measure: "text", variant: "Regularização: caso aberto" },
+  { id: "regularization-empty", user: "owner", path: REGULARIZATION_EMPTY, steps: [], target: { css: 'p[role="status"]', text: "^Nenhuma pendência de unidade em aberto" }, measure: "text", variant: "Regularização: lista vazia" },
+  { id: "regularization-error", user: "owner", path: REGULARIZATION, steps: [], blockUrls: ["*/_api/v1/unit-regularization-cases*"], target: { css: '[role="alert"] p', text: "^Não foi possível carregar as pendências de unidade" }, measure: "text", variant: "Regularização: erro de carregamento" },
+  { id: "regularization-filter-select", user: "owner", path: REGULARIZATION, steps: [], target: { css: "select#reg-status" }, measure: "field", variant: "Regularização: filtro (select)", expect: { height: 40 } },
+  { id: "regularization-filter-no-results", user: "owner", path: REGULARIZATION, steps: [{ select: { css: "select#reg-status", value: "encerrado" } }], target: { css: 'p[role="status"]', text: "^Nenhum caso corresponde" }, measure: "text", variant: "Regularização: filtros sem resultado" },
+  { id: "regularization-confer-qty", user: "owner", path: REGULARIZATION, steps: [openConfer], target: { css: "input#reg-qty", within: '[role="dialog"]' }, measure: "field", variant: "Regularização: diálogo (quantidade)", expect: { height: 40 } },
+  { id: "regularization-confer-reason", user: "owner", path: REGULARIZATION, steps: [openConfer], target: { css: "textarea#reg-reason", within: '[role="dialog"]' }, measure: "field", variant: "Regularização: diálogo (motivo)", expect: { minHeight: 96 } },
+  { id: "regularization-allocation-notice", user: "owner", path: ATTRIBUTIONS, steps: [], target: { css: 'p[role="status"]', text: "^Recebimento pendente de regularização" }, measure: "text", variant: "Regularização: aviso na atribuição" },
 
   // ---- voluntário: Switch desabilitado
   { id: "matching-switch-disabled", user: "volunteer", path: MATCHING, steps: [], target: { css: '[role="switch"]' }, measure: "switch", variant: "Switch (desabilitado)", states: ["disabled"], info: true },

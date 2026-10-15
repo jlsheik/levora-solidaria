@@ -324,6 +324,11 @@ export default function OrganizationDetailPage() {
             Unidades
           </Link>
         )}
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador" || org?.myRole === "operador") && (
+          <Link to={`/organizacoes/${organizationId}/regularizacao`} className={styles.tabNavItem}>
+            Pendências de unidade
+          </Link>
+        )}
       </nav>
 
       <div className={styles.columns}>

@@ -1,0 +1,10 @@
+.section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6); }
+.title { display: flex; align-items: center; gap: var(--spacing-2); font-family: var(--font-family-display); font-size: 1.0625rem; font-weight: 600; margin: 0 0 var(--spacing-3) 0; color: var(--card-foreground); }
+.help { color: var(--muted-foreground); font-size: 0.8125rem; line-height: 1.5; margin: 0 0 var(--spacing-3) 0; }
+.skeleton { height: 4rem; border-radius: var(--radius); }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-3); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-3); flex-wrap: wrap; padding: var(--spacing-3); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.rowInfo { display: flex; flex-direction: column; gap: 2px; font-size: 0.8125rem; color: var(--card-foreground); min-width: 0; overflow-wrap: anywhere; }
+.rowInfo span { color: var(--muted-foreground); font-size: 0.75rem; }
+.form { display: flex; flex-direction: column; gap: var(--spacing-3); }
+.label { font-size: 0.75rem; font-weight: 500; color: var(--muted-foreground); }

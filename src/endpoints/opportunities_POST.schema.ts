@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { optionalUnitInput } from "../helpers/unitInput.js";
 import { positiveQuantity } from "../helpers/quantityRules.js";
 import superjson from "superjson";
 
@@ -8,7 +9,7 @@ export const schema = z.object({
   description: z.string().optional(),
   category: z.string().optional(),
   quantityOffered: positiveQuantity("Informe uma quantidade maior que zero").optional(),
-  unit: z.string().optional(),
+  unit: optionalUnitInput("unidade da oferta"),
   donorName: z.string().min(2, "Informe o nome ou identificação do doador"),
   donorContact: z.string().optional(),
   linkedNeedId: z.coerce.number().int().positive().optional(),
