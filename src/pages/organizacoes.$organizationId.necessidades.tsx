@@ -150,6 +150,7 @@ export default function NeedsPage() {
         <Link to={`/organizacoes/${organizationId}/inventario`} className={styles.tabNavItem}>
           Inventário
         </Link>
+        <Link to={`/organizacoes/${organizationId}/destinacoes`} className={styles.tabNavItem}>Destinação</Link>
         <span className={styles.tabNavItemActive}>Necessidades</span>
         <Link to={`/organizacoes/${organizationId}/oportunidades`} className={styles.tabNavItem}>
           Oportunidades

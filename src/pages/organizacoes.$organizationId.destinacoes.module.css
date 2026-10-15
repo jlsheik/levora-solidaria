@@ -1,0 +1,14 @@
+.page { display: flex; flex-direction: column; gap: var(--spacing-4); min-height: 100vh; background: var(--background); color: var(--foreground); padding: var(--spacing-6) var(--spacing-4); max-width: 72rem; margin: 0 auto; width: 100%; box-sizing: border-box; min-width: 0; }
+.backLink { display: inline-flex; align-items: center; gap: var(--spacing-1); font-size: 0.875rem; color: var(--muted-foreground); text-decoration: none; }
+.tabNav { flex-wrap: wrap; display: flex; gap: var(--spacing-1); overflow-x: auto; border-bottom: 1px solid var(--border); }
+.tabNavItem, .tabNavItemActive { padding: var(--spacing-2) var(--spacing-3); font-size: 0.875rem; white-space: nowrap; text-decoration: none; color: var(--muted-foreground); }
+.tabNavItemActive { color: var(--foreground); border-bottom: 2px solid var(--primary); font-weight: 600; }
+.title { margin: 0; font-size: 1.5rem; font-weight: 700; color: var(--foreground); }
+.subtitle { margin: var(--spacing-1) 0 0; font-size: 0.875rem; color: var(--muted-foreground); line-height: 1.5; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: var(--spacing-3); align-items: end; }
+.field { display: flex; flex-direction: column; gap: var(--spacing-1); min-width: 0; }
+.label { font-size: 0.75rem; font-weight: 500; color: var(--muted-foreground); }
+.select { height: 2.5rem; width: 100%; min-width: 0; box-sizing: border-box; }
+.error { margin: 0; font-size: 0.8125rem; color: var(--error-text); line-height: 1.4; }
+.note { margin: 0; font-size: 0.8125rem; color: var(--muted-foreground); line-height: 1.5; }
+.notAllowed { padding: var(--spacing-6); text-align: center; color: var(--muted-foreground); }
