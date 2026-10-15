@@ -6,7 +6,8 @@ import { StockTransactionTypeArrayValues } from "../helpers/schema.js";
 export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),
   itemId: z.coerce.number().int().positive(),
-  type: z.enum(StockTransactionTypeArrayValues),
+  // Fase 99E: a saída física NÃO é mais lançada aqui — ela nasce junto da destinação (POST /stock-destinations). Entrada e ajuste continuam neste fluxo.
+  type: z.enum(StockTransactionTypeArrayValues).refine((t) => t !== "saida", "Saídas de estoque exigem destinação: use o registro de destinação (finalidade, data e, quando houver, a necessidade)"),
   quantity: nonZeroQuantity("Informe uma quantidade diferente de zero"),
   reason: z.string().min(2, "Descreva o motivo do lançamento"),
 });

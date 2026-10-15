@@ -40,14 +40,8 @@ export async function handle(request: Request) {
 
       const currentStock = await getItemStockBalance(trx, input.itemId);
 
-      let delta: number;
-      if (input.type === "entrada") {
-        delta = Math.abs(input.quantity);
-      } else if (input.type === "saida") {
-        delta = -Math.abs(input.quantity);
-      } else {
-        delta = input.quantity;
-      }
+      // Fase 99E: só entrada e ajuste chegam aqui (a saída física tem endpoint próprio, com destinação atômica)
+      const delta = input.type === "entrada" ? Math.abs(input.quantity) : input.quantity;
 
       const newStock = currentStock + delta;
       if (newStock < 0) {
@@ -104,12 +98,7 @@ export async function handle(request: Request) {
         {
           organizationId: input.organizationId,
           actorUserId: user.id,
-          action:
-            input.type === "entrada"
-              ? "inventario.entrada_registrada"
-              : input.type === "saida"
-                ? "inventario.saida_registrada"
-                : "inventario.ajuste_registrado",
+          action: input.type === "entrada" ? "inventario.entrada_registrada" : "inventario.ajuste_registrado",
           entityType: "inventory_item",
           entityId: String(input.itemId),
           metadata: { delta, reason: input.reason, itemName: item.name },
