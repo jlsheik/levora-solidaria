@@ -5,6 +5,7 @@ import { ArrowLeft, ShieldAlert } from "lucide-react";
 import { getOrganizations } from "../endpoints/organizations_GET.schema";
 import { getInventoryItems } from "../endpoints/inventory-items_GET.schema";
 import { getNeeds } from "../endpoints/needs_GET.schema";
+import { getProofReconciliation } from "../endpoints/destination-proofs-reconciliation_GET.schema";
 import { DestinationHistory, type HistoryFilters } from "../components/DestinationHistory";
 import { Input } from "../components/Input";
 import { Button } from "../components/Button";
@@ -37,6 +38,9 @@ export default function DestinationsPage() {
   const itemsQuery = useQuery({ queryKey: ["inventory-items", organizationId], queryFn: () => getInventoryItems({ organizationId }), enabled: Number.isFinite(organizationId) && canView });
 
   const needsQuery = useQuery({ queryKey: ["needs", organizationId], queryFn: () => getNeeds({ organizationId }), enabled: Number.isFinite(organizationId) && canView });
+
+  const canManage = !!org && ["proprietario", "administrador"].includes(org.myRole);
+  const reconQuery = useQuery({ queryKey: ["destination-proofs-reconciliation", organizationId], queryFn: () => getProofReconciliation(organizationId), enabled: Number.isFinite(organizationId) && canManage });
 
   const from = get("from");
   const to = get("to");
@@ -136,6 +140,18 @@ export default function DestinationsPage() {
             <p className={styles.error} role="alert">{rangeError}. Ajuste as datas para consultar.</p>
           ) : (
             <DestinationHistory organizationId={organizationId} filters={filters} initialLimit={20} showTotals />
+          )}
+          {canManage && reconQuery.data && (reconQuery.data.pendentes.length > 0 || reconQuery.data.removidos.length > 0) && (
+            <section className={styles.recon} data-testid="proof-reconciliation" aria-label="Comprovantes sem vínculo vigente">
+              <p className={styles.note}>
+                <strong>Comprovantes enviados e não vinculados:</strong> {reconQuery.data.pendentes.length} · <strong>com referência removida:</strong> {reconQuery.data.removidos.length}. Somente leitura: nada é apagado
+                automaticamente (não há política de retenção aprovada). Um arquivo pendente pode ser vinculado por quem o enviou ou por proprietário/administrador.
+              </p>
+              <ul className={styles.reconList}>
+                {reconQuery.data.pendentes.map((f) => <li key={`p-${f.id}`}>Pendente: {f.name} · enviado por {f.uploadedByDisplayName} há {f.ageHours} h</li>)}
+                {reconQuery.data.removidos.map((f) => <li key={`r-${f.id}`}>Referência removida: {f.name} · enviado por {f.uploadedByDisplayName}</li>)}
+              </ul>
+            </section>
           )}
         </>
       )}

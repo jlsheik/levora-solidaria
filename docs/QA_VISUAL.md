@@ -22,7 +22,7 @@ Pré-requisitos: Node 22.x (versão declarada em `package.json`), Edge e/ou Chro
 npm run qa:visual                                    # tudo: cenários × 4 viewports × 2 temas, nos navegadores encontrados (Edge e Chrome)
 npm run qa:visual -- --browser edge --verbose        # só o Edge; mostra também as linhas PASS
 npm run qa:visual -- --viewports 375,1280            # subconjunto de viewports (largura ou WxH)
-npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (70 de 79 cenários; o relatório lista os omitidos)
+npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (71 de 80 cenários; o relatório lista os omitidos)
 npm run qa:visual -- --only needs-primary-new,matching-switch
 npm run qa:visual -- --list                          # lista cenários, viewports e temas
 npm run qa:visual -- --self-test                     # prova que o detector acusa regressões e ausências (ver abaixo)
@@ -131,7 +131,7 @@ não for 22** e registra `node -v`, `google-chrome --version` e `docker --versio
 | | Local (completo) | CI (reduzido) |
 |---|---|---|
 | Navegador | Edge e Chrome | **só o Chrome do runner** (`--browser chrome`; nunca Edge); `QA_BROWSER_NO_SANDBOX=1` por opt-in explícito (AppArmor do runner) |
-| `qa:visual` | 79 cenários × 4 viewports × 2 temas | `--profile ci`: **70 cenários** × os mesmos 4 viewports × 2 temas |
+| `qa:visual` | 80 cenários × 4 viewports × 2 temas | `--profile ci`: **71 cenários** × os mesmos 4 viewports × 2 temas |
 | `qa:security` | 5 partes, 2 navegadores | **as 5 partes** (calibração, CSRF, XSS, uploads, cabeçalhos nginx/Docker), 1 navegador |
 | Duração | ~12 min + ~7 min | alvo ~10 min (limite do job: 40 min) |
 
@@ -276,3 +276,7 @@ Sete cenários novos (`destinations-filter-basis`, `destinations-filter-type`, `
 ## Fase 99J — cenários dos comprovantes
 
 Cinco cenários novos (`proof-box-text`, `proof-attach-button`, `proof-remove-button`, `proof-dialog-reason`, `proof-dialog-privacy-note`; total 79; todos no perfil `ci`, que passa a ter 70) no Inventário: linha do comprovante vigente, botões de anexar/remover (4 estados), motivo (≥ 96 px) e aviso de privacidade. A semente envia e vincula um comprovante sintético pelos endpoints reais.
+
+## Fase 99K — conciliação de comprovantes
+
+Um cenário novo (`destinations-reconciliation`; total 80; no perfil `ci`, que passa a ter 71): texto do painel somente leitura de comprovantes pendentes/removidos na aba Destinação. A semente envia um segundo comprovante sem vincular.

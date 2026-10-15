@@ -77,7 +77,7 @@ export const CI_PROFILE_IDS = [
   // Fase 99C: fila de pendências de unidade (caso aberto, vazio, erro, filtros, diálogo de conferência, aviso na atribuição)
   "regularization-status-open", "regularization-empty", "regularization-error", "regularization-filter-select", "regularization-filter-no-results", "regularization-confer-qty", "regularization-confer-reason", "regularization-allocation-notice",
   // Fase 99E: registro de saída com destinação (botão, campos, finalidades, saldo insuficiente, aprovação por risco, necessidade)
-  "destinations-filter-basis", "destinations-filter-type", "destinations-filter-from", "destinations-filter-need", "destinations-totals", "destinations-empty-filter", "destinations-range-error",
+  "destinations-filter-basis", "destinations-filter-type", "destinations-filter-from", "destinations-filter-need", "destinations-reconciliation", "destinations-totals", "destinations-empty-filter", "destinations-range-error",
   "report-destination-hint", "report-destination-basis", "report-reconciliation-row",
   "proof-box-text", "proof-attach-button", "proof-remove-button", "proof-dialog-reason", "proof-dialog-privacy-note",
   "destination-history-numbers", "destination-history-event", "destination-history-reverse-button", "destination-reversal-kind", "destination-reversal-consequence", "destination-reversal-reason",
@@ -148,6 +148,7 @@ export const SCENARIOS = [
   { id: "destinations-filter-type", user: "owner", path: DESTINATIONS, steps: [], target: { css: "select#f-type" }, measure: "field", variant: "Destinação: finalidade", expect: { height: 40 } },
   { id: "destinations-filter-from", user: "owner", path: DESTINATIONS, steps: [], target: { css: "input#f-from" }, measure: "field", variant: "Destinação: data inicial", expect: { height: 40 } },
   { id: "destinations-filter-need", user: "owner", path: DESTINATIONS, steps: [], target: { css: "select#f-need" }, measure: "field", variant: "Destinação: necessidade", expect: { height: 40 } },
+  { id: "destinations-reconciliation", user: "owner", path: DESTINATIONS, steps: [], target: { css: '[data-testid="proof-reconciliation"] p', text: "^Comprovantes enviados e não vinculados" }, measure: "text", variant: "Destinação: conciliação de comprovantes" },
   { id: "destinations-totals", user: "owner", path: DESTINATIONS, steps: [], target: { css: '[data-testid="destination-totals"] span', text: "^kg:" }, measure: "text", variant: "Destinação: totais por unidade" },
   { id: "destinations-empty-filter", user: "owner", path: DESTINATIONS + "?type=descarte", steps: [], target: { css: "p", text: "^Nenhuma destinação corresponde" }, measure: "text", variant: "Destinação: filtro sem resultado" },
   { id: "destinations-range-error", user: "owner", path: DESTINATIONS + "?from=2026-03-12&to=2026-03-10", steps: [], target: { css: 'p[role="alert"]', text: "anterior ou igual" }, measure: "errorText", variant: "Destinação: intervalo inválido" },
