@@ -28,18 +28,18 @@ describe("perfil reduzido do qa:visual", () => {
   it("só cita cenários que existem, sem repetição", () => {
     expect(new Set(CI_PROFILE_IDS).size).toBe(CI_PROFILE_IDS.length);
     for (const id of CI_PROFILE_IDS) expect(byId.has(id), id).toBe(true);
-    expect(CI_PROFILE_IDS.length).toBe(36); // 18 originais + 10 da tela de unidades (99B) + 8 da fila de regularização (99C)
+    expect(CI_PROFILE_IDS.length).toBe(43); // 18 originais + 10 de unidades (99B) + 8 da fila de regularização (99C) + 7 do registro de destinação (99E)
   });
   it("cobre as famílias de maior risco: botões (todas as variantes), Switch, campos, erro, FileDropzone e variação negativa", () => {
     const variants = new Set(CI_PROFILE_IDS.map((id: string) => byId.get(id).variant));
-    for (const v of ["primary", "outline", "ghost (ícone)", "destructive", "secondary", "outline (desabilitado)", "Switch", "Switch (desabilitado)", "Input", "Textarea", "Select (gatilho)", "--error-text (mensagem)", "--error-text (rótulo)", "FileDropzone: limite", "FileDropzone: foco por teclado", "FileDropzone: erro", "Inventário: variação negativa", "Unidades: classificadas", "Unidades: desconhecidas", "Unidades: ambíguas", "Unidades: lista vazia", "Unidades: erro de carregamento", "Unidades: filtros aplicados", "Regularização: caso aberto", "Regularização: lista vazia", "Regularização: erro de carregamento", "Regularização: filtros sem resultado", "Regularização: diálogo (quantidade)"]) expect(variants.has(v), v).toBe(true);
+    for (const v of ["primary", "outline", "ghost (ícone)", "destructive", "secondary", "outline (desabilitado)", "Switch", "Switch (desabilitado)", "Input", "Textarea", "Select (gatilho)", "--error-text (mensagem)", "--error-text (rótulo)", "FileDropzone: limite", "FileDropzone: foco por teclado", "FileDropzone: erro", "Inventário: variação negativa", "Unidades: classificadas", "Unidades: desconhecidas", "Unidades: ambíguas", "Unidades: lista vazia", "Unidades: erro de carregamento", "Unidades: filtros aplicados", "Regularização: caso aberto", "Regularização: lista vazia", "Regularização: erro de carregamento", "Regularização: filtros sem resultado", "Regularização: diálogo (quantidade)", "Destinação: botão primário", "Destinação: quantidade", "Destinação: finalidade", "Destinação: saldo insuficiente", "Destinação: aprovação pendente"]) expect(variants.has(v), v).toBe(true);
     const measures = new Set(CI_PROFILE_IDS.map((id: string) => byId.get(id).measure));
     for (const m of ["button", "switch", "field", "errorText", "boundary", "dropzoneFocus", "text"]) expect(measures.has(m), m).toBe(true);
   });
   it("os omitidos aparecem na seleção e NÃO geram linhas (nunca contam como PASS)", () => {
     const s = selectionSummary(SCENARIOS.map((x: any) => x.id), CI_PROFILE_IDS, "ci");
-    expect(s).toMatchObject({ perfil: "ci", total: SCENARIOS.length, executados: 36, completo: false });
-    expect(s.omitidos).toHaveLength(SCENARIOS.length - 36);
+    expect(s).toMatchObject({ perfil: "ci", total: SCENARIOS.length, executados: 43, completo: false });
+    expect(s.omitidos).toHaveLength(SCENARIOS.length - 43);
     expect(s.omitidos).toContain("login-password-field");
     expect(selectionSummary(["a", "b"], ["a", "b"]).completo).toBe(true);
     const r = new Report(); // um relatório só tem linhas do que rodou: omitidos não existem nele

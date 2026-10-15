@@ -72,7 +72,7 @@ describe("seed sintético de staging", () => {
     const byName = Object.fromEntries(rows.map((r) => [r.name, r]));
     expect(Number(byName["Arroz branco 5kg (Demo)"].saldo)).toBe(80);
     expect(byName["Arroz branco 5kg (Demo)"].movimentos).toBe(4); // inicial, entrada, saída, recebimento
-    expect(Number(byName["Leite em pó lata (Demo)"].saldo)).toBe(40); // 60 - 20 (baixa da need atendida)
+    expect(Number(byName["Leite em pó lata (Demo)"].saldo)).toBe(60); // 60: marcar a need como atendida não baixa estoque (Fase 99E)
     expect(Number(byName["Cobertor casal (Demo)"].saldo)).toBe(5);
     expect(Number(byName["Fralda infantil M (Demo)"].saldo)).toBe(100);
   });

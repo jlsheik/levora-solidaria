@@ -1,9 +1,7 @@
 import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
-import { requirePermission, OrganizationAccessError } from "../helpers/organizationAccess.js";
-import { roleHasPermission } from "../helpers/permissions.js";
+import { requirePermission } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
-import { getItemStockBalance } from "../helpers/stockBalance.js";
 import { schema } from "./needs-status_POST.schema.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
@@ -14,18 +12,7 @@ export async function handle(request: Request) {
     const json = superjson.parse(await request.text());
     const input = schema.parse(json);
 
-    const membership = await requirePermission(user.id, input.organizationId, "necessidades.gerencie");
-
-    // Marcar como "atendida" pode disparar baixa automática de estoque (ver
-    // abaixo) — uma mutação de estoque de verdade, não só de necessidade.
-    // Exige explicitamente inventario.lance também, em vez de confiar que
-    // todo papel com necessidades.gerencie sempre vai ter inventario.lance
-    // (verdade hoje em src/helpers/permissions.tsx, mas não uma garantia
-    // que este endpoint deveria depender silenciosamente do catálogo nunca
-    // mudar).
-    if (input.status === "atendida" && !roleHasPermission(membership.role, "inventario.lance")) {
-      throw new OrganizationAccessError("Seu papel nesta organização não permite dar baixa em estoque, necessária para marcar esta necessidade como atendida");
-    }
+    await requirePermission(user.id, input.organizationId, "necessidades.gerencie");
 
     const result = await db.transaction().execute(async (trx) => {
       // FOR UPDATE (achado de auditoria, Fase 35): trava a linha da need ANTES
@@ -70,65 +57,12 @@ export async function handle(request: Request) {
         ? await trx.selectFrom("needResolutions").select(["id"]).where("needId", "=", existing.id).executeTakeFirst()
         : undefined;
 
-      // Vínculo automático necessidade→estoque (master prompt, "estoque
-      // atualizado" nunca sem transação registrada): só dispara na
-      // transição PARA "atendida" vinda de outro status, só quando a
-      // necessidade está vinculada a um item de inventário, e só quando
-      // ainda NÃO existe uma resolução para esta need. Reverter o status
-      // depois NÃO desfaz a saída automaticamente nem a resolução — isso
-      // exigiria um lançamento manual explícito (ajuste), para nunca
-      // alterar o histórico de estoque em silêncio.
-      const willConsumeStock = input.status === "atendida" && existing.status !== "atendida" && existing.itemId !== null && !existingResolution;
-      // Entrando em "atendida" pela primeira vez (nenhuma resolução ainda),
-      // mesmo sem item vinculado: cria uma resolução puramente declarativa
-      // (stockTransactionId=null) — o evento administrativo continua
-      // identificável historicamente, mesmo sem lastro físico.
-      const willCreateDeclarativeResolution = input.status === "atendida" && !existingResolution && existing.itemId === null;
-      let stockAuditEntry: { itemId: number; itemName: string; delta: number } | null = null;
-
-      if (willConsumeStock) {
-        const item = await trx
-          .selectFrom("inventoryItems")
-          .select(["id", "name"])
-          .where("id", "=", existing.itemId!)
-          .where("organizationId", "=", input.organizationId)
-          .forUpdate()
-          .executeTakeFirst();
-
-        // Item foi excluído/movido depois que a necessidade foi criada —
-        // não impede marcar como atendida, mas não há como dar baixa (nem
-        // como criar uma resolução com lastro físico — fica sem resolução
-        // nenhuma nesse caso raro, igual ao comportamento pré-existente).
-        if (item) {
-          const currentStock = await getItemStockBalance(trx, item.id);
-          const quantity = Number(existing.quantityNeeded);
-          const newStock = currentStock - quantity;
-
-          if (newStock < 0) {
-            return { type: "insufficient_stock" as const, currentStock, quantity, itemName: item.name };
-          }
-
-          const [tx] = await trx
-            .insertInto("stockTransactions")
-            .values({
-              organizationId: input.organizationId,
-              itemId: item.id,
-              type: "saida",
-              delta: -quantity,
-              reason: `Baixa automática: necessidade "${existing.title}" marcada como atendida`,
-              createdByUserId: user.id,
-            })
-            .returning(["id"])
-            .execute();
-
-          stockAuditEntry = { itemId: item.id, itemName: item.name, delta: -quantity };
-
-          await trx
-            .insertInto("needResolutions")
-            .values({ needId: existing.id, stockTransactionId: tx.id, createdByUserId: user.id })
-            .execute();
-        }
-      } else if (willCreateDeclarativeResolution) {
+      // Fase 99E: marcar como "atendida" NUNCA mais baixa estoque (a baixa automática de toda a quantidade criava uma saída sem finalidade e confundia "atendida" com
+      // "saiu do estoque"). Toda saída física nasce no registro de destinação (POST /stock-destinations). Entrando em "atendida" pela primeira vez (sem resolução ainda), fica só a
+      // resolução ADMINISTRATIVA declarativa (stockTransactionId = null), com ou sem item vinculado: o evento continua identificável e o relatório sinaliza se a quantidade
+      // destinada ainda não alcança a necessária. A nova regra de atendimento (derivado das destinações, com entrega parcial) é da Fase 99F.
+      const willCreateDeclarativeResolution = input.status === "atendida" && !existingResolution;
+      if (willCreateDeclarativeResolution) {
         await trx
           .insertInto("needResolutions")
           .values({ needId: existing.id, stockTransactionId: null, createdByUserId: user.id })
@@ -147,20 +81,6 @@ export async function handle(request: Request) {
       // (ver comentário em auditLog.tsx), então quanto menos trabalho
       // acontecer DEPOIS dela dentro desta transação, menos tempo outras
       // transações que também precisam gravar em audit_log ficam esperando.
-      if (stockAuditEntry) {
-        await recordAuditLogEntry(
-          {
-            organizationId: input.organizationId,
-            actorUserId: user.id,
-            action: "inventario.saida_registrada",
-            entityType: "inventory_item",
-            entityId: String(stockAuditEntry.itemId),
-            metadata: { delta: stockAuditEntry.delta, itemName: stockAuditEntry.itemName, motivo: "necessidade_atendida", needId: existing.id },
-          },
-          trx
-        );
-      }
-
       await recordAuditLogEntry(
         {
           organizationId: input.organizationId,
@@ -168,7 +88,7 @@ export async function handle(request: Request) {
           action: "necessidade.status_alterado",
           entityType: "need",
           entityId: String(input.needId),
-          metadata: { title: existing.title, statusAnterior: existing.status, statusNovo: input.status, baixaEstoqueAutomatica: willConsumeStock },
+          metadata: { title: existing.title, statusAnterior: existing.status, statusNovo: input.status, baixaEstoqueAutomatica: false, resolucaoDeclarativa: willCreateDeclarativeResolution },
         },
         trx
       );
@@ -180,15 +100,6 @@ export async function handle(request: Request) {
       return new Response(
         superjson.stringify({ message: "Necessidade não encontrada nesta organização" }),
         { status: 404, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    if (result.type === "insufficient_stock") {
-      return new Response(
-        superjson.stringify({
-          message: `Não é possível marcar como atendida: o item "${result.itemName}" tem saldo de ${result.currentStock}, insuficiente para a quantidade necessária de ${result.quantity}. Ajuste o estoque ou a quantidade antes de tentar novamente.`,
-        }),
-        { status: 409, headers: { "Content-Type": "application/json" } }
       );
     }
 

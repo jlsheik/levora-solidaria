@@ -22,7 +22,7 @@ Pré-requisitos: Node 22.x (versão declarada em `package.json`), Edge e/ou Chro
 npm run qa:visual                                    # tudo: cenários × 4 viewports × 2 temas, nos navegadores encontrados (Edge e Chrome)
 npm run qa:visual -- --browser edge --verbose        # só o Edge; mostra também as linhas PASS
 npm run qa:visual -- --viewports 375,1280            # subconjunto de viewports (largura ou WxH)
-npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (36 de 45 cenários; o relatório lista os omitidos)
+npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (43 de 52 cenários; o relatório lista os omitidos)
 npm run qa:visual -- --only needs-primary-new,matching-switch
 npm run qa:visual -- --list                          # lista cenários, viewports e temas
 npm run qa:visual -- --self-test                     # prova que o detector acusa regressões e ausências (ver abaixo)
@@ -131,7 +131,7 @@ não for 22** e registra `node -v`, `google-chrome --version` e `docker --versio
 | | Local (completo) | CI (reduzido) |
 |---|---|---|
 | Navegador | Edge e Chrome | **só o Chrome do runner** (`--browser chrome`; nunca Edge); `QA_BROWSER_NO_SANDBOX=1` por opt-in explícito (AppArmor do runner) |
-| `qa:visual` | 45 cenários × 4 viewports × 2 temas | `--profile ci`: **36 cenários** × os mesmos 4 viewports × 2 temas |
+| `qa:visual` | 52 cenários × 4 viewports × 2 temas | `--profile ci`: **43 cenários** × os mesmos 4 viewports × 2 temas |
 | `qa:security` | 5 partes, 2 navegadores | **as 5 partes** (calibração, CSRF, XSS, uploads, cabeçalhos nginx/Docker), 1 navegador |
 | Duração | ~12 min + ~7 min | alvo ~10 min (limite do job: 40 min) |
 
@@ -252,3 +252,7 @@ Dez cenários novos (`units-*`, total 37; todos no perfil `ci`, que passa a ter 
 ## Fase 99C — cenários da fila de pendências de unidade
 
 Oito cenários novos (`regularization-*`, total 45; todos no perfil `ci`, que passa a ter 36): caso aberto (selo de situação), lista vazia (organização 2 da semente), erro de carregamento (`blockUrls` só em `*/_api/v1/unit-regularization-cases*`), filtro (select, 40 px), filtros sem resultado, diálogo de conferência (campo de quantidade 40 px e motivo ≥ 96 px, contido no viewport) e o aviso "Recebimento pendente de regularização" na atribuição. A semente abre o caso pelo **endpoint real de recebimento** (oferta em caixa × item em kg → HTTP 202). O móvel (375/390) é coberto pelos viewports.
+
+## Fase 99E — cenários do registro de destinação
+
+Sete cenários novos (`destination-*`, total 52; todos no perfil `ci`, que passa a ter 43): botão primário "Registrar destinação" (4 estados), campo de quantidade e de finalidade (40 px), observações (≥ 96 px), saldo insuficiente (texto de erro), aviso de segunda aprovação (perda) e seletor de necessidade (finalidade de atendimento). Móvel pelos viewports 375/390. A semente registra a saída sintética pelo **endpoint real** (`stock-destinations`), pois a saída física exige destinação desde a 99E.

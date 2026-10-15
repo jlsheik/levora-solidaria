@@ -26,6 +26,7 @@ import {
   buildRequest,
   parseJson,
   type AuthenticatedTestUser,
+  consumeStockForTest,
 } from "./helpers";
 import type { OutputType as HistoryOutput } from "../src/endpoints/allocations-receipt-history_GET.schema";
 
@@ -457,7 +458,7 @@ describe("Fase 80 — concorrência física (Postgres real, Promise.all)", () =>
     const id = await pendingId(await correct(e, a, e.operador, { expectedVigenteFulfillmentId: await tok(e, a), quantity: 80 })); // −20
     const [dec, saida] = await Promise.all([
       decide(e, e.admin, id),
-      postStock(buildRequest("stock-transactions", { method: "POST", cookie: e.owner.cookie, body: { organizationId: e.orgId, itemId: e.itemId, type: "saida", quantity: 90, reason: "Distribuição" } })),
+      consumeStockForTest(e.orgId, e.owner.userId, e.itemId, 90),
     ]);
     expect([dec.status, saida.status].sort()).toEqual([200, 409]);
     expect(await stock(e.itemId)).toBeGreaterThanOrEqual(0);
@@ -470,7 +471,7 @@ describe("Fase 80 — concorrência física (Postgres real, Promise.all)", () =>
     const id = await pendingId(await reverse(e, a, e.operador, { expectedVigenteFulfillmentId: await tok(e, a), withdrawStock: true })); // −100
     const [dec, saida] = await Promise.all([
       decide(e, e.admin, id),
-      postStock(buildRequest("stock-transactions", { method: "POST", cookie: e.owner.cookie, body: { organizationId: e.orgId, itemId: e.itemId, type: "saida", quantity: 60, reason: "Distribuição" } })),
+      consumeStockForTest(e.orgId, e.owner.userId, e.itemId, 60),
     ]);
     expect([dec.status, saida.status].sort()).toEqual([200, 409]);
     expect(await stock(e.itemId)).toBe(dec.status === 200 ? 0 : 40);

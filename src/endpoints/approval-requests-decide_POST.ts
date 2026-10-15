@@ -5,6 +5,7 @@ import { recordAuditLogEntry } from "../helpers/auditLog.js";
 import { getItemStockBalance } from "../helpers/stockBalance.js";
 import { APPROVAL_REQUEST_EXPIRATION_DAYS } from "../helpers/expireApprovalRequests.js";
 import { buildLedgerAuditEntry, executeApprovedLedgerRequest, isLedgerApprovalActionType, type ApprovedLedgerResult } from "../helpers/needFulfillmentCorrections.js";
+import { DESTINATION_APPROVAL_ACTION, executeApprovedDestinationRequest, markDestinationRequestRejected } from "../helpers/stockExit.js";
 import { schema } from "./approval-requests-decide_POST.schema.js";
 import superjson from "superjson";
 import type { Json } from "../helpers/schema.js";
@@ -92,6 +93,15 @@ export async function handle(request: Request) {
         ledgerExecution = executed;
       }
 
+      // Saída de estoque com destinação (Fase 99E): a execução acontece AQUI, na transação da aprovação, reavaliando o estado atual; erro devolve 409/4xx sem escrever nada.
+      let destinationAudit: ((t: typeof trx) => Promise<void>) | null = null;
+      if (input.decision === "aprovada" && req.actionType === DESTINATION_APPROVAL_ACTION) {
+        const executed = await executeApprovedDestinationRequest(trx, req, user.id);
+        if (executed.type === "payload_invalid") return { type: "destination_payload_invalid" as const };
+        if (executed.type === "error") return { type: "destination_error" as const, status: executed.status, message: executed.message, code: executed.code };
+        destinationAudit = executed.run;
+      }
+
       const [updated] = await trx
         .updateTable("approvalRequests")
         .set({ status: input.decision, decidedByUserId: user.id, decisionNotes: input.notes ?? null, decidedAt: new Date() })
@@ -99,7 +109,9 @@ export async function handle(request: Request) {
         .returning(["id", "status"])
         .execute();
 
-      if (input.decision === "aprovada" && ledgerExecution) {
+      if (input.decision === "aprovada" && destinationAudit) {
+        await destinationAudit(trx);
+      } else if (input.decision === "aprovada" && ledgerExecution) {
         const audit = buildLedgerAuditEntry(ledgerExecution.plan, ledgerExecution.result, {
           actorUserId: user.id,
           reason: ledgerExecution.payload.motivo,
@@ -148,6 +160,7 @@ export async function handle(request: Request) {
           );
         }
       } else {
+        if (req.actionType === DESTINATION_APPROVAL_ACTION) await markDestinationRequestRejected(trx, req.id, input.organizationId);
         await recordAuditLogEntry(
           {
             organizationId: input.organizationId,
@@ -187,6 +200,12 @@ export async function handle(request: Request) {
         status: 409,
         headers: { "Content-Type": "application/json" },
       });
+    }
+    if (result.type === "destination_payload_invalid") {
+      return new Response(superjson.stringify({ message: "Não foi possível executar este pedido de saída: os dados do pedido são inválidos ou ele já foi tratado. Rejeite o pedido e peça de novo." }), { status: 409, headers: { "Content-Type": "application/json" } });
+    }
+    if (result.type === "destination_error") {
+      return new Response(superjson.stringify({ message: `Não é possível aprovar: ${result.message}. Revise a situação atual ou rejeite o pedido.`, code: result.code }), { status: result.status === 403 || result.status === 404 ? 409 : result.status, headers: { "Content-Type": "application/json" } });
     }
     if (result.type === "ledger_payload_invalid") {
       // Mesmo status (409) e mesmo fluxo do payload_invalid de estoque; só a mensagem

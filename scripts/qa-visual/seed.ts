@@ -3,10 +3,12 @@
 // endpoints reais, para exibir a variação negativa), uma capacidade (diálogo de exclusão) e uma atribuição aceita (diálogo de recebimento com o
 // FileDropzone). As credenciais abaixo existem só neste banco descartável.
 import { sql } from "kysely";
+import { businessDateOf } from "../../src/helpers/businessDate";
 import { db } from "../../src/helpers/db";
 import { generatePasswordHash } from "../../src/helpers/generatePasswordHash";
 import { buildRequest, createSessionCookie } from "../../test/helpers";
 import { handle as stockTransaction } from "../../src/endpoints/stock-transactions_POST";
+import { handle as stockDestination } from "../../src/endpoints/stock-destinations_POST";
 import { handle as receiveAllocation } from "../../src/endpoints/allocations-receive_POST";
 
 // vem do orquestrador (scenarios.mjs), para a semente e o login do navegador nunca divergirem
@@ -41,12 +43,12 @@ await db.insertInto("donationOpportunities").values([
 await db.insertInto("needs").values({ organizationId: org.id, title: "Cestas básicas", description: "Famílias do bairro", quantityNeeded: "300", unit: "kg", priority: "media", status: "aberta", createdByUserId: owner }).execute();
 await db.insertInto("organizationCapacities").values({ organizationId: org.id, category: "alimentos", unit: "kg", maxCapacity: "500", createdByUserId: owner }).execute();
 
-// movimentações reais do estoque (entrada de 5 kg e saída de 1 kg) pelo endpoint, como um usuário faria
+// movimentações reais do estoque (entrada de 5 kg pelo endpoint e saída de 1 kg COM destinação, como um usuário faria; a saída física exige destinação desde a Fase 99E)
 const cookie = await createSessionCookie(owner);
-for (const [type, quantity, reason] of [["entrada", 5, "entrada sintética para a verificação visual"], ["saida", 1, "saída sintética de 1 kg para a verificação visual"]] as const) {
-  const res = await stockTransaction(buildRequest("stock-transactions", { method: "POST", cookie, body: { organizationId: org.id, itemId: item.id, type, quantity, reason } }));
-  if (res.status !== 200) throw new Error(`movimentação ${type} falhou (${res.status})`);
-}
+const entrada = await stockTransaction(buildRequest("stock-transactions", { method: "POST", cookie, body: { organizationId: org.id, itemId: item.id, type: "entrada", quantity: 5, reason: "entrada sintética para a verificação visual" } }));
+if (entrada.status !== 200) throw new Error(`movimentação entrada falhou (${entrada.status})`);
+const saida = await stockDestination(buildRequest("stock-destinations", { method: "POST", cookie, body: { organizationId: org.id, itemId: item.id, quantity: 1, destinationType: "uso_operacional_instituicao", deliveredOn: businessDateOf(new Date()), notes: "saída sintética de 1 kg para a verificação visual", idempotencyKey: "qa-visual-seed-saida-1" } }));
+if (saida.status !== 200) throw new Error(`saída com destinação falhou (${saida.status})`);
 
 // atribuição aceita (abre o diálogo "Registrar recebimento", onde fica o FileDropzone)
 const source = await db.insertInto("sources").values({ name: "Fonte QA", type: "manual", connectorKey: "manual", status: "ativa", createdByUserId: owner }).returning("id").executeTakeFirstOrThrow();

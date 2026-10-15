@@ -26,8 +26,10 @@
  * passo do lifecycle só roda se o estado atual ainda não o alcançou — um
  * segundo run não chama nenhum endpoint de escrita (logo, não gera audit).
  */
+import { createHash } from "node:crypto";
 import { randomBytes } from "node:crypto";
 import { sql } from "kysely";
+import { businessDateOf } from "../src/helpers/businessDate.js";
 import superjson from "superjson";
 import { db } from "../src/helpers/db.js";
 import { generatePasswordHash } from "../src/helpers/generatePasswordHash.js";
@@ -48,6 +50,7 @@ import { handle as serviceAreasPost } from "../src/endpoints/organization-servic
 import { handle as matchingSettingsPost } from "../src/endpoints/organization-matching-settings_POST.js";
 import { handle as inventoryItemsPost } from "../src/endpoints/inventory-items_POST.js";
 import { handle as stockTransactionsPost } from "../src/endpoints/stock-transactions_POST.js";
+import { handle as stockDestinationsPost } from "../src/endpoints/stock-destinations_POST.js";
 import { handle as needsPost } from "../src/endpoints/needs_POST.js";
 import { handle as needsStatusPost } from "../src/endpoints/needs-status_POST.js";
 import { handle as sourcesPost } from "../src/endpoints/sources_POST.js";
@@ -257,13 +260,22 @@ async function ensureItem(
 
 async function ensureStockTx(
   stats: SeedStats, orgId: number, itemId: number, actor: Actor,
-  type: "entrada" | "saida", quantity: number, reason: string
+  type: "entrada", quantity: number, reason: string
 ): Promise<void> {
   const found = await db.selectFrom("stockTransactions").select("id")
     .where("itemId", "=", itemId).where("reason", "=", reason).executeTakeFirst();
   if (found) return;
   await call(stats, `estoque ${reason}`, stockTransactionsPost, actor,
     { organizationId: orgId, itemId, type, quantity, reason }, "stock-transactions");
+}
+
+/** Saída com DESTINAÇÃO (Fase 99E): a saída física só existe pelo registro de destinação; a chave de idempotência derivada do marcador torna a semente reexecutável. */
+async function ensureStockExit(stats: SeedStats, orgId: number, itemId: number, actor: Actor, quantity: number, marker: string): Promise<void> {
+  const idempotencyKey = `seed-${createHash("sha1").update(marker).digest("hex").slice(0, 24)}`;
+  const already = await db.selectFrom("stockExitRequests").select("id").where("organizationId", "=", orgId).where("idempotencyKey", "=", idempotencyKey).executeTakeFirst();
+  if (already) return; // semente reexecutável: a saída (com destinação) já existe
+  await call(stats, `saída com destinação ${marker}`, stockDestinationsPost, actor,
+    { organizationId: orgId, itemId, quantity, destinationType: "distribuicao_familias", deliveredOn: businessDateOf(new Date()), idempotencyKey }, "stock-destinations");
 }
 
 async function ensureNeed(
@@ -482,7 +494,7 @@ export async function runStagingSeed(options: { resetPasswords?: boolean } = {})
     // --- Estoque (sempre por movimentações; nunca saldo direto) -----------
     const arroz = await ensureItem(stats, orgA, actor.demo, { name: "Arroz branco 5kg (Demo)", unit: "kg", category: "alimentos", initialQuantity: 20 });
     await ensureStockTx(stats, orgA, arroz, actor.operador, "entrada", 30, marker("Doação de campanha (sintético)"));
-    await ensureStockTx(stats, orgA, arroz, actor.operador, "saida", 10, marker("Distribuição semanal (sintético)"));
+    await ensureStockExit(stats, orgA, arroz, actor.operador, 10, marker("Distribuição semanal (sintético)"));
     const leite = await ensureItem(stats, orgA, actor.demo, { name: "Leite em pó lata (Demo)", unit: "unidade", category: "alimentos", initialQuantity: 60 });
     const cobertor = await ensureItem(stats, orgA, actor.demo, { name: "Cobertor casal (Demo)", unit: "unidade", category: "agasalhos", initialQuantity: 5 });
     const fralda = await ensureItem(stats, orgB, actor.parceiro, { name: "Fralda infantil M (Demo)", unit: "unidade", category: "higiene", initialQuantity: 100 });
@@ -605,7 +617,7 @@ async function verifySeedResult(ids: {
   const balance = (id: number) => db.transaction().execute((trx) => getItemStockBalance(trx, id));
   const expected: [string, number, number][] = [
     ["Arroz (20+30-10 + 40 recebidos)", ids.arroz, 80],
-    ["Leite (60 - 20 baixa da necessidade atendida)", ids.leite, 40],
+    ["Leite (60; 'atendida' não baixa estoque desde a Fase 99E)", ids.leite, 60],
     ["Cobertor (5 iniciais)", ids.cobertor, 5],
     ["Fralda (100 iniciais)", ids.fralda, 100],
   ];

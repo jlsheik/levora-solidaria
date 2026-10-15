@@ -1,0 +1,12 @@
+.form { display: flex; flex-direction: column; gap: var(--spacing-3); min-width: 0; }
+.label { font-size: 0.75rem; font-weight: 500; color: var(--muted-foreground); }
+.select { height: 2.5rem; width: 100%; min-width: 0; box-sizing: border-box; max-width: 100%; }
+.help { margin: 0; font-size: 0.75rem; color: var(--muted-foreground); line-height: 1.4; }
+.skeleton { height: 2.5rem; border-radius: var(--radius); }
+.row { display: grid; grid-template-columns: 1fr 10rem; gap: var(--spacing-3); align-items: end; }
+.row > div { display: flex; flex-direction: column; gap: var(--spacing-1); min-width: 0; }
+.warning, .approval { margin: 0; padding: var(--spacing-2) var(--spacing-3); font-size: 0.8125rem; line-height: 1.4; color: var(--card-foreground); background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); }
+.approval { border-color: var(--primary); }
+.problems { margin: 0; padding-left: var(--spacing-4); font-size: 0.8125rem; color: var(--error-text); line-height: 1.4; }
+.error { margin: 0; font-size: 0.8125rem; color: var(--error-text); line-height: 1.4; }
+@media (max-width: 640px) { .row { grid-template-columns: 1fr; } }

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { db } from "../src/helpers/db";
 import { handle as postStockTransaction } from "../src/endpoints/stock-transactions_POST";
 import { handle as postApprovalDecide } from "../src/endpoints/approval-requests-decide_POST";
-import { createAuthenticatedUser, createTestOrganization, addMembership, createTestInventoryItem, buildRequest, parseJson, type AuthenticatedTestUser } from "./helpers";
+import { createAuthenticatedUser, createTestOrganization, addMembership, createTestInventoryItem, buildRequest, parseJson, type AuthenticatedTestUser , consumeStockForTest } from "./helpers";
 
 describe("POST /approval-requests-decide", () => {
   async function setupHighRiskRequest(orgId: number, requester: AuthenticatedTestUser, itemId: number) {
@@ -52,9 +52,8 @@ describe("POST /approval-requests-decide", () => {
     // Enquanto o pedido de ajuste (-30) está pendente, uma saída legítima
     // de -80 acontece (saldo cai de 100 para 20) — aprovar o ajuste de -30
     // agora deixaria o saldo em -10.
-    const saida = await postStockTransaction(
-      buildRequest("stock-transactions", { method: "POST", cookie: requester.cookie, body: { organizationId: org.id, itemId: item.id, type: "saida", quantity: 80, reason: "Distribuição" } })
-    );
+    // Fase 99E: a saída física não nasce mais em stock-transactions; o consumo concorrente é um fixture sob a trava do item
+    const saida = await consumeStockForTest(org.id, requester.userId, item.id, 80);
     expect(saida.status).toBe(200);
 
     const response = await postApprovalDecide(
