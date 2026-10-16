@@ -88,14 +88,27 @@ export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone, ex
   onSpawn?.(child.pid, "browser");
   const cleanup = async () => {
     killTree(child);
+    // On Windows the initial browser process may exit while the browser session remains alive.
+    // Stop only Edge/Chrome processes tied to this unique temporary profile.
+    if (process.platform === "win32") {
+      const encodedProfile = Buffer.from(profile, "utf8").toString("base64");
+      const script = "$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + encodedProfile + "')); " +
+        "Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'msedge.exe' -or $_.Name -eq 'chrome.exe') -and $_.CommandLine -and $_.CommandLine.Contains($p) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }";
+      spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { stdio: "ignore", windowsHide: true });
+    }
     for (let i = 0; i < 8; i++) { try { rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 }); onProfileGone?.(profile); return; } catch { await sleep(300); } }
   };
   try {
     let port; let tries = 0;
     while (!port) {
-      if (child.exitCode !== null) throw new Error(`o navegador encerrou ao iniciar (código ${child.exitCode})`);
+      // On Windows the initial process may exit with code 0 while the browser child publishes its port.
+      // Prefer the actual DevTools endpoint over the launcher exit status.
       try { port = Number(readFileSync(path.join(profile, "DevToolsActivePort"), "utf8").split(/\r?\n/)[0]); } catch { /* ainda não escreveu */ }
-      if (!port) { if (++tries > 100) throw new Error("o navegador não abriu a porta de depuração a tempo"); await sleep(150); }
+      if (port) break;
+      // No Windows, o processo inicial pode sair com 0 enquanto o browser-filho ainda publica a porta.
+      if (child.exitCode !== null && !(process.platform === "win32" && child.exitCode === 0)) throw new Error(`browser launcher exited with code ${child.exitCode}`);
+      if (++tries > 100) throw new Error("browser did not open the DevTools port in time");
+      await sleep(150);
     }
     const info = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
     let page; for (let i = 0; i < 40 && !page; i++) { const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); page = list.find((t) => t.type === "page"); if (!page) await sleep(150); }
