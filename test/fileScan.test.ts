@@ -352,10 +352,61 @@ describe("C. máquina de estados em PostgreSQL real (scanner simulado injetado)"
   });
 });
 
-describe.skipIf(!REAL_CLAMD_HOST)("D. scanner REAL (ClamAV) — só roda com CLAMD_HOST/CLAMD_PORT apontando para um clamd em rede privada", () => {
-  it("reconhece o arquivo de teste EICAR e aprova conteúdo limpo", async () => {
-    const scanner = new ClamdScanner({ host: REAL_CLAMD_HOST!, port: Number(REAL_CLAMD_PORT ?? 3310), timeoutMs: 15000, maxBytes: 25 * 1024 * 1024 });
+describe.skipIf(!REAL_CLAMD_HOST)("D. scanner REAL (ClamAV) - só roda com CLAMD_HOST/CLAMD_PORT apontando para um clamd em rede privada", () => {
+  it("detecta EICAR, aprova arquivo limpo e valida upload/download real em modo fail-closed", async () => {
+    const options = { host: REAL_CLAMD_HOST!, port: Number(REAL_CLAMD_PORT ?? 3310), timeoutMs: 15000, maxBytes: 25 * 1024 * 1024 };
+    const scanner = new ClamdScanner(options);
     expect(await scanner.scan(Buffer.from(EICAR))).toMatchObject({ status: "infectado", signature: expect.stringMatching(/Eicar/i) });
     expect((await scanner.scan(Buffer.from(PNG, "base64"))).status).toBe("limpo");
+
+    const w = await world();
+    required();
+    setFileScannerForTests(scanner);
+
+    const clean = await upload(w);
+    expect(clean).toMatchObject({ status: 200, scanStatus: "aprovado" });
+    expect(await row(clean.id)).toMatchObject({ scanStatus: "aprovado" });
+    expect((await row(clean.id)).scanCheckedAt).not.toBeNull();
+    expect((await download(clean.id, w.operator)).status).toBe(200);
+
+    // EICAR dentro de um PDF de teste para percorrer o mesmo validador de arquivo do endpoint real.
+    const eicarBytes = Buffer.from(EICAR, "utf8");
+    const pdfPrefix = Buffer.from(
+      "%PDF-1.4\n" +
+      "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+      "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+      "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents 4 0 R >>\nendobj\n" +
+      "4 0 obj\n<< /Length " + eicarBytes.length + " >>\nstream\n",
+      "utf8",
+    );
+    const eicarPdf = Buffer.concat([pdfPrefix, eicarBytes, Buffer.from("\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n", "utf8")]);
+    expect((await scanner.scan(eicarPdf)).status).toBe("infectado");
+    const infectedResponse = await uploadPost(post("files-upload", w.operator.cookie, {
+      organizationId: w.orgId,
+      purpose: "comprovante_destinacao",
+      fileName: "eicar-validation.pdf",
+      contentType: "application/pdf",
+      fileBase64: eicarPdf.toString("base64"),
+    }));
+    expect(infectedResponse.status).toBe(200);
+    const infectedBody = await parseJson<{ file: { id: number; scanStatus: string } }>(infectedResponse);
+    const infectedId = infectedBody.file.id;
+    expect(infectedBody.file.scanStatus).toBe("infectado");
+    expect(await row(infectedId)).toMatchObject({ scanStatus: "infectado", scanSignature: expect.stringMatching(/Eicar/i) });
+    for (const actor of [w.operator, w.admin, w.owner]) expect((await download(infectedId, actor)).status).toBe(409);
+
+    const destinationId = await dest(w);
+    expect((await attach(w, destinationId, infectedId, w.admin)).status).toBe(409);
+    expect(await db.selectFrom("stockDestinations").select("id").where("proofFileId", "=", infectedId).execute()).toHaveLength(0);
+    expect(JSON.stringify(await audits("arquivo.bloqueado_por_analise"))).not.toContain(EICAR);
+
+    // Porta confirmadamente fechada no host de teste: falha real de conexao, nao scanner simulado.
+    setFileScannerForTests(new ClamdScanner({ host: "127.0.0.1", port: 13311, timeoutMs: 1000, maxBytes: 25 * 1024 * 1024 }));
+    const unavailable = await upload(w);
+    expect(unavailable).toMatchObject({ status: 200, scanStatus: "indisponivel" });
+    expect(await row(unavailable.id)).toMatchObject({ scanStatus: "indisponivel" });
+    expect((await download(unavailable.id, w.operator)).status).toBe(409);
+    expect((await attach(w, destinationId, unavailable.id, w.admin)).status).toBe(409);
+    expect(await db.selectFrom("stockDestinations").select("id").where("proofFileId", "=", unavailable.id).execute()).toHaveLength(0);
   });
 });
