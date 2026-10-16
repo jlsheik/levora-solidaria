@@ -356,8 +356,12 @@ describe.skipIf(!REAL_CLAMD_HOST)("D. scanner REAL (ClamAV) - só roda com CLAMD
   it("detecta EICAR, aprova arquivo limpo e valida upload/download real em modo fail-closed", async () => {
     const options = { host: REAL_CLAMD_HOST!, port: Number(REAL_CLAMD_PORT ?? 3310), timeoutMs: 15000, maxBytes: 25 * 1024 * 1024 };
     const scanner = new ClamdScanner(options);
-    expect(await scanner.scan(Buffer.from(EICAR))).toMatchObject({ status: "infectado", signature: expect.stringMatching(/Eicar/i) });
-    expect((await scanner.scan(Buffer.from(PNG, "base64"))).status).toBe("limpo");
+    // a mensagem inclui o desfecho completo (motivo, se indisponível): um toMatchObject escondia a propriedade `reason` quando o scanner real não respondia
+    const eicarResult = await scanner.scan(Buffer.from(EICAR));
+    expect(eicarResult.status, JSON.stringify(eicarResult)).toBe("infectado");
+    expect(eicarResult).toMatchObject({ signature: expect.stringMatching(/Eicar/i) });
+    const cleanResult = await scanner.scan(Buffer.from(PNG, "base64"));
+    expect(cleanResult.status, JSON.stringify(cleanResult)).toBe("limpo");
 
     const w = await world();
     required();
@@ -408,5 +412,15 @@ describe.skipIf(!REAL_CLAMD_HOST)("D. scanner REAL (ClamAV) - só roda com CLAMD
     expect((await download(unavailable.id, w.operator)).status).toBe(409);
     expect((await attach(w, destinationId, unavailable.id, w.admin)).status).toBe(409);
     expect(await db.selectFrom("stockDestinations").select("id").where("proofFileId", "=", unavailable.id).execute()).toHaveLength(0);
+
+    // recuperação: com o scanner real de volta, a NOVA análise válida libera o arquivo limpo; o EICAR continua infectado (reanálise não o libera) e nada foi aprovado retroativamente antes disso
+    setFileScannerForTests(scanner);
+    const recovered = await parseJson<{ file: { scanStatus: string } }>(await rescan(w, unavailable.id));
+    expect(recovered.file.scanStatus).toBe("aprovado");
+    expect((await download(unavailable.id, w.operator)).status).toBe(200);
+    const again = await parseJson<{ file: { scanStatus: string } }>(await rescan(w, infectedId));
+    expect(again.file.scanStatus).toBe("infectado");
+    expect((await download(infectedId, w.owner)).status).toBe(409);
+    expect((await row(infectedId)).scanStatus).toBe("infectado");
   });
 });
