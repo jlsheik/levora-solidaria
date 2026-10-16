@@ -34,10 +34,17 @@ const REAL_CLAMD_PORT = process.env.CLAMD_PORT;
 const post = (p: string, cookie: string, body: unknown) => buildRequest(p, { method: "POST", cookie, body });
 const key = () => `k-${randomBytes(8).toString("hex")}`;
 
+// Variáveis do scanner como estavam ANTES de qualquer teste (execução com scanner real define CLAMD_*; sem ele ficam indefinidas).
+const ENV_BEFORE: Record<string, string | undefined> = Object.fromEntries(["CLAMD_HOST", "CLAMD_PORT", "CLAMD_TIMEOUT_MS", "CLAMD_MAX_BYTES"].map((k) => [k, process.env[k]]));
 afterEach(() => {
   setFileScannerForTests(undefined);
   delete process.env.FILE_SCAN_MODE;
   vi.unstubAllEnvs();
+  // restauração garantida mesmo se um teste falhar no meio: nenhum teste (ex.: o de produção sem scanner, que remove CLAMD_HOST) afeta os seguintes
+  for (const [k, v] of Object.entries(ENV_BEFORE)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
 });
 
 const stub = (outcomes: ScanOutcome | ((n: number) => ScanOutcome | Promise<ScanOutcome>)): FileScanner & { calls: number } => {
@@ -176,6 +183,7 @@ const audits = (action: string) => db.selectFrom("auditLog").select("metadata").
 
 describe("C. máquina de estados em PostgreSQL real (scanner simulado injetado)", () => {
   it("modo desligado (desenvolvimento/testes): arquivo nasce 'dispensado' — nunca 'aprovado' — e é liberado; sem scanner nenhum é chamado", async () => {
+    delete process.env.FILE_SCAN_MODE; // explícito: não depende da ordem dos testes nem de um FILE_SCAN_MODE herdado da execução com o scanner real
     const w = await world();
     const s = stub(CLEAN);
     setFileScannerForTests(s);
@@ -255,6 +263,10 @@ describe("C. máquina de estados em PostgreSQL real (scanner simulado injetado)"
     const up = await upload(w);
     expect(up.scanStatus).toBe("indisponivel");
     expect((await download(up.id, w.owner)).status).toBe(409);
+  });
+
+ it("regressão de isolamento: o teste de produção sem scanner (que remove CLAMD_HOST) não vaza a remoção para os testes seguintes", () => {
+    for (const [k, v] of Object.entries(ENV_BEFORE)) expect(process.env[k], k).toBe(v);
   });
 
   it("outros propósitos NÃO contornam a análise: comprovante de entrega também fica retido e não é servido", async () => {
