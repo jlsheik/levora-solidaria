@@ -3,6 +3,7 @@ import { expireReservations } from "./expireReservations.js";
 import { expireOpportunities } from "./expireOpportunities.js";
 import { expireApprovalRequests } from "./expireApprovalRequests.js";
 import { expireAssignmentDeadlines } from "./expireAssignmentDeadlines.js";
+import { retryFileScansScheduled } from "./retryFileScansTask.js";
 import { verifyAuditChainScheduled } from "./verifyAuditChainTask.js";
 
 /**
@@ -24,4 +25,5 @@ export const TASK_HANDLERS: Record<string, () => Promise<void>> = {
   expireApprovalRequests,
   expireAssignmentDeadlines,
   verifyAuditChain: verifyAuditChainScheduled,
+  retryFileScans: retryFileScansScheduled,
 };

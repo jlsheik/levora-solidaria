@@ -24,7 +24,7 @@ export async function handle(request: Request) {
     const file = await db.selectFrom("files").select(["id", "uploadedByUserId"]).where("id", "=", input.fileId).where("organizationId", "=", input.organizationId).executeTakeFirst();
     if (!file) return json(404, { message: "Arquivo não encontrado" });
     if (file.uploadedByUserId !== user.id && !roleHasPermission(membership.role, "organizacao.gerencie")) return json(403, { message: "Somente quem enviou o arquivo, ou proprietário/administrador, pode reanalisá-lo" });
-    const result = await scanFile(file.id, input.organizationId, user.id);
+    const result = await scanFile(file.id, input.organizationId, user.id, { manual: true });
     return json(200, { file: { id: file.id, scanStatus: result.status, scanMessage: scanMessage(result.status), released: result.released } } satisfies OutputType);
   } catch (error: unknown) {
     console.error("Erro ao reanalisar arquivo:", error);
