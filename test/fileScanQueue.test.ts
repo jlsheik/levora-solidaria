@@ -2,7 +2,7 @@
  * Hardening pós-99K — operação confiável do scanner: política de novas tentativas, fila durável com lease, tarefa agendada, saúde do clamd (PING/VERSION/idade da base carregada) e
  * indicadores globais. PostgreSQL real; scanner SIMULADO (o scanner real continua coberto por test/fileScan.test.ts, bloco D). Nada aqui prova o serviço definitivo.
  */
-import { describe, it, expect, afterEach, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vitest";
 import net from "node:net";
 import { rm } from "node:fs/promises";
 import path from "node:path";
@@ -27,6 +27,11 @@ const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQU
 const post = (p: string, cookie: string, body: unknown) => buildRequest(p, { method: "POST", cookie, body });
 const get = (p: string, cookie: string) => buildRequest(p, { method: "GET", cookie });
 
+// Premissas de ambiente EXPLÍCITAS: o resultado não depende de FILE_SCAN_MODE/CLAMD_* herdados do terminal ou do .env.test. Cada teste que precisa do modo obrigatório o declara (required()).
+beforeEach(() => {
+  vi.stubEnv("FILE_SCAN_MODE", "disabled");
+  vi.stubEnv("CLAMD_HOST", "");
+});
 afterEach(() => {
   setFileScannerForTests(undefined);
   vi.unstubAllEnvs();
@@ -256,11 +261,17 @@ describe("C. fila durável, lease, backoff e esgotamento (PostgreSQL real)", () 
     expect((await runFileScanRetries()).approved).toBe(1);
   });
 
-  it("análise desligada ou sem scanner configurado: a execução é 'pulada' e NÃO consome tentativas", async () => {
+  it("análise DESLIGADA (FILE_SCAN_MODE=disabled explícito): a execução é 'pulada' e nada entra na fila", async () => {
+    vi.stubEnv("FILE_SCAN_MODE", "disabled");
     const w = await world();
     const id = await upload(w); // modo desligado: nasce dispensado
     expect((await runFileScanRetries()).skipped).toBe("analise_desligada");
+    expect(await row(id)).toMatchObject({ scanStatus: "dispensado", scanAttempts: 0 });
+  });
+
+  it("modo OBRIGATÓRIO sem scanner configurado: a execução é 'pulada' como cenário distinto, NÃO consome tentativas e o arquivo continua bloqueado", async () => {
     required();
+    const w = await world();
     setFileScannerForTests(stub(DOWN));
     const held = await upload(w);
     await makeDue(held);
@@ -268,7 +279,7 @@ describe("C. fila durável, lease, backoff e esgotamento (PostgreSQL real)", () 
     setFileScannerForTests(null); // modo obrigatório sem scanner
     expect((await runFileScanRetries()).skipped).toBe("scanner_nao_configurado");
     expect((await row(held)).scanAttempts).toBe(before);
-    expect((await row(id)).scanStatus).toBe("dispensado");
+    expect((await downloadGet(get(`files-download?fileId=${held}`, w.owner.cookie))).status).toBe(409);
   });
 
   it("a fila não mexe em estoque, destinações nem necessidades", async () => {

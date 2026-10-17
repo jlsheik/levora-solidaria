@@ -188,6 +188,11 @@ describe.each([["local"], ["s3"]] as const)("upload × banco com armazenamento %
 });
 
 // ------------------------------------------------------------------------------------------------ files.storageProvider
+// Estes testes cobrem ARMAZENAMENTO/cabeçalhos e usam linhas ANTIGAS (legado_nao_analisado, anteriores à análise), que só são servidas fora do modo obrigatório.
+// A premissa é explícita e restaurada a cada teste (não herda FILE_SCAN_MODE do terminal/.env.test). O bloqueio do modo obrigatório (legado, 409, infectado, fail-closed) é provado em test/fileScan.test.ts.
+beforeEach(() => { vi.stubEnv("FILE_SCAN_MODE", "disabled"); });
+afterEach(() => { vi.unstubAllEnvs(); });
+
 describe("files.storageProvider decide o adaptador de CADA arquivo (não a configuração atual)", () => {
   let server: Server; let base: string; let owner: AuthenticatedTestUser; let orgId: number;
   beforeAll(async () => { server = (await buildApp()).listen(0); await new Promise<void>((r) => server.once("listening", r)); base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`; });

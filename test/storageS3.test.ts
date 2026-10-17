@@ -48,6 +48,11 @@ beforeAll(async () => { s3 = new FakeS3(); await s3.start(); adapter = buildStor
 afterAll(async () => { await s3.stop(); });
 afterEach(() => { s3.fault = "none"; s3.faultOnPut = false; s3.faultOnDelete = false; });
 
+// Estes testes cobrem ARMAZENAMENTO/cabeçalhos e usam linhas ANTIGAS (legado_nao_analisado, anteriores à análise), que só são servidas fora do modo obrigatório.
+// A premissa é explícita e restaurada a cada teste (não herda FILE_SCAN_MODE do terminal/.env.test). O bloqueio do modo obrigatório (legado, 409, infectado, fail-closed) é provado em test/fileScan.test.ts.
+beforeEach(() => { vi.stubEnv("FILE_SCAN_MODE", "disabled"); });
+afterEach(() => { vi.unstubAllEnvs(); });
+
 describe("adaptador S3 real contra um endpoint HTTP local", () => {
   it("é o adaptador S3 (não o de disco) quando as variáveis S3_* existem, e o de disco sem elas", () => {
     expect(adapter.provider).toBe("s3");

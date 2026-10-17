@@ -3,7 +3,7 @@
  * Defesa em profundidade para uma linha adulterada no banco (o endpoint nunca usa entrada do usuário como chave): a guarda de formato do S3 e a do disco
  * impediam sair da raiz, mas `<outra-org>/<uuid>` tem o formato válido e `1/../2/<uuid>` continua DENTRO da raiz do disco.
  */
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll, afterEach, vi } from "vitest";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { db } from "../src/helpers/db";
@@ -15,6 +15,11 @@ import { createAuthenticatedUser, createTestOrganization, buildRequest } from ".
 const STORAGE_DIR = path.resolve(process.cwd(), process.env.STORAGE_LOCAL_DIR || "storage/uploads-test");
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 const SECRET = Buffer.concat([PNG, Buffer.from("segredo-da-outra-organizacao")]);
+
+// Estes testes cobrem ARMAZENAMENTO/cabeçalhos e usam linhas ANTIGAS (legado_nao_analisado, anteriores à análise), que só são servidas fora do modo obrigatório.
+// A premissa é explícita e restaurada a cada teste (não herda FILE_SCAN_MODE do terminal/.env.test). O bloqueio do modo obrigatório (legado, 409, infectado, fail-closed) é provado em test/fileScan.test.ts.
+beforeEach(() => { vi.stubEnv("FILE_SCAN_MODE", "disabled"); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 describe("a chave de armazenamento tem de pertencer à organização do registro", () => {
   afterAll(async () => { await rm(STORAGE_DIR, { recursive: true, force: true }); });

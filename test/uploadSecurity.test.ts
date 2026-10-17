@@ -3,7 +3,7 @@
  * `files-upload` → storage → `files-download`: conteúdo que não corresponde ao tipo declarado (SVG/HTML com script declarado como imagem), nomes
  * de arquivo hostis, base64 inválido, linhas antigas com tipo ativo (text/html, image/svg+xml) e erros do Express que viravam HTML.
  */
-import { describe, it, expect, beforeEach, afterAll, beforeAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll, beforeAll, afterEach, vi } from "vitest";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { readdir, rm } from "node:fs/promises";
@@ -34,6 +34,11 @@ async function filesOnDisk(dir = STORAGE_DIR): Promise<string[]> {
   return out;
 }
 const rows = async () => Number((await db.selectFrom("files").select(db.fn.countAll().as("n")).executeTakeFirstOrThrow()).n);
+
+// Estes testes cobrem ARMAZENAMENTO/cabeçalhos e usam linhas ANTIGAS (legado_nao_analisado, anteriores à análise), que só são servidas fora do modo obrigatório.
+// A premissa é explícita e restaurada a cada teste (não herda FILE_SCAN_MODE do terminal/.env.test). O bloqueio do modo obrigatório (legado, 409, infectado, fail-closed) é provado em test/fileScan.test.ts.
+beforeEach(() => { vi.stubEnv("FILE_SCAN_MODE", "disabled"); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 describe("upload/download de arquivos: conteúdo, nomes e cabeçalhos", () => {
   let owner: AuthenticatedTestUser; let orgId: number;

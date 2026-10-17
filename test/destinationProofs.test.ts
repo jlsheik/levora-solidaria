@@ -2,7 +2,7 @@
  * Fase 99J — comprovantes de destinação (PostgreSQL real, banco `_test`; armazenamento local descartável): upload privado, vínculo por evento imutável, remoção da referência sem apagar o
  * objeto, autorização de download por finalidade/vínculo, isolamento entre organizações, idempotência, atomicidade e garantias do banco. Comprovante é opcional.
  */
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, afterAll, beforeEach, afterEach, vi } from "vitest";
 import { randomBytes } from "node:crypto";
 import { rm } from "node:fs/promises";
 import path from "node:path";
@@ -58,6 +58,11 @@ const download = (fileId: number, user: Auth) => downloadHandle(buildRequest(`fi
 const list = async (w: W, user: Auth = w.operator) => (await parseJson<OutputType>(await listHandle(buildRequest(`stock-destinations?organizationId=${w.org.id}`, { method: "GET", cookie: user.cookie })))).destinations;
 const code = async (r: Response) => (await parseJson<{ code?: string }>(r)).code;
 const events = (destId: string) => db.selectFrom("stockDestinations").selectAll().where("reversesDestinationId", "=", destId).orderBy("id").execute();
+
+// Este arquivo verifica o ciclo do comprovante de destinação (vínculo, permissões, idempotência, concorrência, atomicidade), não a análise antimalware: só se vincula arquivo liberado (aprovado/dispensado), então os envios precisam nascer liberados.
+// Premissa explícita (modo desligado: envios nascem 'dispensado' e são liberados), restaurada a cada teste; não herda FILE_SCAN_MODE do terminal/.env.test. A análise e o bloqueio do modo obrigatório (409, infectado, legado, fail-closed) são provados em test/fileScan.test.ts.
+beforeEach(() => { vi.stubEnv("FILE_SCAN_MODE", "disabled"); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 describe("A. upload e vínculo", () => {
   it("fluxo completo: envia, anexa (evento imutável), lista e baixa; original, estoque e atendimento intactos; comprovante é opcional", async () => {
