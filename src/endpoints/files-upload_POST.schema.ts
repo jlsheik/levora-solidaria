@@ -26,6 +26,9 @@ export type OutputType = {
     contentType: string;
     sizeBytes: number;
     downloadUrl: string;
+    /** Situação da análise antimalware; só `aprovado`/`dispensado` liberam o arquivo. */
+    scanStatus: string;
+    scanMessage: string;
   };
 };
 

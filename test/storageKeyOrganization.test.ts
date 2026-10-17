@@ -25,7 +25,7 @@ describe("a chave de armazenamento tem de pertencer à organização do registro
     const b = await createAuthenticatedUser(); const orgB = (await createTestOrganization(b.userId)).id;
     const objB = await storageAdapter.upload({ organizationId: orgB, buffer: SECRET, contentType: "image/png" });
     const own = await storageAdapter.upload({ organizationId: orgA, buffer: PNG, contentType: "image/png" });
-    const row = await db.insertInto("files").values({ organizationId: orgA, uploadedByUserId: a.userId, storageProvider: own.storageProvider, storageKey: own.storageKey, originalFilename: "a.png", contentType: "image/png", sizeBytes: PNG.length, purpose: "comprovante_entrega" }).returning("id").executeTakeFirstOrThrow();
+    const row = await db.insertInto("files").values({ scanStatus: "legado_nao_analisado", organizationId: orgA, uploadedByUserId: a.userId, storageProvider: own.storageProvider, storageKey: own.storageKey, originalFilename: "a.png", contentType: "image/png", sizeBytes: PNG.length, purpose: "comprovante_entrega" }).returning("id").executeTakeFirstOrThrow();
     return { a, orgA, orgB, objB, row };
   }
   const download = (cookie: string, id: number) => getFilesDownload(buildRequest(`files-download?fileId=${id}`, { cookie }));

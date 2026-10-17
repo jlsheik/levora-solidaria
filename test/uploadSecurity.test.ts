@@ -102,7 +102,7 @@ describe("upload/download de arquivos: conteúdo, nomes e cabeçalhos", () => {
   it("linha ANTIGA com tipo ativo (text/html, image/svg+xml): o download nunca devolve conteúdo renderizável (attachment + octet-stream)", async () => {
     for (const [type, bytes, name] of [["text/html", HTML_ACTIVE, "legado.html"], ["image/svg+xml", SVG_ACTIVE, "legado.svg"], ["application/xhtml+xml", HTML_ACTIVE, "legado.xhtml"]] as const) {
       const stored = await storageAdapter.upload({ organizationId: orgId, buffer: bytes, contentType: type });
-      const row = await db.insertInto("files").values({ organizationId: orgId, uploadedByUserId: owner.userId, storageProvider: stored.storageProvider, storageKey: stored.storageKey, originalFilename: name, contentType: type, sizeBytes: bytes.length, purpose: "comprovante_entrega" }).returning("id").executeTakeFirstOrThrow();
+      const row = await db.insertInto("files").values({ scanStatus: "legado_nao_analisado", organizationId: orgId, uploadedByUserId: owner.userId, storageProvider: stored.storageProvider, storageKey: stored.storageKey, originalFilename: name, contentType: type, sizeBytes: bytes.length, purpose: "comprovante_entrega" }).returning("id").executeTakeFirstOrThrow();
       const down = await getFilesDownload(buildRequest(`files-download?fileId=${row.id}`, { cookie: owner.cookie }));
       expect(down.status, type).toBe(200);
       expect(down.headers.get("content-type"), type).toBe("application/octet-stream");

@@ -196,7 +196,7 @@ describe("files.storageProvider decide o adaptador de CADA arquivo (não a confi
     resetAllRateLimitsForTests(); s3.objects.clear(); s3.requests.length = 0; await rm(STORAGE_DIR, { recursive: true, force: true });
     owner = await createAuthenticatedUser(); orgId = (await createTestOrganization(owner.userId)).id;
   });
-  const row = async (provider: string, key: string) => (await db.insertInto("files").values({ organizationId: orgId, uploadedByUserId: owner.userId, storageProvider: provider, storageKey: key, originalFilename: "x.png", contentType: "image/png", sizeBytes: PNG.length, purpose: "comprovante_entrega" }).returning("id").executeTakeFirstOrThrow()).id;
+  const row = async (provider: string, key: string) => (await db.insertInto("files").values({ scanStatus: "legado_nao_analisado", organizationId: orgId, uploadedByUserId: owner.userId, storageProvider: provider, storageKey: key, originalFilename: "x.png", contentType: "image/png", sizeBytes: PNG.length, purpose: "comprovante_entrega" }).returning("id").executeTakeFirstOrThrow()).id;
   const download = (id: number, cookie?: string) => fetch(`${base}/_api/v1/files-download?fileId=${id}`, { headers: cookie ? { Cookie: cookie } : {} });
 
   it("configuração ATUAL = S3, mas o arquivo antigo é local: é servido do disco (e o S3 não é consultado); o inverso também", async () => {

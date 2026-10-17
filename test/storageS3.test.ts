@@ -207,7 +207,7 @@ describe("files-upload / files-download pelo Express real, com armazenamento S3"
   it("linha ANTIGA com tipo ativo guardada no S3 (text/html, image/svg+xml) é servida como octet-stream + attachment + nosniff", async () => {
     for (const [type, content] of [["text/html", "<script>1</script>"], ["image/svg+xml", "<svg onload='1'/>"]] as const) {
       const ref = await adapter.upload({ organizationId: orgId, buffer: Buffer.from(content), contentType: type });
-      const row = await db.insertInto("files").values({ organizationId: orgId, uploadedByUserId: owner.userId, storageProvider: "s3", storageKey: ref.storageKey, originalFilename: "legado", contentType: type, sizeBytes: content.length, purpose: "comprovante_entrega" }).returning("id").executeTakeFirstOrThrow();
+      const row = await db.insertInto("files").values({ scanStatus: "legado_nao_analisado", organizationId: orgId, uploadedByUserId: owner.userId, storageProvider: "s3", storageKey: ref.storageKey, originalFilename: "legado", contentType: type, sizeBytes: content.length, purpose: "comprovante_entrega" }).returning("id").executeTakeFirstOrThrow();
       const res = await download(row.id, owner.cookie);
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toBe("application/octet-stream");

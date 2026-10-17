@@ -307,7 +307,7 @@ describe("E. atomicidade e garantias do banco", () => {
     const a = await world();
     const b = await world();
     const d = await dest(a);
-    const mkFile = async (x: W, purpose: string) => (await db.insertInto("files").values({ organizationId: x.org.id, uploadedByUserId: x.owner.userId, storageProvider: "local", storageKey: `${x.org.id}/seed-${randomBytes(4).toString("hex")}`, originalFilename: "x.png", contentType: "image/png", sizeBytes: 10, purpose }).returning("id").execute())[0].id;
+    const mkFile = async (x: W, purpose: string) => (await db.insertInto("files").values({ organizationId: x.org.id, uploadedByUserId: x.owner.userId, storageProvider: "local", storageKey: `${x.org.id}/seed-${randomBytes(4).toString("hex")}`, originalFilename: "x.png", contentType: "image/png", sizeBytes: 10, purpose, scanStatus: "aprovado" } as never).returning("id").execute())[0].id;
     const base = (fileId: number, over: Record<string, unknown> = {}) => ({ organizationId: a.org.id, entryType: "correction", itemId: a.item.id, reversesDestinationId: d, proofFileId: fileId, reason: "Motivo válido", createdByUserId: a.owner.userId, ...over });
     const ok = await mkFile(a, "comprovante_destinacao");
     await expect(db.insertInto("stockDestinations").values(base(await mkFile(a, "comprovante_entrega")) as never).execute()).rejects.toThrow(/propósito/);

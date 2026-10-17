@@ -2,6 +2,8 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requireOrganizationMembership, requirePermission } from "../helpers/organizationAccess.js";
 import { roleHasPermission } from "../helpers/permissions.js";
+import { isReleasable } from "../helpers/fileScanner.js";
+import { scanMessage } from "../helpers/fileScan.js";
 import { getProofState, PROOF_PURPOSE } from "../helpers/destinationProofs.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
 import { adapterForProvider, keyBelongsToOrganization } from "../helpers/storageAdapter.js";
@@ -24,7 +26,7 @@ export async function handle(request: Request) {
 
     const file = await db
       .selectFrom("files")
-      .select(["id", "organizationId", "storageProvider", "storageKey", "originalFilename", "contentType", "purpose", "uploadedByUserId"])
+      .select(["id", "organizationId", "storageProvider", "storageKey", "originalFilename", "contentType", "purpose", "uploadedByUserId", "scanStatus"])
       .where("id", "=", input.fileId)
       .executeTakeFirst();
 
@@ -46,6 +48,11 @@ export async function handle(request: Request) {
       if (proof.state !== "vigente" && !privileged) {
         return new Response(superjson.stringify({ message: "Arquivo não encontrado" }), { status: 404, headers: { "Content-Type": "application/json" } });
       }
+    }
+
+    // Análise antimalware: depois da autorização (não revela o estado a quem não pode ver o arquivo), arquivo não liberado NUNCA é servido — nem a quem o enviou ou aos administradores.
+    if (!isReleasable(file.scanStatus)) {
+      return new Response(superjson.stringify({ message: scanMessage(file.scanStatus), code: "arquivo_nao_liberado", scanStatus: file.scanStatus }), { status: 409, headers: { "Content-Type": "application/json" } });
     }
 
     // Chave adulterada no banco (de outra organização, com `..` ou fora do formato) nunca vai ao armazenamento: o objeto servido tem de ser da organização do registro.
