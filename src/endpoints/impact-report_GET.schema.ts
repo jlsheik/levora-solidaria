@@ -1,6 +1,9 @@
 import { z } from "zod";
 import superjson from "superjson";
 import { ApiRequestError } from "../helpers/apiRequestError.js";
+import { DESTINATION_TYPES } from "../helpers/destinationRules.js";
+import type { NeedAttendanceProgress } from "../helpers/needAttendance.js";
+import type { DestinationReport } from "../helpers/impactDestinationReport.js";
 
 export const REPORT_EVENT_TYPES = ["recebimento", "entrada_manual", "correcao", "estorno"] as const;
 export type ReportEventType = (typeof REPORT_EVENT_TYPES)[number];
@@ -16,6 +19,9 @@ export const schema = z.object({
   itemId: optionalId,
   needId: optionalId,
   eventType: z.preprocess((v) => (v === null || v === "" ? undefined : v), z.enum(REPORT_EVENT_TYPES).optional()),
+  // Fase 99H: o bloco Destinação filtra por data de REGISTRO (padrão) ou por data EFETIVA da entrega, e opcionalmente por finalidade.
+  destinationDateBasis: z.preprocess((v) => (v === null || v === "" ? undefined : v), z.enum(["registro", "efetiva"]).default("registro")),
+  destinationType: z.preprocess((v) => (v === null || v === "" ? undefined : v), z.enum(DESTINATION_TYPES).optional()),
 });
 
 export type ReceiptEvent = {
@@ -64,6 +70,9 @@ export type NeedReportRow = {
   periodNet: number;
   components: { recebido: number; correcoes: number; estornos: number };
   today: NeedProgressView;
+  /** Fase 99H — atendimento final (destinações, hoje), medida separada do suprimento. */
+  attendance: NeedAttendanceProgress;
+  historicalAttended: boolean;
   statusWarning: boolean;
 };
 
@@ -89,6 +98,10 @@ export type OutputType = {
     ajustes: number;
     ajustesRede: number;
     ajustesOutros: number;
+    entradasDevolucao: number;
+    ajustesDestinacao: number;
+    saidasComDestinacao: number;
+    saidasSemDestinacao: number;
     netChange: number;
     balanceAtStart: number;
     balanceAtEnd: number;
@@ -115,6 +128,22 @@ export type OutputType = {
   };
   receipts: { groups: ReceiptGroup[]; totalEvents: number; truncated: boolean; limit: number };
   needs: { rows: NeedReportRow[]; truncated: boolean; limit: number };
+  destination: DestinationReport;
+  reconciliation: Array<{
+    itemId: number;
+    itemName: string;
+    unit: string;
+    balanceAtStart: number;
+    entradas: number;
+    ajustes: number;
+    saidas: number;
+    balanceAtEnd: number;
+    computedEnd: number;
+    saidasComDestinacao: number;
+    saidasSemDestinacao: number;
+    balanced: boolean;
+    exitsBalanced: boolean;
+  }>;
 };
 
 export const getImpactReport = async (query: z.input<typeof schema>, init?: RequestInit): Promise<OutputType> => {
@@ -127,6 +156,8 @@ export const getImpactReport = async (query: z.input<typeof schema>, init?: Requ
   if (validated.itemId) params.set("itemId", String(validated.itemId));
   if (validated.needId) params.set("needId", String(validated.needId));
   if (validated.eventType) params.set("eventType", validated.eventType);
+  if (validated.destinationDateBasis) params.set("destinationDateBasis", validated.destinationDateBasis);
+  if (validated.destinationType) params.set("destinationType", validated.destinationType);
   const result = await fetch(`/_api/v1/impact-report?${params.toString()}`, {
     method: "GET",
     ...init,

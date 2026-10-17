@@ -17,6 +17,8 @@ export async function handle(request: Request) {
       itemId: url.searchParams.get("itemId"),
       needId: url.searchParams.get("needId"),
       eventType: url.searchParams.get("eventType"),
+      destinationDateBasis: url.searchParams.get("destinationDateBasis"),
+      destinationType: url.searchParams.get("destinationType"),
     });
 
     // Prestação de contas é dado sensível: só quem tem relatorios.leia (proprietário/administrador hoje), não qualquer
@@ -31,6 +33,8 @@ export async function handle(request: Request) {
       itemId: input.itemId ?? null,
       needId: input.needId ?? null,
       eventType: input.eventType ?? null,
+      destinationDateBasis: input.destinationDateBasis,
+      destinationType: input.destinationType ?? null,
     });
 
     return new Response(superjson.stringify(report), { headers: { "Content-Type": "application/json" } });

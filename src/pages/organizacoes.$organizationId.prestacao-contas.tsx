@@ -11,7 +11,8 @@ import { Button } from "../components/Button";
 import { Badge } from "../components/Badge";
 import { Skeleton } from "../components/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/Select";
-import { ArrowLeft, FileText, Printer, ShieldAlert, CornerDownRight, TriangleAlert } from "lucide-react";
+import { ArrowLeft, FileText, Printer, ShieldAlert, CornerDownRight, TriangleAlert, CheckCircle2 } from "lucide-react";
+import { DESTINATION_LABELS, DESTINATION_TYPES, type DestinationType } from "../helpers/destinationRules";
 import styles from "./organizacoes.$organizationId.prestacao-contas.module.css";
 
 const nf = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
@@ -27,6 +28,139 @@ const EVENT_TYPE_LABELS: Record<ReportEventType, string> = {
   correcao: "Correções",
   estorno: "Estornos",
 };
+const INDICATOR_LABELS: Record<string, string> = {
+  atendimento: "Atendimento (contabilizável)",
+  operacao: "Uso operacional da instituição",
+  terceiros: "Doações a terceiros",
+  devolucao_ao_doador: "Devoluções ao doador",
+  perdas: "Perdas",
+  descartes: "Descartes",
+};
+
+function DestinationSection({ data }: { data: OutputType }) {
+  const d = data.destination;
+  const inconsistent = data.reconciliation.filter((r) => !r.balanced || !r.exitsBalanced);
+  return (
+    <section aria-labelledby="dest-report-title" data-testid="destination-report">
+      <h3 id="dest-report-title" className={styles.sectionTitle}>Destinação das saídas</h3>
+      <p className={styles.sectionHint}>
+        Destinação <strong>declarada</strong> pela organização — não é confirmação de entrega ao beneficiário. Físico e atendimento contabilizável ficam em colunas separadas e
+        unidades diferentes nunca são somadas. Filtro por {d.basis === "efetiva" ? "data efetiva da entrega" : "data de registro"}; revertido é o acumulado até hoje.
+      </p>
+      {d.byPurpose.length === 0 ? (
+        <p className={styles.emptyText}>Nenhuma destinação registrada neste período.</p>
+      ) : (
+        <>
+          <div className={`${styles.tableScroll} ${styles.desktopOnly}`}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Finalidade</th>
+                  <th>Item</th>
+                  <th>Registros</th>
+                  <th>Físico</th>
+                  <th>Revertido</th>
+                  <th>Físico líquido</th>
+                  <th>Atendimento</th>
+                  <th>Excedente</th>
+                  <th>Unid. incompatível</th>
+                  <th>Pessoas / famílias declaradas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.byPurpose.map((r) => (
+                  <tr key={`${r.destinationType}-${r.itemId}-${r.unit}`}>
+                    <td>{DESTINATION_LABELS[r.destinationType].label}</td>
+                    <td>{r.itemName} ({r.unit})</td>
+                    <td>{r.records}</td>
+                    <td>{fmt(r.physical)}</td>
+                    <td>{minus(r.reverted)}</td>
+                    <td><strong>{fmt(r.physicalNet)}</strong></td>
+                    <td>{fmt(r.appliedNet)}</td>
+                    <td>{fmt(r.surplusNet)}</td>
+                    <td>{fmt(r.incompatibleNet)}</td>
+                    <td>{r.declaredPeople.pessoas} pessoas · {r.declaredPeople.familias} famílias</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul className={`${styles.cardList} ${styles.mobileOnly}`}>
+            {d.byPurpose.map((r) => (
+              <li key={`m-${r.destinationType}-${r.itemId}-${r.unit}`} className={styles.miniCard}>
+                <strong>{DESTINATION_LABELS[r.destinationType].label}</strong>
+                <div className={styles.kv}><span>Item</span><span>{r.itemName} ({r.unit})</span></div>
+                <div className={styles.kv}><span>Registros</span><span>{r.records}</span></div>
+                <div className={styles.kv}><span>Físico líquido</span><strong>{fmt(r.physicalNet)}</strong></div>
+                <div className={styles.kv}><span>Atendimento</span><strong>{fmt(r.appliedNet)}</strong></div>
+                <div className={styles.kv}><span>Físico / revertido</span><span>{fmt(r.physical)} / {minus(r.reverted)}</span></div>
+                <div className={styles.kv}><span>Excedente</span><span>{fmt(r.surplusNet)}</span></div>
+                <div className={styles.kv}><span>Unid. incompatível</span><span>{fmt(r.incompatibleNet)}</span></div>
+                <div className={styles.kv}><span>Declarados</span><span>{r.declaredPeople.pessoas} pessoas · {r.declaredPeople.familias} famílias</span></div>
+              </li>
+            ))}
+          </ul>
+          <p className={styles.sectionHint}>
+            Pessoas e famílias são a soma das quantidades <strong>declaradas</strong> nos registros (não são pessoas distintas). {d.correctedRecords} registro(s) corrigido(s) e {d.revertedRecords} revertido(s) total ou parcialmente;
+            no período foram criados {d.eventsInPeriod.corrections} correção(ões) documental(is), {d.eventsInPeriod.estornoDocumental} estorno(s) documental(is), {d.eventsInPeriod.devolucaoFisica} devolução(ões) física(s) e {d.eventsInPeriod.correcaoQuantidade} correção(ões) de quantidade.
+          </p>
+        </>
+      )}
+
+      <h4 className={styles.sectionTitle}>Indicadores separados</h4>
+      {d.indicators.length === 0 ? (
+        <p className={styles.emptyText}>Sem indicadores neste período.</p>
+      ) : (
+        <ul className={styles.cardList}>
+          {d.indicators.map((i) => (
+            <li key={`${i.group}-${i.unit}`} className={styles.miniCard}>
+              <div className={styles.kv}><span>{INDICATOR_LABELS[i.group]}</span><strong>{fmt(i.physicalNet)} {i.unit}</strong></div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h4 className={styles.sectionTitle}>Saídas sem destinação estruturada</h4>
+      <p className={styles.sectionHint}>Saídas anteriores ao registro de destinação. Nenhuma foi reclassificada: continuam como foram registradas.</p>
+      {d.withoutStructuredDestination.automaticHistorical.length === 0 && d.withoutStructuredDestination.notClassified.length === 0 ? (
+        <p className={styles.emptyText}>Nenhuma saída sem destinação estruturada neste período.</p>
+      ) : (
+        <ul className={styles.cardList}>
+          {d.withoutStructuredDestination.automaticHistorical.map((r) => (
+            <li key={`a-${r.itemId}`} className={styles.miniCard}><div className={styles.kv}><span>Baixa automática histórica (resolução da necessidade) — {r.itemName}</span><strong>{fmt(r.quantity)} {r.unit} · {r.count} saída(s)</strong></div></li>
+          ))}
+          {d.withoutStructuredDestination.notClassified.map((r) => (
+            <li key={`n-${r.itemId}`} className={styles.miniCard}><div className={styles.kv}><span>Sem destinação estruturada — {r.itemName}</span><strong>{fmt(r.quantity)} {r.unit} · {r.count} saída(s)</strong></div></li>
+          ))}
+        </ul>
+      )}
+
+      <h4 className={styles.sectionTitle}>Conciliação por item</h4>
+      <p className={styles.sectionHint}>Saldo no início + entradas + ajustes − saídas = saldo no fim; e saídas = com destinação + sem destinação estruturada.</p>
+      {inconsistent.length > 0 && (
+        <div className={styles.statusWarning} role="alert"><TriangleAlert size={12} aria-hidden /> {inconsistent.length} item(ns) não conciliam: {inconsistent.map((r) => r.itemName).join(", ")}.</div>
+      )}
+      {data.reconciliation.length === 0 ? (
+        <p className={styles.emptyText}>Nenhum item para conciliar neste período.</p>
+      ) : (
+        <ul className={styles.cardList}>
+          {data.reconciliation.map((r) => (
+            <li key={`c-${r.itemId}`} className={styles.miniCard} data-testid="reconciliation-row" data-balanced={r.balanced && r.exitsBalanced}>
+              <div className={styles.kv}>
+                <span>{r.itemName} ({r.unit})</span>
+                <span>
+                  {r.balanced && r.exitsBalanced ? <CheckCircle2 size={12} aria-label="Conciliado" /> : <TriangleAlert size={12} aria-label="Não concilia" />}{" "}
+                  {fmt(r.balanceAtStart)} + {fmt(r.entradas)} {signed(r.ajustes)} − {fmt(r.saidas)} = {fmt(r.balanceAtEnd)} · saídas: {fmt(r.saidasComDestinacao)} com destinação + {fmt(r.saidasSemDestinacao)} sem
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 const STATUS_LABELS: Record<string, string> = { aberta: "Aberta", em_andamento: "Em andamento", atendida: "Atendida", cancelada: "Cancelada" };
 
 function EventLines({ ev, unit }: { ev: ReceiptEvent; unit: string }) {
@@ -129,6 +263,8 @@ export default function ImpactReportPage() {
   const [itemId, setItemId] = useState<string>("all");
   const [needId, setNeedId] = useState<string>("all");
   const [eventType, setEventType] = useState<string>("all");
+  const [destBasis, setDestBasis] = useState<"registro" | "efetiva">("registro");
+  const [destType, setDestType] = useState<string>("all");
 
   const orgsQuery = useQuery({ queryKey: ["organizations"], queryFn: () => getOrganizations() });
   const org = orgsQuery.data?.organizations.find((o) => o.id === organizationId);
@@ -140,7 +276,7 @@ export default function ImpactReportPage() {
   const rangeOk = startDate !== "" && endDate !== "" && startDate <= endDate;
 
   const reportQuery = useQuery({
-    queryKey: ["impact-report", organizationId, startDate, endDate, itemId, needId, eventType],
+    queryKey: ["impact-report", organizationId, startDate, endDate, itemId, needId, eventType, destBasis, destType],
     queryFn: () =>
       getImpactReport({
         organizationId,
@@ -148,6 +284,8 @@ export default function ImpactReportPage() {
         itemId: itemId === "all" ? undefined : Number(itemId),
         needId: needId === "all" ? undefined : Number(needId),
         eventType: eventType === "all" ? undefined : (eventType as ReportEventType),
+        destinationDateBasis: destBasis,
+        destinationType: destType === "all" ? undefined : (destType as DestinationType),
       }),
     enabled: Number.isFinite(organizationId) && !!canView && rangeOk,
   });
@@ -240,6 +378,26 @@ export default function ImpactReportPage() {
                 <SelectContent>
                   <SelectItem value="all">Todos os tipos</SelectItem>
                   {(Object.keys(EVENT_TYPE_LABELS) as ReportEventType[]).map((t) => <SelectItem key={t} value={t}>{EVENT_TYPE_LABELS[t]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className={styles.filterField}>
+              <label className={styles.filterLabel}>Destinação: data usada</label>
+              <Select value={destBasis} onValueChange={(v) => setDestBasis(v as "registro" | "efetiva")}>
+                <SelectTrigger aria-label="Data usada no bloco de destinação"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="registro">Data de registro</SelectItem>
+                  <SelectItem value="efetiva">Data efetiva da entrega</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className={styles.filterField}>
+              <label className={styles.filterLabel}>Finalidade</label>
+              <Select value={destType} onValueChange={setDestType}>
+                <SelectTrigger aria-label="Filtrar por finalidade da destinação"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as finalidades</SelectItem>
+                  {DESTINATION_TYPES.map((t) => <SelectItem key={t} value={t}>{DESTINATION_LABELS[t].label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -351,6 +509,8 @@ export default function ImpactReportPage() {
                 </>
               )}
 
+              <DestinationSection data={data} />
+
               <h3 className={styles.sectionTitle}>Atendimento das necessidades</h3>
               <p className={styles.sectionHint}>Acumulado até o fim do período, movimentação do período e visão de hoje. O status é a decisão registrada, não um cálculo.</p>
               {data.needs.rows.length === 0 ? (
@@ -392,6 +552,7 @@ export default function ImpactReportPage() {
                             <td>
                               {fmt(n.today.fulfilled)}
                               <div className={styles.cellSub}>falta {fmt(n.today.requiredRemaining)}</div>
+                              <div className={styles.cellSub}>{n.historicalAttended ? "atendimento histórico sem destinação estruturada" : `atendido (destinações): ${fmt(n.attendance.attended)} de ${fmt(n.attendance.requested)}`}</div>
                             </td>
                             <td>
                               <Badge variant={n.status === "atendida" ? "success" : n.status === "cancelada" ? "destructive" : "outline"}>{STATUS_LABELS[n.status] ?? n.status}</Badge>
@@ -423,6 +584,7 @@ export default function ImpactReportPage() {
                         <div className={styles.kv}><span>Necessário</span><span>{fmt(n.needed)}</span></div>
                         <div className={styles.kv}><span>No período</span><span>{signed(n.periodNet)}</span></div>
                         <div className={styles.kv}><span>Hoje</span><span>{fmt(n.today.fulfilled)} (falta {fmt(n.today.requiredRemaining)})</span></div>
+                        <div className={styles.kv}><span>Atendido (destinações)</span><span>{n.historicalAttended ? "histórico, sem destinação estruturada" : `${fmt(n.attendance.attended)} de ${fmt(n.attendance.requested)}`}</span></div>
                       </li>
                     ))}
                   </ul>

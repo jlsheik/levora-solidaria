@@ -3,6 +3,9 @@ import type { DB } from "./schema.js";
 import { computeNeedProgress, getNeedFulfillmentBalanceBatch } from "./needFulfillment.js";
 import { countedEffect } from "./needFulfillmentCorrections.js";
 import { normalize } from "./opportunityMatching.js";
+import { computeAttendanceProgress, getNeedAttendanceBatch, type NeedAttendanceProgress } from "./needAttendance.js";
+import { buildDestinationReport, type DestinationDateBasis, type DestinationReport } from "./impactDestinationReport.js";
+import type { DestinationType } from "./destinationRules.js";
 
 /**
  * Prestação de Contas (Fase 85, Fatia 3) — CAMADA DE LEITURA sobre dados existentes. Contrato:
@@ -33,6 +36,9 @@ export interface ImpactReportParams {
   itemId?: number | null;
   needId?: number | null;
   eventType?: ReportEventType | null;
+  /** Fase 99H: filtro do bloco Destinação — data de REGISTRO (padrão, a mesma do restante do relatório) ou data EFETIVA da entrega. */
+  destinationDateBasis?: DestinationDateBasis;
+  destinationType?: DestinationType | null;
 }
 
 export type ReceiptEventKind = "correcao" | "reativacao" | "estorno";
@@ -91,7 +97,11 @@ export interface NeedReportRow {
   components: { recebido: number; correcoes: number; estornos: number };
   /** Visão de hoje (todo o histórico). */
   today: { fulfilled: number; requiredRemaining: number; surplus: number };
-  /** `needs.status = atendida` mas ainda há saldo faltante HOJE (aviso factual; nunca reabre). */
+  /** Fase 99H — ATENDIMENTO FINAL (destinações, hoje), medida separada do suprimento acima: nunca somadas. */
+  attendance: NeedAttendanceProgress;
+  /** `atendida` por registro anterior ao controle por destinações: sem destinação que a comprove (indicado como histórico; nunca recalculado nem reaberto). */
+  historicalAttended: boolean;
+  /** `atendida` COM destinações estruturadas mas o atendimento ainda não alcança o solicitado; para o registro histórico, o aviso factual de suprimento (nunca reabre). */
   statusWarning: boolean;
 }
 
@@ -117,6 +127,12 @@ export interface ImpactReportOutput {
     ajustes: number;
     ajustesRede: number;
     ajustesOutros: number;
+    /** Fase 99H: parte de `entradas` que é devolução física de destinação (não é doação) e ajustes positivos de correção de quantidade de destinação. */
+    entradasDevolucao: number;
+    ajustesDestinacao: number;
+    /** Fase 99H: `saidas` = com destinação estruturada + sem destinação estruturada. */
+    saidasComDestinacao: number;
+    saidasSemDestinacao: number;
     netChange: number;
     balanceAtStart: number;
     balanceAtEnd: number;
@@ -143,6 +159,24 @@ export interface ImpactReportOutput {
   };
   receipts: { groups: ReceiptGroup[]; totalEvents: number; truncated: boolean; limit: number };
   needs: { rows: NeedReportRow[]; truncated: boolean; limit: number };
+  /** Fase 99H — destinação final por finalidade × item × unidade, indicadores separados e saídas sem destinação estruturada. */
+  destination: DestinationReport;
+  /** Fase 99H — reconciliação por item no período: saldo inicial + entradas + ajustes − saídas = saldo final e saídas = com + sem destinação. */
+  reconciliation: Array<{
+    itemId: number;
+    itemName: string;
+    unit: string;
+    balanceAtStart: number;
+    entradas: number;
+    ajustes: number;
+    saidas: number;
+    balanceAtEnd: number;
+    computedEnd: number;
+    saidasComDestinacao: number;
+    saidasSemDestinacao: number;
+    balanced: boolean;
+    exitsBalanced: boolean;
+  }>;
 }
 
 const num = (v: unknown) => Number(v ?? 0);
@@ -270,6 +304,8 @@ export async function buildImpactReport(db: Kysely<DB>, params: ImpactReportPara
 
   const stItem = itemId !== null ? sql`AND st.item_id = ${itemId}` : sql``;
   const nfNeed = needId !== null ? sql`AND nf.need_id = ${needId}` : sql``;
+  // Fase 99H: a ENTRADA de uma devolução física de destinação (e o ajuste de correção de quantidade) NÃO é doação recebida: entra no estoque, mas não no bloco de doações
+  const notDestinationReturn = sql`AND NOT EXISTS (SELECT 1 FROM stock_destinations sdr WHERE sdr.stock_transaction_id = st.id AND sdr.organization_id = ${org} AND sdr.entry_type = 'reversal')`;
   const lrItem = itemId !== null ? sql`AND item_id = ${itemId}` : sql``;
   const lrNeed = needId !== null ? sql`AND need_id = ${needId}` : sql``;
   const nItem = itemId !== null ? sql`AND n.item_id = ${itemId}` : sql``;
@@ -299,7 +335,7 @@ export async function buildImpactReport(db: Kysely<DB>, params: ImpactReportPara
       (SELECT count(*) AS total, count(nf.id) AS net
          FROM stock_transactions st
          LEFT JOIN need_fulfillments nf ON nf.stock_transaction_id = st.id AND nf.entry_type = 'original' AND nf.organization_id = ${org}
-        WHERE st.organization_id = ${org} AND st.type = 'entrada' AND st.created_at >= ${s} AND st.created_at < ${e} ${stItem} ${nfNeed}) d,
+        WHERE st.organization_id = ${org} AND st.type = 'entrada' AND st.created_at >= ${s} AND st.created_at < ${e} ${stItem} ${nfNeed} ${notDestinationReturn}) d,
       (SELECT count(*) FILTER (WHERE entry_type = 'correction') AS corrections,
               count(*) FILTER (WHERE entry_type = 'reversal' AND NOT paired AND stock_transaction_id IS NULL) AS rev_acc,
               count(*) FILTER (WHERE entry_type = 'reversal' AND NOT paired AND stock_transaction_id IS NOT NULL) AS rev_phys
@@ -326,6 +362,9 @@ export async function buildImpactReport(db: Kysely<DB>, params: ImpactReportPara
       saidas: string;
       ajustesRede: string;
       ajustesOutros: string;
+      entradasDevolucao: string;
+      ajustesDestinacao: string;
+      saidasComDestinacao: string;
       balanceAtStart: string;
       balanceAtEnd: string;
       currentStock: string;
@@ -334,13 +373,18 @@ export async function buildImpactReport(db: Kysely<DB>, params: ImpactReportPara
       coalesce(sum(st.delta) FILTER (WHERE st.type = 'entrada' AND st.created_at >= ${s} AND st.created_at < ${e}), 0) AS entradas,
       coalesce(sum(-st.delta) FILTER (WHERE st.type = 'saida' AND st.created_at >= ${s} AND st.created_at < ${e}), 0) AS saidas,
       coalesce(sum(st.delta) FILTER (WHERE st.type = 'ajuste' AND nf.id IS NOT NULL AND st.created_at >= ${s} AND st.created_at < ${e}), 0) AS ajustes_rede,
-      coalesce(sum(st.delta) FILTER (WHERE st.type = 'ajuste' AND nf.id IS NULL AND st.created_at >= ${s} AND st.created_at < ${e}), 0) AS ajustes_outros,
+      coalesce(sum(st.delta) FILTER (WHERE st.type = 'ajuste' AND nf.id IS NULL AND sdr.id IS NULL AND st.created_at >= ${s} AND st.created_at < ${e}), 0) AS ajustes_outros,
+      coalesce(sum(st.delta) FILTER (WHERE st.type = 'entrada' AND sdr.id IS NOT NULL AND st.created_at >= ${s} AND st.created_at < ${e}), 0) AS entradas_devolucao,
+      coalesce(sum(st.delta) FILTER (WHERE st.type = 'ajuste' AND nf.id IS NULL AND sdr.id IS NOT NULL AND st.created_at >= ${s} AND st.created_at < ${e}), 0) AS ajustes_destinacao,
+      coalesce(sum(-st.delta) FILTER (WHERE st.type = 'saida' AND sdo.id IS NOT NULL AND st.created_at >= ${s} AND st.created_at < ${e}), 0) AS saidas_com_destinacao,
       coalesce(sum(st.delta) FILTER (WHERE st.created_at < ${s}), 0) AS balance_at_start,
       coalesce(sum(st.delta) FILTER (WHERE st.created_at < ${e}), 0) AS balance_at_end,
       coalesce(sum(st.delta), 0) AS current_stock
     FROM stock_transactions st
     JOIN inventory_items i ON i.id = st.item_id AND i.organization_id = ${org}
     LEFT JOIN need_fulfillments nf ON nf.stock_transaction_id = st.id AND nf.organization_id = ${org}
+    LEFT JOIN stock_destinations sdr ON sdr.stock_transaction_id = st.id AND sdr.organization_id = ${org} AND sdr.entry_type = 'reversal'
+    LEFT JOIN (SELECT DISTINCT stock_transaction_id AS id FROM stock_destinations WHERE organization_id = ${org} AND entry_type = 'original' AND stock_transaction_id IS NOT NULL) sdo ON sdo.id = st.id
     WHERE st.organization_id = ${org} ${stItem}
     GROUP BY i.id, i.name, i.unit
     -- Inclusão (decisão de produto, Fase 94): o item aparece se teve movimentação no período OU tem saldo final ≠ 0 (acumulado até o fim).
@@ -379,7 +423,7 @@ export async function buildImpactReport(db: Kysely<DB>, params: ImpactReportPara
           LEFT JOIN needs n ON n.id = nf.need_id AND n.organization_id = ${org}
           LEFT JOIN opportunity_allocations a ON a.id = nf.allocation_id AND a.organization_id = ${org}
           LEFT JOIN opportunity_registry r ON r.id = a.opportunity_registry_id
-         WHERE st.organization_id = ${org} AND st.type = 'entrada' AND st.created_at >= ${s} AND st.created_at < ${e} ${stItem} ${nfNeed} ${originCond}
+         WHERE st.organization_id = ${org} AND st.type = 'entrada' AND st.created_at >= ${s} AND st.created_at < ${e} ${stItem} ${nfNeed} ${originCond} ${notDestinationReturn}
          ORDER BY st.created_at DESC, st.id DESC
          LIMIT ${REPORT_EVENT_LIMIT + 1}
       `.execute(db)
@@ -543,7 +587,8 @@ export async function buildImpactReport(db: Kysely<DB>, params: ImpactReportPara
     }>`
     WITH ${ledgerRowsCte(org)}
     SELECT n.id, n.title, n.unit, n.quantity_needed, n.status, n.item_id, i.name AS item_name, n.updated_at,
-           (n.id IN (SELECT need_id FROM need_fulfillments WHERE organization_id = ${org} AND need_id IS NOT NULL AND created_at >= ${s} AND created_at < ${e})) AS has_activity
+           (n.id IN (SELECT need_id FROM need_fulfillments WHERE organization_id = ${org} AND need_id IS NOT NULL AND created_at >= ${s} AND created_at < ${e})
+            OR n.id IN (SELECT need_id FROM stock_destinations WHERE organization_id = ${org} AND entry_type = 'original' AND need_id IS NOT NULL AND created_at >= ${s} AND created_at < ${e})) AS has_activity
       FROM needs n
       LEFT JOIN inventory_items i ON i.id = n.item_id AND i.organization_id = ${org}
      WHERE n.organization_id = ${org} ${nNeed}
@@ -556,6 +601,9 @@ export async function buildImpactReport(db: Kysely<DB>, params: ImpactReportPara
           WHERE organization_id = ${org} AND need_id IS NOT NULL AND is_countable AND created_at < ${e}
           GROUP BY need_id
          HAVING sum(CASE WHEN entry_type = 'reversal' THEN -quantity ELSE quantity END) <> 0
+         UNION
+         SELECT need_id FROM stock_destinations
+          WHERE organization_id = ${org} AND entry_type = 'original' AND need_id IS NOT NULL AND created_at < ${e}
        )
      ORDER BY n.title, n.id
      LIMIT ${REPORT_NEED_LIMIT + 1}
@@ -597,9 +645,16 @@ export async function buildImpactReport(db: Kysely<DB>, params: ImpactReportPara
       : [];
   const componentsByNeed = new Map(componentRows.map((r) => [r.needId, { recebido: num(r.recebido), correcoes: num(r.correcoes), estornos: num(r.estornos) }]));
 
+  // Fase 99H: atendimento final (destinações, hoje) em lote, pela fonte única da 99F
+  const attendanceMap = await getNeedAttendanceBatch(db, needIds);
+  const emptyAttendance = { physicalNet: 0, appliedNet: 0, surplusNet: 0, unitIncompatiblePhysical: 0, destinationCount: 0 };
+
   const needs: NeedReportRow[] = needRows.map((n) => {
     const needed = Number(n.quantityNeeded);
     const today = computeNeedProgress(needed, todayMap.get(n.id) ?? 0);
+    const att = attendanceMap.get(n.id) ?? emptyAttendance;
+    const attendance = computeAttendanceProgress(needed, att, n.status as "aberta" | "atendida" | "cancelada");
+    const historicalAttended = attendance.state === "atendida_historica";
     return {
       id: n.id,
       title: n.title,
@@ -615,10 +670,14 @@ export async function buildImpactReport(db: Kysely<DB>, params: ImpactReportPara
       periodNet: periodMap.get(n.id) ?? 0,
       components: componentsByNeed.get(n.id) ?? { recebido: 0, correcoes: 0, estornos: 0 },
       today,
-      // aviso factual: marcada como atendida, mas ainda falta saldo HOJE (nunca reabre, nunca altera o status)
-      statusWarning: n.status === "atendida" && today.requiredRemaining > 0,
+      attendance,
+      historicalAttended,
+      // aviso factual (nunca reabre, nunca altera o status): com destinações estruturadas compara `atendida` com o ATENDIDO; no registro histórico (sem destinação) mantém a comparação com o suprimento
+      statusWarning: n.status === "atendida" && (att.destinationCount > 0 ? attendance.remaining > 0 : today.requiredRemaining > 0),
     };
   });
+
+  const destination = await buildDestinationReport(db, { organizationId: org, startDate: s, endDate: e, itemId, needId, destinationType: params.destinationType ?? null, basis: params.destinationDateBasis ?? "registro" });
 
   return {
     period: { startDate: s.toISOString(), endDateExclusive: e.toISOString() },
@@ -638,16 +697,22 @@ export async function buildImpactReport(db: Kysely<DB>, params: ImpactReportPara
       const saidas = num(r.saidas);
       const ajustesRede = num(r.ajustesRede);
       const ajustesOutros = num(r.ajustesOutros);
+      const ajustesDestinacao = num(r.ajustesDestinacao);
+      const saidasComDestinacao = num(r.saidasComDestinacao);
       return {
         itemId: r.itemId,
         itemName: r.itemName,
         unit: r.unit,
         entradas,
         saidas,
-        ajustes: ajustesRede + ajustesOutros,
+        ajustes: ajustesRede + ajustesOutros + ajustesDestinacao,
         ajustesRede,
         ajustesOutros,
-        netChange: entradas - saidas + ajustesRede + ajustesOutros,
+        entradasDevolucao: num(r.entradasDevolucao),
+        ajustesDestinacao,
+        saidasComDestinacao,
+        saidasSemDestinacao: Math.round((saidas - saidasComDestinacao) * 1000) / 1000,
+        netChange: entradas - saidas + ajustesRede + ajustesOutros + ajustesDestinacao,
         balanceAtStart: num(r.balanceAtStart),
         balanceAtEnd: num(r.balanceAtEnd),
         currentStock: num(r.currentStock),
@@ -674,5 +739,29 @@ export async function buildImpactReport(db: Kysely<DB>, params: ImpactReportPara
     },
     receipts: { groups, totalEvents, truncated: totalEvents > REPORT_EVENT_LIMIT, limit: REPORT_EVENT_LIMIT },
     needs: { rows: needs, truncated: needsTruncated, limit: REPORT_NEED_LIMIT },
+    destination,
+    reconciliation: movementRows.map((r) => {
+      const entradas = num(r.entradas);
+      const saidas = num(r.saidas);
+      const ajustes = num(r.ajustesRede) + num(r.ajustesOutros) + num(r.ajustesDestinacao);
+      const computedEnd = Math.round((num(r.balanceAtStart) + entradas + ajustes - saidas) * 1000) / 1000;
+      const comDest = num(r.saidasComDestinacao);
+      const semDest = Math.round((saidas - comDest) * 1000) / 1000;
+      return {
+        itemId: r.itemId,
+        itemName: r.itemName,
+        unit: r.unit,
+        balanceAtStart: num(r.balanceAtStart),
+        entradas,
+        ajustes,
+        saidas,
+        balanceAtEnd: num(r.balanceAtEnd),
+        computedEnd,
+        saidasComDestinacao: comDest,
+        saidasSemDestinacao: semDest,
+        balanced: Math.abs(computedEnd - num(r.balanceAtEnd)) < 0.0005,
+        exitsBalanced: Math.abs(comDest + semDest - saidas) < 0.0005,
+      };
+    }),
   };
 }

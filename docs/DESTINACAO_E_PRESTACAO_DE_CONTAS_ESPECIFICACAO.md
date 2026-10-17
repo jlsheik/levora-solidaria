@@ -439,6 +439,8 @@ Permissões **propostas** (só entram no catálogo `src/helpers/permissions.tsx`
 
 ## 14. Experiência e interfaces
 
+> **Implementação do item 5 (prestação de contas) — 99H:** `docs/DESTINACAO_RELATORIO_99H.md` (contrato aditivo de `impact-report_GET`, sem migration). A aba de histórico (item 2) e os comprovantes continuam na 99I/99J.
+
 **Linguagem:** os nomes refletem o que os dados provam. "Destinação registrada" (declarada pela organização) — **nunca** "entregue ao beneficiário" como afirmação, e nunca "atendida" para o que é só recebido.
 
 1. **Estoque:** "Saída" vira **"Registrar destinação"** (diálogo): item, quantidade (unidade canônica visível), finalidade (as oito, com descrição), necessidade (somente nas três categorias de atendimento; sugere a vinculada à doação local e filtra por item/unidade), data efetiva (com aviso e exigência de justificativa/autorização além de 7 dias), pessoas/famílias (opcional, com `people_unit`), observações (aviso de não sensível), comprovante (opcional, `FileDropzone`). Avisos **antes** de confirmar: unidade incompatível (não contará), excesso (exige motivo), saldo insuficiente, necessidade de aprovação por risco. Ajuste continua separado (e oferece "registrar perda/descarte" quando o motivo é perda).
