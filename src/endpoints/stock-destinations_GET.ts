@@ -19,7 +19,7 @@ export async function handle(request: Request) {
     const input = schema.parse({ organizationId: g("organizationId"), itemId: g("itemId"), needId: g("needId"), destinationType: g("destinationType"), state: g("state"), basis: g("basis"), from: g("from"), to: g("to"), limit: g("limit"), beforeId: g("beforeId") });
     const membership = await requirePermission(user.id, input.organizationId, "inventario.lance");
     const filter = { itemId: input.itemId, needId: input.needId, destinationType: input.destinationType, state: input.state, basis: input.basis, from: input.from, to: input.to };
-    const [page, totals] = await Promise.all([listDestinationHistory(db, input.organizationId, { ...filter, limit: input.limit, beforeId: input.beforeId }), destinationTotals(db, { ...filter, organizationId: input.organizationId })]);
+    const [page, totals] = await Promise.all([listDestinationHistory(db, input.organizationId, { ...filter, limit: input.limit, beforeId: input.beforeId }, { userId: user.id, canManage: roleHasPermission(membership.role, "organizacao.gerencie") }), destinationTotals(db, { ...filter, organizationId: input.organizationId })]);
     const body: OutputType = { ...page, canReverse: roleHasPermission(membership.role, "organizacao.gerencie"), totals, filters: { basis: input.basis, from: input.from ?? null, to: input.to ?? null } };
     return new Response(superjson.stringify(body), { headers: { "Content-Type": "application/json" } });
   } catch (error: unknown) {

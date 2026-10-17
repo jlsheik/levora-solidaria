@@ -14,6 +14,8 @@ import { handle as needClosure } from "../../src/endpoints/need-closure_POST";
 import { handle as destinationReversal } from "../../src/endpoints/stock-destination-reversal_POST";
 import { handle as destinationCorrection } from "../../src/endpoints/stock-destination-correction_POST";
 import superjson from "superjson";
+import { handle as filesUpload } from "../../src/endpoints/files-upload_POST";
+import { handle as destinationProof } from "../../src/endpoints/stock-destination-proof_POST";
 
 // vem do orquestrador (scenarios.mjs), para a semente e o login do navegador nunca divergirem
 const QA_PASSWORD = process.env.QA_PASSWORD ?? "";
@@ -60,6 +62,13 @@ const correcao = await destinationCorrection(buildRequest("stock-destination-cor
 if (correcao.status !== 200) throw new Error(`correção documental falhou (${correcao.status})`);
 const estorno = await destinationReversal(buildRequest("stock-destination-reversal", { method: "POST", cookie, body: { organizationId: org.id, destinationId: saidaDestinationId, kind: "estorno_documental", quantity: 0.25, reason: "Parte do registro estava errada (sintético)", idempotencyKey: "qa-visual-seed-estorno-1" } }));
 if (estorno.status !== 200) throw new Error(`estorno documental falhou (${estorno.status})`);
+
+// Fase 99J: comprovante sintético (PNG 1x1) enviado e vinculado pelos endpoints reais à saída acima; a destinação parcial seguinte fica SEM comprovante (botão de anexar)
+const proofUpload = await filesUpload(buildRequest("files-upload", { method: "POST", cookie, body: { organizationId: org.id, purpose: "comprovante_destinacao", fileName: "recibo-sintetico.png", contentType: "image/png", fileBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" } }));
+if (proofUpload.status !== 200) throw new Error(`envio do comprovante falhou (${proofUpload.status})`);
+const proofFileId = (superjson.parse(await proofUpload.text()) as { file: { id: number } }).file.id;
+const proofLink = await destinationProof(buildRequest("stock-destination-proof", { method: "POST", cookie, body: { organizationId: org.id, destinationId: saidaDestinationId, action: "anexar", fileId: proofFileId, reason: "Recibo sintético da saída", idempotencyKey: "qa-visual-seed-comprovante-1" } }));
+if (proofLink.status !== 200) throw new Error(`vínculo do comprovante falhou (${proofLink.status})`);
 
 // Fase 99F: necessidade PARCIALMENTE atendida (1 de 4 kg, por uma destinação real vinculada), uma ENCERRADA com motivo (pelo endpoint) e uma "atendida" HISTÓRICA (sem destinação)
 const [partialNeed] = await db.insertInto("needs").values({ organizationId: org.id, itemId: item.id, title: "Arroz para a campanha", quantityNeeded: "4", unit: "kg", priority: "baixa", status: "aberta", createdByUserId: owner }).returning("id").execute();

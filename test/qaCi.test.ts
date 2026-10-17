@@ -28,7 +28,7 @@ describe("perfil reduzido do qa:visual", () => {
   it("só cita cenários que existem, sem repetição", () => {
     expect(new Set(CI_PROFILE_IDS).size).toBe(CI_PROFILE_IDS.length);
     for (const id of CI_PROFILE_IDS) expect(byId.has(id), id).toBe(true);
-    expect(CI_PROFILE_IDS.length).toBe(65); // 18 originais + 10 de unidades (99B) + 8 da fila de regularização (99C) + 7 do registro de destinação (99E) + 6 do atendimento da necessidade (99F) + 6 do histórico de destinações (99G) + 3 do relatório de destinação (99H) + 7 da aba Destinação (99I)
+    expect(CI_PROFILE_IDS.length).toBe(70); // 18 originais + 10 de unidades (99B) + 8 da fila de regularização (99C) + 7 do registro de destinação (99E) + 6 do atendimento da necessidade (99F) + 6 do histórico de destinações (99G) + 3 do relatório de destinação (99H) + 7 da aba Destinação (99I) + 5 dos comprovantes (99J)
   });
   it("cobre as famílias de maior risco: botões (todas as variantes), Switch, campos, erro, FileDropzone e variação negativa", () => {
     const variants = new Set(CI_PROFILE_IDS.map((id: string) => byId.get(id).variant));
@@ -38,8 +38,8 @@ describe("perfil reduzido do qa:visual", () => {
   });
   it("os omitidos aparecem na seleção e NÃO geram linhas (nunca contam como PASS)", () => {
     const s = selectionSummary(SCENARIOS.map((x: any) => x.id), CI_PROFILE_IDS, "ci");
-    expect(s).toMatchObject({ perfil: "ci", total: SCENARIOS.length, executados: 65, completo: false });
-    expect(s.omitidos).toHaveLength(SCENARIOS.length - 65);
+    expect(s).toMatchObject({ perfil: "ci", total: SCENARIOS.length, executados: 70, completo: false });
+    expect(s.omitidos).toHaveLength(SCENARIOS.length - 70);
     expect(s.omitidos).toContain("login-password-field");
     expect(selectionSummary(["a", "b"], ["a", "b"]).completo).toBe(true);
     const r = new Report(); // um relatório só tem linhas do que rodou: omitidos não existem nele

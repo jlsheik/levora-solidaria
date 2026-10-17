@@ -52,6 +52,7 @@ const openDestination = { click: { css: "button", text: "^Registrar destinação
 const inDialog = (css) => ({ css, within: '[role="dialog"]' });
 // Fase 99F: encerramento de necessidade e leitura do atendimento derivado
 const openClose = { click: { css: 'button[class*="_outline_"]', text: "^Encerrar a necessidade" } };
+const openAttachProof = { click: { css: 'button[class*="_outline_"]', text: "^Anexar comprovante" } };
 const openReverse = { click: { css: 'button[class*="_outline_"]', text: "^Reverter a destinação" } };
 const editNeed = { click: { css: 'button[class*="_ghost_"]', text: "^Editar a necessidade" } };
 const openReceive = { click: { css: "button", text: "^Registrar recebimento direto" } };
@@ -78,6 +79,7 @@ export const CI_PROFILE_IDS = [
   // Fase 99E: registro de saída com destinação (botão, campos, finalidades, saldo insuficiente, aprovação por risco, necessidade)
   "destinations-filter-basis", "destinations-filter-type", "destinations-filter-from", "destinations-filter-need", "destinations-totals", "destinations-empty-filter", "destinations-range-error",
   "report-destination-hint", "report-destination-basis", "report-reconciliation-row",
+  "proof-box-text", "proof-attach-button", "proof-remove-button", "proof-dialog-reason", "proof-dialog-privacy-note",
   "destination-history-numbers", "destination-history-event", "destination-history-reverse-button", "destination-reversal-kind", "destination-reversal-consequence", "destination-reversal-reason",
   "needs-close-button", "needs-close-dialog-reason", "needs-close-dialog-description", "needs-attendance-text", "needs-attendance-historical-note", "needs-closure-note",
   "destination-primary-button", "destination-qty", "destination-type-select", "destination-notes", "destination-insufficient", "destination-approval-notice", "destination-need-select",
@@ -154,6 +156,13 @@ export const SCENARIOS = [
   { id: "report-destination-hint", user: "owner", path: IMPACT_REPORT, steps: [], target: { css: '[data-testid="destination-report"] p', text: "^Destinação declarada" }, measure: "text", variant: "Relatório: destinação declarada" },
   { id: "report-destination-basis", user: "owner", path: IMPACT_REPORT, steps: [], target: { css: 'button[role="combobox"][aria-label="Data usada no bloco de destinação"]' }, measure: "field", variant: "Relatório: data usada", expect: { minHeight: 40 } },
   { id: "report-reconciliation-row", user: "owner", path: IMPACT_REPORT, steps: [], target: { css: '[data-testid="reconciliation-row"] span', text: "^Arroz" }, measure: "text", variant: "Relatório: conciliação por item" },
+
+  // ---- Fase 99J: comprovantes de destinação (privados, opcionais)
+  { id: "proof-box-text", user: "owner", path: INVENTORY, steps: [], target: { css: '[data-testid="destination-proof"] span', text: "^Comprovante:" }, measure: "text", variant: "Comprovante: linha do comprovante vigente" },
+  { id: "proof-attach-button", user: "owner", path: INVENTORY, steps: [], target: { css: 'button[class*="_outline_"]', text: "^Anexar comprovante" }, measure: "button", variant: "outline: Anexar comprovante", states: ALL4 },
+  { id: "proof-remove-button", user: "owner", path: INVENTORY, steps: [], target: { css: 'button[class*="_outline_"]', text: "^Remover o comprovante" }, measure: "button", variant: "outline: Remover comprovante", states: ALL4 },
+  { id: "proof-dialog-reason", user: "owner", path: INVENTORY, steps: [openAttachProof], target: inDialog("textarea#proof-reason"), measure: "field", variant: "Comprovante: motivo", expect: { minHeight: 96 } },
+  { id: "proof-dialog-privacy-note", user: "owner", path: INVENTORY, steps: [openAttachProof], target: { css: "p", text: "^Não envie documentos que identifiquem", within: '[role="dialog"]' }, measure: "text", variant: "Comprovante: aviso de privacidade" },
 
   // ---- Fase 99G: histórico de destinações, correções e reversões (inventário)
   { id: "destination-history-numbers", user: "owner", path: INVENTORY, steps: [], target: { css: '[data-testid="destination-card"] p', text: "^Revertido:" }, measure: "text", variant: "Histórico: saldo reversível" },

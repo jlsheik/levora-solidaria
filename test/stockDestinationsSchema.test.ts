@@ -71,10 +71,10 @@ describe("stock_destinations — destinação original", () => {
     await expect(insert(original(a, await exit5(a), { itemId: b.item.id }))).rejects.toThrow(/item_org_fkey|foreign key|não é do item/);
     const [needB] = await db.insertInto("needs").values({ organizationId: b.org.id, title: "Necessidade de B", quantityNeeded: "10", unit: "kg", priority: "media", status: "aberta", createdByUserId: b.owner.userId }).returning("id").execute();
     await expect(insert(original(a, await exit5(a), { needId: needB.id }))).rejects.toThrow(/need_org_fkey|foreign key/);
-    const [fileB] = await db.insertInto("files").values({ organizationId: b.org.id, uploadedByUserId: b.owner.userId, storageProvider: "local", storageKey: "k-b", originalFilename: "c.png", contentType: "image/png", sizeBytes: "10", purpose: "comprovante_entrega" }).returning("id").execute();
+    const [fileB] = await db.insertInto("files").values({ organizationId: b.org.id, uploadedByUserId: b.owner.userId, storageProvider: "local", storageKey: "k-b", originalFilename: "c.png", contentType: "image/png", sizeBytes: "10", purpose: "comprovante_destinacao" }).returning("id").execute();
     await expect(insert(original(a, await exit5(a), { proofFileId: fileB.id }))).rejects.toThrow(/proof_org_fkey|foreign key/);
     // o mesmo comprovante da PRÓPRIA organização é aceito
-    const [fileA] = await db.insertInto("files").values({ organizationId: a.org.id, uploadedByUserId: a.owner.userId, storageProvider: "local", storageKey: "k-a", originalFilename: "c.png", contentType: "image/png", sizeBytes: "10", purpose: "comprovante_entrega" }).returning("id").execute();
+    const [fileA] = await db.insertInto("files").values({ organizationId: a.org.id, uploadedByUserId: a.owner.userId, storageProvider: "local", storageKey: "k-a", originalFilename: "c.png", contentType: "image/png", sizeBytes: "10", purpose: "comprovante_destinacao" }).returning("id").execute();
     expect((await insert(original(a, await exit5(a), { proofFileId: fileA.id }))).id).toBeDefined();
   });
 
