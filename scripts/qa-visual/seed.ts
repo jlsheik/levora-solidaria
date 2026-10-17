@@ -10,6 +10,7 @@ import { buildRequest, createSessionCookie } from "../../test/helpers";
 import { handle as stockTransaction } from "../../src/endpoints/stock-transactions_POST";
 import { handle as stockDestination } from "../../src/endpoints/stock-destinations_POST";
 import { handle as receiveAllocation } from "../../src/endpoints/allocations-receive_POST";
+import { handle as needClosure } from "../../src/endpoints/need-closure_POST";
 
 // vem do orquestrador (scenarios.mjs), para a semente e o login do navegador nunca divergirem
 const QA_PASSWORD = process.env.QA_PASSWORD ?? "";
@@ -49,6 +50,15 @@ const entrada = await stockTransaction(buildRequest("stock-transactions", { meth
 if (entrada.status !== 200) throw new Error(`movimentação entrada falhou (${entrada.status})`);
 const saida = await stockDestination(buildRequest("stock-destinations", { method: "POST", cookie, body: { organizationId: org.id, itemId: item.id, quantity: 1, destinationType: "uso_operacional_instituicao", deliveredOn: businessDateOf(new Date()), notes: "saída sintética de 1 kg para a verificação visual", idempotencyKey: "qa-visual-seed-saida-1" } }));
 if (saida.status !== 200) throw new Error(`saída com destinação falhou (${saida.status})`);
+
+// Fase 99F: necessidade PARCIALMENTE atendida (1 de 4 kg, por uma destinação real vinculada), uma ENCERRADA com motivo (pelo endpoint) e uma "atendida" HISTÓRICA (sem destinação)
+const [partialNeed] = await db.insertInto("needs").values({ organizationId: org.id, itemId: item.id, title: "Arroz para a campanha", quantityNeeded: "4", unit: "kg", priority: "baixa", status: "aberta", createdByUserId: owner }).returning("id").execute();
+const partial = await stockDestination(buildRequest("stock-destinations", { method: "POST", cookie, body: { organizationId: org.id, itemId: item.id, quantity: 1, destinationType: "distribuicao_familias", needId: partialNeed.id, deliveredOn: businessDateOf(new Date()), idempotencyKey: "qa-visual-seed-parcial-1" } }));
+if (partial.status !== 200) throw new Error(`destinação parcial falhou (${partial.status})`);
+const [closedNeed] = await db.insertInto("needs").values({ organizationId: org.id, title: "Cobertores da campanha encerrada", quantityNeeded: "10", unit: "unidade", priority: "baixa", status: "aberta", createdByUserId: owner }).returning("id").execute();
+const closed = await needClosure(buildRequest("need-closure", { method: "POST", cookie, body: { action: "encerrar", organizationId: org.id, needId: closedNeed.id, reasonCode: "necessidade_superada", reasonText: "Campanha encerrada pela coordenação" } }));
+if (closed.status !== 200) throw new Error(`encerramento falhou (${closed.status})`);
+await db.insertInto("needs").values({ organizationId: org.id, title: "Kit escolar (registro antigo)", quantityNeeded: "15", unit: "unidade", priority: "baixa", status: "atendida", createdByUserId: owner }).execute();
 
 // atribuição aceita (abre o diálogo "Registrar recebimento", onde fica o FileDropzone)
 const source = await db.insertInto("sources").values({ name: "Fonte QA", type: "manual", connectorKey: "manual", status: "ativa", createdByUserId: owner }).returning("id").executeTakeFirstOrThrow();

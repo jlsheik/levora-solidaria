@@ -12,7 +12,7 @@ import { handle as postCorrect } from "../src/endpoints/allocations-receipt-corr
 import { handle as postReverse } from "../src/endpoints/allocations-receipt-reverse_POST";
 import { handle as postReceive } from "../src/endpoints/allocations-receive_POST";
 import { handle as postDecide } from "../src/endpoints/approval-requests-decide_POST";
-import { handle as postNeedsStatus } from "../src/endpoints/needs-status_POST";
+import { handle as postNeedClosure } from "../src/endpoints/need-closure_POST";
 import { expireApprovalRequests } from "../src/helpers/expireApprovalRequests";
 import { getNeedFulfillmentBalance } from "../src/helpers/needFulfillment";
 import { resolveLedgerChain, type LedgerRow } from "../src/helpers/needFulfillmentCorrections";
@@ -840,12 +840,12 @@ describe("Fase 78 — concorrência (Postgres real, Promise.all)", () => {
     const v1 = await vigente(s);
     const [c, st] = await Promise.all([
       correct(s, s.operador, { expectedVigenteFulfillmentId: v1, quantity: 140 }),
-      postNeedsStatus(buildRequest("needs-status", { method: "POST", cookie: s.owner.cookie, body: { organizationId: s.orgId, needId: s.needId, status: "atendida" } })),
+      postNeedClosure(buildRequest("need-closure", { method: "POST", cookie: s.owner.cookie, body: { action: "encerrar", organizationId: s.orgId, needId: s.needId, reasonCode: "duplicidade" } })),
     ]);
     expect(c.status).toBe(200);
     expect(st.status).toBe(200);
     expect(await balance(s)).toBe(140);
-    expect((await db.selectFrom("needs").select(["status"]).where("id", "=", s.needId as number).executeTakeFirstOrThrow()).status).toBe("atendida");
+    expect((await db.selectFrom("needs").select(["status"]).where("id", "=", s.needId as number).executeTakeFirstOrThrow()).status).toBe("cancelada"); // Fase 99F: o encerramento é o caminho de cancelamento
   });
 
   it("caso 6: dois usuários aprovam o mesmo pedido ⇒ só uma decisão vence; uma única execução no ledger", async () => {

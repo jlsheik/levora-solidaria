@@ -38,6 +38,8 @@ export async function handle(request: Request) {
       peopleUnit: input.peopleUnit ?? null,
       notes: input.notes && input.notes.length > 0 ? input.notes : null,
       lateRegistrationReason: input.lateRegistrationReason && input.lateRegistrationReason.length > 0 ? input.lateRegistrationReason : null,
+      authorizeSurplus: input.authorizeSurplus === true,
+      surplusReason: input.surplusReason && input.surplusReason.length > 0 ? input.surplusReason : null,
     };
     const hash = hashDestinationInput(exitInput);
 
@@ -74,7 +76,7 @@ export async function handle(request: Request) {
           {
             actionType: DESTINATION_APPROVAL_ACTION,
             organizationId: input.organizationId,
-            payload: { input: exitInput, idempotencyKey: input.idempotencyKey, riskReasons: prepared.risk, balanceAtRequest: prepared.balanceBefore } as unknown as Json,
+            payload: { input: exitInput, idempotencyKey: input.idempotencyKey, riskReasons: prepared.risk, balanceAtRequest: prepared.balanceBefore, requesterCanAuthorize: actorCanAuthorizeLate } as unknown as Json,
             reason: `Saída de ${input.quantity} ${prepared.item.unit} de "${prepared.item.name}" (finalidade: ${input.destinationType}; saldo atual ${prepared.balanceBefore}) — ${prepared.risk.map((r) => RISK_LABELS[r]).join("; ")}`,
             requestedByUserId: user.id,
           },

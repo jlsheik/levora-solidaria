@@ -22,7 +22,7 @@ Pré-requisitos: Node 22.x (versão declarada em `package.json`), Edge e/ou Chro
 npm run qa:visual                                    # tudo: cenários × 4 viewports × 2 temas, nos navegadores encontrados (Edge e Chrome)
 npm run qa:visual -- --browser edge --verbose        # só o Edge; mostra também as linhas PASS
 npm run qa:visual -- --viewports 375,1280            # subconjunto de viewports (largura ou WxH)
-npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (43 de 52 cenários; o relatório lista os omitidos)
+npm run qa:visual -- --browser chrome --profile ci   # perfil reduzido do CI (49 de 58 cenários; o relatório lista os omitidos)
 npm run qa:visual -- --only needs-primary-new,matching-switch
 npm run qa:visual -- --list                          # lista cenários, viewports e temas
 npm run qa:visual -- --self-test                     # prova que o detector acusa regressões e ausências (ver abaixo)
@@ -131,7 +131,7 @@ não for 22** e registra `node -v`, `google-chrome --version` e `docker --versio
 | | Local (completo) | CI (reduzido) |
 |---|---|---|
 | Navegador | Edge e Chrome | **só o Chrome do runner** (`--browser chrome`; nunca Edge); `QA_BROWSER_NO_SANDBOX=1` por opt-in explícito (AppArmor do runner) |
-| `qa:visual` | 52 cenários × 4 viewports × 2 temas | `--profile ci`: **43 cenários** × os mesmos 4 viewports × 2 temas |
+| `qa:visual` | 58 cenários × 4 viewports × 2 temas | `--profile ci`: **49 cenários** × os mesmos 4 viewports × 2 temas |
 | `qa:security` | 5 partes, 2 navegadores | **as 5 partes** (calibração, CSRF, XSS, uploads, cabeçalhos nginx/Docker), 1 navegador |
 | Duração | ~12 min + ~7 min | alvo ~10 min (limite do job: 40 min) |
 
@@ -256,3 +256,7 @@ Oito cenários novos (`regularization-*`, total 45; todos no perfil `ci`, que pa
 ## Fase 99E — cenários do registro de destinação
 
 Sete cenários novos (`destination-*`, total 52; todos no perfil `ci`, que passa a ter 43): botão primário "Registrar destinação" (4 estados), campo de quantidade e de finalidade (40 px), observações (≥ 96 px), saldo insuficiente (texto de erro), aviso de segunda aprovação (perda) e seletor de necessidade (finalidade de atendimento). Móvel pelos viewports 375/390. A semente registra a saída sintética pelo **endpoint real** (`stock-destinations`), pois a saída física exige destinação desde a 99E.
+
+## Fase 99F — cenários do atendimento da necessidade
+
+Seis cenários novos (`needs-close-button`, `needs-close-dialog-reason`, `needs-close-dialog-description`, `needs-attendance-text`, `needs-attendance-historical-note`, `needs-closure-note`; total 58; todos no perfil `ci`, que passa a ter 49): botão "Encerrar" (4 estados), campos do diálogo de encerramento (40 px / ≥ 96 px) e os textos de progresso, de registro histórico e de necessidade encerrada. A semente cria uma necessidade parcial (destinação real), uma encerrada (endpoint `need-closure`) e uma atendida histórica.

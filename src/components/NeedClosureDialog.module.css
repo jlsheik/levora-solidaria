@@ -1,0 +1,31 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.summary,
+.note {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--card-foreground);
+  overflow-wrap: anywhere;
+}
+
+.note {
+  color: var(--muted-foreground);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.error {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--destructive);
+}

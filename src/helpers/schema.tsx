@@ -315,6 +315,7 @@ export type StockDestinationType = "atendimento_coletivo" | "descarte" | "devolu
 export type StockDestinationReversalKind = "correcao_quantidade" | "devolucao_fisica" | "estorno_documental";
 
 export interface StockDestinations {
+  appliedQuantity: Numeric | null;
   authorizedByUserId: number | null;
   createdAt: Generated<Timestamp>;
   createdByUserId: number;
@@ -336,6 +337,7 @@ export interface StockDestinations {
   reversalKind: StockDestinationReversalKind | null;
   reversesDestinationId: Int8 | null;
   stockTransactionId: Int8 | null;
+  surplusQuantity: Numeric | null;
   surplusReason: string | null;
   unit: string | null;
 }

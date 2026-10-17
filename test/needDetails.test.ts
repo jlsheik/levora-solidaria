@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { db } from "../src/helpers/db";
 import * as auditModule from "../src/helpers/auditLog";
 import { handle as postDetails } from "../src/endpoints/need-details_POST";
-import { handle as postStatus } from "../src/endpoints/needs-status_POST";
+import { handle as postClosure } from "../src/endpoints/need-closure_POST";
 import { handle as postReceive } from "../src/endpoints/allocations-receive_POST";
 import { handle as getNeeds } from "../src/endpoints/needs_GET";
 import { runMatchingForOpportunity } from "../src/helpers/opportunityMatching";
@@ -213,10 +213,10 @@ describe("atomicidade e concorrência", () => {
   it("edição × mudança de STATUS simultâneas: nenhuma sobrescreve a outra (status novo E campos editados)", async () => {
     const e = await setup();
     for (let round = 0; round < 3; round++) {
-      const status = round % 2 === 0 ? "cancelada" : "aberta"; // ("atendida" exigiria saldo do item)
+      const status = round % 2 === 0 ? "cancelada" : "aberta"; // Fase 99F: cancelar = encerrar com motivo; reabrir = evento de reabertura (nunca um clique em "atendida")
       const [d, s] = await Promise.all([
         edit(e.owner.cookie, { organizationId: e.orgId, needId: e.needId, title: `Título rodada ${round}`, priority: round % 2 === 0 ? "alta" : "baixa" }),
-        postStatus(buildRequest("needs-status", { method: "POST", cookie: e.owner.cookie, body: { organizationId: e.orgId, needId: e.needId, status } })),
+        postClosure(buildRequest("need-closure", { method: "POST", cookie: e.owner.cookie, body: status === "cancelada" ? { action: "encerrar", organizationId: e.orgId, needId: e.needId, reasonCode: "duplicidade" } : { action: "reabrir", organizationId: e.orgId, needId: e.needId, reasonText: "Reaberta no teste" } })),
       ]);
       expect([d.status, s.status]).toEqual([200, 200]);
       expect(await needRow(e.needId)).toMatchObject({ title: `Título rodada ${round}`, status, priority: round % 2 === 0 ? "alta" : "baixa", unit: "kg", quantityNeeded: "300.000", itemId: e.itemId });

@@ -18,6 +18,7 @@ import { handle as postReverse } from "../src/endpoints/allocations-receipt-reve
 import { handle as postReceive } from "../src/endpoints/allocations-receive_POST";
 import { handle as postDecide } from "../src/endpoints/approval-requests-decide_POST";
 import { handle as postNeedsStatus } from "../src/endpoints/needs-status_POST";
+import { handle as postNeedClosure } from "../src/endpoints/need-closure_POST";
 import { handle as getHistory } from "../src/endpoints/allocations-receipt-history_GET";
 import { getItemStockBalance } from "../src/helpers/stockBalance";
 import {
@@ -244,15 +245,15 @@ describe("Fase 81 — fluxos REAIS contra um recebimento 'no meio' (item travado
     expect(await stock(e.itemId)).toBe(0);
   }, 40000);
 
-  it("needs-status 'atendida' (need FOR UPDATE; desde a 99E sem baixa de estoque) contra o recebimento no meio: sem 40P01", async () => {
+  it("encerramento da necessidade (need FOR NO KEY UPDATE; 99F: sem movimento de estoque) contra o recebimento no meio: sem 40P01", async () => {
     const e = await setupEnv(true);
     await receive(e, 100); // estoque (need de 50 kg ligada ao item; 'atendida' não baixa mais)
     const out = await against(e, () =>
-      postNeedsStatus(buildRequest("needs-status", { method: "POST", cookie: e.owner.cookie, body: { organizationId: e.orgId, needId: e.needId, status: "atendida" } }))
+      postNeedClosure(buildRequest("need-closure", { method: "POST", cookie: e.owner.cookie, body: { action: "encerrar", organizationId: e.orgId, needId: e.needId, reasonCode: "duplicidade" } }))
     );
     expect(out.holderOutcome).toEqual({ ok: true });
     expect(out.status).toBe(200);
-    expect(await stock(e.itemId)).toBe(100); // sem baixa automática (Fase 99E);
+    expect(await stock(e.itemId)).toBe(100); // sem baixa automática (Fases 99E/99F)
   }, 30000);
 });
 

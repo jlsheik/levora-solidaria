@@ -48,6 +48,8 @@ const openConfer = { click: { css: "button", text: "^Conferir quantidade" } };
 // Fase 99E: diálogo de registro de saída com destinação (inventário). O saldo semeado do primeiro item é pequeno: 9999 é "saldo insuficiente".
 const openDestination = { click: { css: "button", text: "^Registrar destinação" } };
 const inDialog = (css) => ({ css, within: '[role="dialog"]' });
+// Fase 99F: encerramento de necessidade e leitura do atendimento derivado
+const openClose = { click: { css: 'button[class*="_outline_"]', text: "^Encerrar a necessidade" } };
 const editNeed = { click: { css: 'button[class*="_ghost_"]', text: "^Editar a necessidade" } };
 const openReceive = { click: { css: "button", text: "^Registrar recebimento direto" } };
 // arquivo sintético que o FileDropzone RECUSA (a lista aceita é image/jpeg, image/png, image/webp): provoca o estado de erro real
@@ -71,6 +73,7 @@ export const CI_PROFILE_IDS = [
   // Fase 99C: fila de pendências de unidade (caso aberto, vazio, erro, filtros, diálogo de conferência, aviso na atribuição)
   "regularization-status-open", "regularization-empty", "regularization-error", "regularization-filter-select", "regularization-filter-no-results", "regularization-confer-qty", "regularization-confer-reason", "regularization-allocation-notice",
   // Fase 99E: registro de saída com destinação (botão, campos, finalidades, saldo insuficiente, aprovação por risco, necessidade)
+  "needs-close-button", "needs-close-dialog-reason", "needs-close-dialog-description", "needs-attendance-text", "needs-attendance-historical-note", "needs-closure-note",
   "destination-primary-button", "destination-qty", "destination-type-select", "destination-notes", "destination-insufficient", "destination-approval-notice", "destination-need-select",
   "units-badge-canonical", "units-badge-unknown", "units-badge-ambiguous", "units-empty", "units-error", "units-filter-select", "units-filter-input", "units-filtered-unknown", "units-filter-no-results", "units-inventory-pending-marker",
 ];
@@ -131,6 +134,14 @@ export const SCENARIOS = [
   { id: "regularization-confer-qty", user: "owner", path: REGULARIZATION, steps: [openConfer], target: { css: "input#reg-qty", within: '[role="dialog"]' }, measure: "field", variant: "Regularização: diálogo (quantidade)", expect: { height: 40 } },
   { id: "regularization-confer-reason", user: "owner", path: REGULARIZATION, steps: [openConfer], target: { css: "textarea#reg-reason", within: '[role="dialog"]' }, measure: "field", variant: "Regularização: diálogo (motivo)", expect: { minHeight: 96 } },
   { id: "regularization-allocation-notice", user: "owner", path: ATTRIBUTIONS, steps: [], target: { css: 'p[role="status"]', text: "^Recebimento pendente de regularização" }, measure: "text", variant: "Regularização: aviso na atribuição" },
+
+  // ---- Fase 99F: atendimento derivado das destinações, encerramento com motivo e registro histórico
+  { id: "needs-close-button", user: "owner", path: NEEDS, steps: [], target: { css: 'button[class*="_outline_"]', text: "^Encerrar a necessidade" }, measure: "button", variant: "outline: Encerrar necessidade", states: ALL4 },
+  { id: "needs-close-dialog-reason", user: "owner", path: NEEDS, steps: [openClose], target: inDialog('button[role="combobox"]'), measure: "field", variant: "Encerramento: motivo", expect: { height: 40 } },
+  { id: "needs-close-dialog-description", user: "owner", path: NEEDS, steps: [openClose], target: inDialog("textarea"), measure: "field", variant: "Encerramento: descrição", expect: { minHeight: 96 } },
+  { id: "needs-attendance-text", user: "owner", path: NEEDS, steps: [], target: { css: '[data-testid="need-attendance"] p', text: "^Atendido:" }, measure: "text", variant: "Atendimento: progresso derivado" },
+  { id: "needs-attendance-historical-note", user: "owner", path: NEEDS, steps: [], target: { css: '[data-testid="need-attendance"] p', text: "^Atendimento histórico sem destinação" }, measure: "text", variant: "Atendimento: registro histórico" },
+  { id: "needs-closure-note", user: "owner", path: NEEDS, steps: [], target: { css: '[data-testid="need-attendance"] p', text: "^Encerrada em" }, measure: "text", variant: "Atendimento: necessidade encerrada" },
 
   // ---- Fase 99E: registro de saída com destinação (o servidor é a autoridade; aqui só a interface renderizada)
   { id: "destination-primary-button", user: "owner", path: INVENTORY, steps: [], target: { css: 'button[class*="_primary_"]', text: "^Registrar destinação" }, measure: "button", variant: "Destinação: botão primário", states: ALL4 },
