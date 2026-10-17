@@ -69,6 +69,9 @@ if (proofUpload.status !== 200) throw new Error(`envio do comprovante falhou (${
 const proofFileId = (superjson.parse(await proofUpload.text()) as { file: { id: number } }).file.id;
 const proofLink = await destinationProof(buildRequest("stock-destination-proof", { method: "POST", cookie, body: { organizationId: org.id, destinationId: saidaDestinationId, action: "anexar", fileId: proofFileId, reason: "Recibo sintético da saída", idempotencyKey: "qa-visual-seed-comprovante-1" } }));
 if (proofLink.status !== 200) throw new Error(`vínculo do comprovante falhou (${proofLink.status})`);
+// Fase 99K: um segundo comprovante enviado e NÃO vinculado (aparece na conciliação somente leitura)
+const pendingUpload = await filesUpload(buildRequest("files-upload", { method: "POST", cookie, body: { organizationId: org.id, purpose: "comprovante_destinacao", fileName: "pendente-sintetico.png", contentType: "image/png", fileBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" } }));
+if (pendingUpload.status !== 200) throw new Error(`envio do comprovante pendente falhou (${pendingUpload.status})`);
 
 // Fase 99F: necessidade PARCIALMENTE atendida (1 de 4 kg, por uma destinação real vinculada), uma ENCERRADA com motivo (pelo endpoint) e uma "atendida" HISTÓRICA (sem destinação)
 const [partialNeed] = await db.insertInto("needs").values({ organizationId: org.id, itemId: item.id, title: "Arroz para a campanha", quantityNeeded: "4", unit: "kg", priority: "baixa", status: "aberta", createdByUserId: owner }).returning("id").execute();

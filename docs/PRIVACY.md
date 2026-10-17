@@ -82,6 +82,8 @@ instruído na seção 13) e controles de acesso extras para esse dado.
 
 ## Destinação de recursos e pessoas atendidas — política APROVADA, controles ainda NÃO implementados
 
+> **Atualização 99K:** não existe rotina de exclusão de conta nem de conteúdo de comprovantes; a conciliação somente leitura (`GET /destination-proofs-reconciliation`) lista arquivos pendentes e de referência removida. Antimalware e política de retenção/anonimização continuam ausentes e dependem de decisão (ver `docs/DESTINACAO_VALIDACAO_99K.md`).
+>
 > **Atualização 99J:** os comprovantes de destinação existem (privados, `comprovante_destinacao`, download reautorizado a cada acesso por permissão + vínculo; ver `docs/DESTINACAO_COMPROVANTES_99J.md`). Continuam **sem** política de retenção/exclusão/anonimização do conteúdo e sem antimalware; o restante da seção segue como requisito.
 >
 > **Estado:** planejamento da Fase 99 (`docs/DESTINACAO_E_PRESTACAO_DE_CONTAS_ESPECIFICACAO.md`). Tudo abaixo é **requisito aprovado para desenvolvimento futuro**, não capacidade atual: não existe registro de destinação, `people_served`, propósito de comprovante de destinação, fila de regularização de unidades nem as permissões `destinacoes.*`. Cada controle só passa a constar como existente quando for implementado e verificado; esta seção deve então ser atualizada para refletir o que passou a existir.

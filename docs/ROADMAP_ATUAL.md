@@ -483,3 +483,8 @@ Edição de quantidade, unidade, item e status das necessidades; edição de ite
 - **Interface:** comprovante no cartão da destinação (abrir, anexar, remover) com linha do tempo; **relatório da 99H** com contagem com × sem comprovante; 5 cenários `qa:visual` (perfil `ci`: 70).
 - **Limitações:** sem retenção/exclusão/anonimização (avaliação jurídica), sem antimalware, sem limpeza automática de arquivos pendentes, sem barra de progresso percentual.
 - **Pendente (99K):** validação de ponta a ponta. A Fase 99 **não** está concluída; exportação segue sem atribuição na especificação.
+
+**Fase 99K (validação de ponta a ponta) executada — branch `fase-99k-end-to-end-validation`, encadeada sobre a 99J (PR #15); nada integrado.** Detalhes e matriz: `docs/DESTINACAO_VALIDACAO_99K.md`.
+- **Validação:** `test/endToEnd99k.test.ts` (15, PostgreSQL real) percorre os endpoints reais (rede e doação local, matching, recebimento, destinação, correção, reversão, comprovante, relatório) com um oráculo que compara SQL independente × necessidades × histórico × relatório × estoque; concorrência, atomicidade, aprovação de risco, permissões e isolamento. Nenhum defeito de integridade encontrado na cadeia 99F–99J.
+- **Adição:** `GET /destination-proofs-reconciliation` (somente leitura; proprietário/administrador) e painel na aba Destinação listam comprovantes pendentes e de referência removida; nada é apagado. 1 cenário `qa:visual` (perfil `ci`: 71 de 80).
+- **A Fase 99 NÃO está pronta para produção:** sem antimalware, sem política de retenção/exclusão/anonimização (decisão jurídica/operacional), sem validação oficial do GitHub da cadeia encadeada. Exportação e visão por data de corte seguem sem atribuição. Critérios de liberação em `docs/DESTINACAO_VALIDACAO_99K.md`.

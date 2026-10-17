@@ -110,3 +110,36 @@ export async function auditProof(trx: Transaction<DB>, organizationId: number, a
     trx
   );
 }
+
+export interface ProofFileListing {
+  id: number;
+  name: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedByDisplayName: string;
+  uploadedAt: string;
+  ageHours: number;
+}
+
+/**
+ * Fase 99K — reconciliação SOMENTE LEITURA dos comprovantes da organização: arquivos enviados e NUNCA vinculados (`pendentes`) e arquivos cuja referência foi removida (`removidos`; o objeto continua
+ * armazenado). Nada é apagado nem alterado: remover é decisão manual, condicionada a uma política de retenção ainda não aprovada. O diagnóstico físico (objeto sem registro / registro sem objeto)
+ * continua sendo o de \`storageIntegrity\` (docs/UPLOAD_DE_ARQUIVOS.md).
+ */
+export async function listProofFileReconciliation(db: Kysely<DB> | Transaction<DB>, organizationId: number, limit = 200): Promise<{ pendentes: ProofFileListing[]; removidos: ProofFileListing[]; limit: number }> {
+  const rows = await sql<{ id: number; name: string; contentType: string; sizeBytes: string; uploader: string; createdAt: Date; ageHours: string; linked: boolean }>`
+    SELECT f.id, f.original_filename AS name, f.content_type, f.size_bytes, u.display_name AS uploader, f.created_at,
+           extract(epoch FROM (now() - f.created_at)) / 3600 AS age_hours,
+           EXISTS (SELECT 1 FROM stock_destinations e WHERE e.organization_id = f.organization_id AND e.proof_file_id = f.id AND e.proof_removed IS NOT TRUE) AS linked
+      FROM files f JOIN users u ON u.id = f.uploaded_by_user_id
+     WHERE f.organization_id = ${organizationId} AND f.purpose = ${PROOF_PURPOSE}
+     ORDER BY f.id DESC LIMIT ${limit * 3}`.execute(db);
+  const removed: typeof rows.rows = [];
+  for (const r of rows.rows.filter((x) => x.linked)) if ((await getProofState(db, organizationId, r.id)).state === "removido") removed.push(r);
+  const map = (r: (typeof rows.rows)[number]): ProofFileListing => ({ id: r.id, name: r.name, contentType: r.contentType, sizeBytes: Number(r.sizeBytes), uploadedByDisplayName: r.uploader, uploadedAt: r.createdAt.toISOString(), ageHours: Math.round(Number(r.ageHours) * 10) / 10 });
+  return {
+    pendentes: rows.rows.filter((r) => !r.linked).slice(0, limit).map(map),
+    removidos: removed.slice(0, limit).map(map),
+    limit,
+  };
+}

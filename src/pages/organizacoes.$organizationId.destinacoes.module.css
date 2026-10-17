@@ -12,3 +12,5 @@
 .error { margin: 0; font-size: 0.8125rem; color: var(--error-text); line-height: 1.4; }
 .note { margin: 0; font-size: 0.8125rem; color: var(--muted-foreground); line-height: 1.5; }
 .notAllowed { padding: var(--spacing-6); text-align: center; color: var(--muted-foreground); }
+.recon { display: flex; flex-direction: column; gap: var(--spacing-2); padding: var(--spacing-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.reconList { margin: 0; padding-left: var(--spacing-4); font-size: 0.8125rem; color: var(--card-foreground); overflow-wrap: anywhere; }
