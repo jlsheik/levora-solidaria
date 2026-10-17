@@ -33,6 +33,7 @@ import { Badge } from "../components/Badge";
 import { UnitText } from "../components/UnitText";
 import { UnitSelect } from "../components/UnitSelect";
 import { DestinationDialog, type DestinationItem } from "../components/DestinationDialog";
+import { DestinationHistory } from "../components/DestinationHistory";
 import { Skeleton } from "../components/Skeleton";
 import {
   Select,
@@ -364,6 +365,8 @@ export default function InventoryPage() {
           <p className={styles.emptyText}>Nenhuma movimentação registrada ainda.</p>
         )}
       </section>
+
+      {canManage && <DestinationHistory organizationId={organizationId} />}
 
       <DestinationDialog organizationId={organizationId} item={destinationItem} canAuthorizeLate={!!canAuthorizeLate} onClose={() => setDestinationItem(null)} />
 

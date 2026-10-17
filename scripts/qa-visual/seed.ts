@@ -11,6 +11,9 @@ import { handle as stockTransaction } from "../../src/endpoints/stock-transactio
 import { handle as stockDestination } from "../../src/endpoints/stock-destinations_POST";
 import { handle as receiveAllocation } from "../../src/endpoints/allocations-receive_POST";
 import { handle as needClosure } from "../../src/endpoints/need-closure_POST";
+import { handle as destinationReversal } from "../../src/endpoints/stock-destination-reversal_POST";
+import { handle as destinationCorrection } from "../../src/endpoints/stock-destination-correction_POST";
+import superjson from "superjson";
 
 // vem do orquestrador (scenarios.mjs), para a semente e o login do navegador nunca divergirem
 const QA_PASSWORD = process.env.QA_PASSWORD ?? "";
@@ -50,6 +53,13 @@ const entrada = await stockTransaction(buildRequest("stock-transactions", { meth
 if (entrada.status !== 200) throw new Error(`movimentação entrada falhou (${entrada.status})`);
 const saida = await stockDestination(buildRequest("stock-destinations", { method: "POST", cookie, body: { organizationId: org.id, itemId: item.id, quantity: 1, destinationType: "uso_operacional_instituicao", deliveredOn: businessDateOf(new Date()), notes: "saída sintética de 1 kg para a verificação visual", idempotencyKey: "qa-visual-seed-saida-1" } }));
 if (saida.status !== 200) throw new Error(`saída com destinação falhou (${saida.status})`);
+
+// Fase 99G: a saída acima ganha uma correção documental e um estorno documental PARCIAL (sem movimento de estoque), para o histórico de destinações exibir a linha do tempo
+const saidaDestinationId = (superjson.parse(await saida.text()) as { destination: { id: string } }).destination.id;
+const correcao = await destinationCorrection(buildRequest("stock-destination-correction", { method: "POST", cookie, body: { organizationId: org.id, destinationId: saidaDestinationId, notes: "saída sintética corrigida para a verificação visual", reason: "Ajuste da descrição sintética", idempotencyKey: "qa-visual-seed-correcao-1" } }));
+if (correcao.status !== 200) throw new Error(`correção documental falhou (${correcao.status})`);
+const estorno = await destinationReversal(buildRequest("stock-destination-reversal", { method: "POST", cookie, body: { organizationId: org.id, destinationId: saidaDestinationId, kind: "estorno_documental", quantity: 0.25, reason: "Parte do registro estava errada (sintético)", idempotencyKey: "qa-visual-seed-estorno-1" } }));
+if (estorno.status !== 200) throw new Error(`estorno documental falhou (${estorno.status})`);
 
 // Fase 99F: necessidade PARCIALMENTE atendida (1 de 4 kg, por uma destinação real vinculada), uma ENCERRADA com motivo (pelo endpoint) e uma "atendida" HISTÓRICA (sem destinação)
 const [partialNeed] = await db.insertInto("needs").values({ organizationId: org.id, itemId: item.id, title: "Arroz para a campanha", quantityNeeded: "4", unit: "kg", priority: "baixa", status: "aberta", createdByUserId: owner }).returning("id").execute();

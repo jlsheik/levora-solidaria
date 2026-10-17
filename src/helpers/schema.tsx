@@ -363,6 +363,17 @@ export interface NeedClosures {
 
 export type StockExitRequestStatus = "executada" | "pendente_aprovacao" | "rejeitada";
 
+export interface DestinationCorrectionRequests {
+  createdAt: Generated<Timestamp>;
+  eventDestinationId: Int8;
+  id: Generated<Int8>;
+  idempotencyKey: string;
+  organizationId: number;
+  payloadHash: string;
+  requestedByUserId: number;
+  stockDestinationId: Int8;
+}
+
 export interface StockExitRequests {
   approvalRequestId: number | null;
   createdAt: Generated<Timestamp>;
@@ -555,6 +566,7 @@ export interface DB {
   sources: Sources;
   stockDestinations: StockDestinations;
   stockExitRequests: StockExitRequests;
+  destinationCorrectionRequests: DestinationCorrectionRequests;
   unitRegularizationCases: UnitRegularizationCases;
   unitRegularizationEvents: UnitRegularizationEvents;
   stockTransactions: StockTransactions;

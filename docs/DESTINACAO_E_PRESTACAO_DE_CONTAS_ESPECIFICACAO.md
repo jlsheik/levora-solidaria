@@ -299,6 +299,8 @@ Seção 13.
 
 ## 9. Correções, reversões e devoluções (E6)
 
+> **Implementação (99G):** `docs/DESTINACAO_CORRECOES_99G.md` — endpoints `stock-destination-correction`, `stock-destination-reversal` e `stock-destinations` (GET); decisões de lacuna: sem aprovação (só movimentos positivos), devolução física só de saída física, permissões existentes (sem `destinacoes.corrija` nova), reabertura automática só de `atendida` estruturada.
+
 Princípios: nunca editar nem apagar; nunca criar saldo físico fictício; movimento compensatório **só** quando o fato físico o justifica; a correção documental **nunca** serve para contornar os controles de estoque.
 
 | Situação | Quando | Movimento físico | Linha | Quem | Auditoria |
