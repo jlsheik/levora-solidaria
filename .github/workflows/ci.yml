@@ -4,7 +4,7 @@ on:
   push:
     branches: [master]
   pull_request:
-    branches: [master]
+    branches: [master, 'fase-**']
 
 # Fase 54 (SEC-08): princípio do menor privilégio — este workflow só faz
 # checkout, instala dependências e roda scripts locais (typecheck, testes,
