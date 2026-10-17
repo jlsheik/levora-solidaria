@@ -439,7 +439,7 @@ Permissões **propostas** (só entram no catálogo `src/helpers/permissions.tsx`
 
 ## 14. Experiência e interfaces
 
-> **Implementação do item 5 (prestação de contas) — 99H:** `docs/DESTINACAO_RELATORIO_99H.md` (contrato aditivo de `impact-report_GET`, sem migration). A aba de histórico (item 2) e os comprovantes continuam na 99I/99J.
+> **Implementação do item 5 (prestação de contas) — 99H:** `docs/DESTINACAO_RELATORIO_99H.md` (contrato aditivo de `impact-report_GET`, sem migration). A aba de histórico (item 2) foi implementada na 99I (`docs/DESTINACAO_HISTORICO_99I.md`); os comprovantes continuam na 99J.
 
 **Linguagem:** os nomes refletem o que os dados provam. "Destinação registrada" (declarada pela organização) — **nunca** "entregue ao beneficiário" como afirmação, e nunca "atendida" para o que é só recebido.
 

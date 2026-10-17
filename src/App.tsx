@@ -26,6 +26,8 @@ import organizationOpportunitiesPageLayout from "./pages/organizacoes.$organizat
 import OrganizationAllocationsPage from "./pages/organizacoes.$organizationId.atribuicoes";
 import organizationAllocationsPageLayout from "./pages/organizacoes.$organizationId.atribuicoes.pageLayout";
 
+import OrganizationDestinationsPage from "./pages/organizacoes.$organizationId.destinacoes";
+import organizationDestinationsPageLayout from "./pages/organizacoes.$organizationId.destinacoes.pageLayout";
 import OrganizationAccountingPage from "./pages/organizacoes.$organizationId.prestacao-contas";
 import organizationAccountingPageLayout from "./pages/organizacoes.$organizationId.prestacao-contas.pageLayout";
 
@@ -96,6 +98,10 @@ const router = createBrowserRouter([
       {
         path: "/organizacoes/:organizationId/atribuicoes",
         element: <>{withPageLayout(organizationAllocationsPageLayout, OrganizationAllocationsPage)}</>,
+      },
+      {
+        path: "/organizacoes/:organizationId/destinacoes",
+        element: <>{withPageLayout(organizationDestinationsPageLayout, OrganizationDestinationsPage)}</>,
       },
       {
         path: "/organizacoes/:organizationId/prestacao-contas",

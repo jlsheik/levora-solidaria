@@ -12,6 +12,7 @@ import { sql, type Kysely } from "kysely";
 import type { DB } from "./schema.js";
 import { businessDateOf } from "./businessDate.js";
 import type { DestinationType } from "./destinationRules.js";
+import { effectiveDateExpr } from "./destinationFilters.js";
 
 export type DestinationDateBasis = "registro" | "efetiva";
 
@@ -99,7 +100,7 @@ export async function buildDestinationReport(db: Kysely<DB>, p: DestinationParam
   const windowCond =
     p.basis === "registro"
       ? sql`AND d.created_at >= ${s} AND d.created_at < ${e}`
-      : sql`AND d.delivered_on >= ${businessDateOf(s)}::date AND d.delivered_on < ${businessDateOf(e)}::date`;
+      : sql`AND ${effectiveDateExpr} >= ${businessDateOf(s)}::date AND ${effectiveDateExpr} < ${businessDateOf(e)}::date`;
 
   const rows = (
     await sql<{

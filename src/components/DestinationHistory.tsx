@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getStockDestinations } from "../endpoints/stock-destinations_GET.schema";
+import { getStockDestinations, type InputType as DestinationQuery } from "../endpoints/stock-destinations_GET.schema";
 import { postStockDestinationReversal } from "../endpoints/stock-destination-reversal_POST.schema";
 import { postStockDestinationCorrection } from "../endpoints/stock-destination-correction_POST.schema";
 import type { DestinationView } from "../helpers/destinationCorrections";
@@ -29,12 +29,17 @@ const STATE_LABEL = { ativa: "Ativa", parcialmente_revertida: "Parcialmente reve
 const fmtDate = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("pt-BR");
 
 /** Histórico das destinações (Fase 99G): original, correções documentais, reversões, saldo reversível e efeito físico de cada evento. O servidor decide tudo; a interface só mostra e pede. */
-export function DestinationHistory({ organizationId }: { organizationId: number }) {
+export type HistoryFilters = Partial<Pick<DestinationQuery, "itemId" | "needId" | "destinationType" | "state" | "basis" | "from" | "to">>;
+
+export function DestinationHistory({ organizationId, filters = {}, initialLimit = 10, showTotals = false }: { organizationId: number; filters?: HistoryFilters; initialLimit?: number; showTotals?: boolean }) {
   const queryClient = useQueryClient();
   const [reverseTarget, setReverseTarget] = useState<DestinationView | null>(null);
   const [correctTarget, setCorrectTarget] = useState<DestinationView | null>(null);
-  const [limit, setLimit] = useState(10);
-  const query = useQuery({ queryKey: ["stock-destinations", organizationId, limit], queryFn: () => getStockDestinations({ organizationId, limit }), enabled: Number.isFinite(organizationId) });
+  const [limit, setLimit] = useState(initialLimit);
+  const filterKey = JSON.stringify(filters);
+  // mudar o filtro volta à primeira página (a ordenação é sempre por id decrescente, estável)
+  useEffect(() => { setLimit(initialLimit); }, [filterKey, initialLimit]);
+  const query = useQuery({ queryKey: ["stock-destinations", organizationId, filterKey, limit], queryFn: () => getStockDestinations({ organizationId, limit, ...filters }), enabled: Number.isFinite(organizationId), placeholderData: (prev) => prev });
 
   const refreshAll = async () => {
     await Promise.all([
@@ -55,6 +60,15 @@ export function DestinationHistory({ organizationId }: { organizationId: number 
         <p className={styles.error} role="alert">Não foi possível carregar as destinações. {query.error instanceof Error ? query.error.message : ""}</p>
       ) : query.data && query.data.destinations.length > 0 ? (
         <>
+          {showTotals && query.data.totals.byUnit.length > 0 && (
+            <div className={styles.totals} data-testid="destination-totals" aria-label="Totais do conjunto filtrado, por unidade">
+              <strong>{query.data.totals.records} destinação(ões) no filtro</strong>
+              {query.data.totals.byUnit.map((t) => (
+                <span key={t.unit}>{t.unit}: físico líquido {t.physicalNet} (saiu {t.physical}, revertido {t.reverted}) · atendimento {t.appliedNet} · excedente {t.surplusNet}</span>
+              ))}
+              <span className={styles.help}>Unidades diferentes nunca são somadas. Revertido é o acumulado até hoje.</span>
+            </div>
+          )}
           <ul className={styles.list}>
             {query.data.destinations.map((d) => (
               <li key={d.id} className={styles.card} data-testid="destination-card" data-state={d.state}>
@@ -102,7 +116,7 @@ export function DestinationHistory({ organizationId }: { organizationId: number 
           )}
         </>
       ) : (
-        <p className={styles.help}>Nenhuma destinação registrada ainda.</p>
+        <p className={styles.help}>{Object.values(filters).some((v) => v !== undefined && v !== "") ? "Nenhuma destinação corresponde aos filtros. Ajuste o período, a finalidade ou a situação." : "Nenhuma destinação registrada ainda."}</p>
       )}
       <ReversalDialog organizationId={organizationId} target={reverseTarget} onClose={() => setReverseTarget(null)} onDone={refreshAll} />
       <CorrectionDialog organizationId={organizationId} target={correctTarget} onClose={() => setCorrectTarget(null)} onDone={refreshAll} />

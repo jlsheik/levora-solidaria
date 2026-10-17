@@ -12,7 +12,7 @@
  * (`needAttendance`), nunca por soma incremental.
  */
 import { createHash } from "node:crypto";
-import type { Kysely, Transaction } from "kysely";
+import { sql, type Kysely, type Transaction } from "kysely";
 import type { DB } from "./schema.js";
 import { recordAuditLogEntry } from "./auditLog.js";
 import { roundQuantity } from "./quantityRules.js";
@@ -21,6 +21,7 @@ import { computeAttendanceProgress, getNeedAttendance } from "./needAttendance.j
 import { isAttendanceType, REASON_REQUIRED_TYPES, NOTES_MIN_WHEN_REQUIRED, type DestinationType } from "./destinationRules.js";
 import { classifyUnit } from "./unitVocabulary.js";
 import { serverNow } from "./stockExit.js";
+import { destinationWhere, type DestinationFilter } from "./destinationFilters.js";
 
 export const REVERSAL_KINDS = ["estorno_documental", "devolucao_fisica", "correcao_quantidade"] as const;
 export type ReversalKind = (typeof REVERSAL_KINDS)[number];
@@ -474,28 +475,63 @@ export interface DestinationView {
   events: DestinationEventView[];
 }
 
+export interface DestinationTotals {
+  /** Por UNIDADE (nunca somadas entre si) sobre TODO o conjunto filtrado, não só a página. */
+  byUnit: Array<{ unit: string; records: number; physical: number; reverted: number; physicalNet: number; appliedNet: number; surplusNet: number }>;
+  records: number;
+}
+
+/** Totais do conjunto filtrado, por unidade, com a mesma fórmula do relatório da 99H (aplicado = LEAST(aplicada, física − revertida) só de contabilizáveis). */
+export async function destinationTotals(db: Kysely<DB> | Transaction<DB>, filter: DestinationFilter): Promise<DestinationTotals> {
+  const rows = (
+    await sql<{ unit: string; records: string; physical: string; reverted: string; physicalNet: string; appliedNet: string; surplusNet: string }>`
+    SELECT d.unit, count(*) AS records, coalesce(sum(d.quantity), 0) AS physical,
+           coalesce(sum(rv.q), 0) AS reverted, coalesce(sum(d.quantity - rv.q), 0) AS physical_net,
+           coalesce(sum(CASE WHEN d.is_countable THEN LEAST(coalesce(d.applied_quantity, d.quantity), d.quantity - rv.q) ELSE 0 END), 0) AS applied_net,
+           coalesce(sum(CASE WHEN d.is_countable THEN (d.quantity - rv.q) - LEAST(coalesce(d.applied_quantity, d.quantity), d.quantity - rv.q) ELSE 0 END), 0) AS surplus_net
+      FROM stock_destinations d
+      CROSS JOIN LATERAL (SELECT coalesce(sum(r.quantity), 0) AS q FROM stock_destinations r WHERE r.entry_type = 'reversal' AND r.reverses_destination_id = d.id) rv
+     WHERE ${destinationWhere(filter)}
+     GROUP BY d.unit ORDER BY d.unit
+  `.execute(db)
+  ).rows;
+  const n = (v: unknown) => Math.round(Number(v ?? 0) * 1000) / 1000;
+  return {
+    records: rows.reduce((t, r) => t + Number(r.records), 0),
+    byUnit: rows.map((r) => ({ unit: r.unit, records: Number(r.records), physical: n(r.physical), reverted: n(r.reverted), physicalNet: n(r.physicalNet), appliedNet: n(r.appliedNet), surplusNet: n(r.surplusNet) })),
+  };
+}
+
 export async function listDestinationHistory(
   db: Kysely<DB> | Transaction<DB>,
   organizationId: number,
-  filter: { itemId?: number; needId?: number; limit: number; beforeId?: string }
+  filter: Omit<DestinationFilter, "organizationId"> & { limit: number; beforeId?: string }
 ): Promise<{ destinations: DestinationView[]; hasMore: boolean }> {
-  let q = db
+  const full: DestinationFilter = { ...filter, organizationId };
+  // ordem ESTÁVEL por id decrescente (keyset): os filtros nunca mudam a ordenação, e `beforeId` não pula nem repete linhas
+  const idRows = (
+    await sql<{ id: string }>`
+    SELECT d.id FROM stock_destinations d
+     WHERE ${destinationWhere(full)} ${filter.beforeId ? sql`AND d.id < ${filter.beforeId}` : sql``}
+     ORDER BY d.id DESC LIMIT ${filter.limit + 1}
+  `.execute(db)
+  ).rows;
+  const ids = idRows.map((r) => String(r.id));
+  const hasMoreIds = ids.length > filter.limit;
+  const pageIds = ids.slice(0, filter.limit);
+  if (pageIds.length === 0) return { destinations: [], hasMore: false };
+  const fetched = await db
     .selectFrom("stockDestinations as d")
     .innerJoin("inventoryItems as i", "i.id", "d.itemId")
     .innerJoin("users as u", "u.id", "d.createdByUserId")
     .leftJoin("needs as n", "n.id", "d.needId")
     .select(["d.id", "d.itemId", "i.name as itemName", "d.destinationType", "d.quantity", "d.unit", "d.isCountable", "d.appliedQuantity", "d.surplusQuantity", "d.needId", "n.title as needTitle", "n.status as needStatus", "d.deliveredOn", "d.peopleServed", "d.peopleUnit", "d.notes", "u.displayName as createdByDisplayName", "d.createdAt"])
     .where("d.organizationId", "=", organizationId)
-    .where("d.entryType", "=", "original")
+    .where("d.id", "in", pageIds)
     .orderBy("d.id", "desc")
-    .limit(filter.limit + 1);
-  if (filter.itemId) q = q.where("d.itemId", "=", filter.itemId);
-  if (filter.needId) q = q.where("d.needId", "=", filter.needId);
-  if (filter.beforeId) q = q.where("d.id", "<", filter.beforeId);
-  const fetched = await q.execute();
-  const hasMore = fetched.length > filter.limit;
-  const rows = fetched.slice(0, filter.limit);
-  if (rows.length === 0) return { destinations: [], hasMore: false };
+    .execute();
+  const hasMore = hasMoreIds;
+  const rows = fetched;
 
   const events = await db
     .selectFrom("stockDestinations as e")
