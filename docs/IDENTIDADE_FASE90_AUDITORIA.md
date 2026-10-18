@@ -16,7 +16,7 @@ bootstrap: CLI offline ──► token (hash) ──► /plataforma/ativar ─�
 Regra de sessão (central, em `getServerUserSession`): **titular de `platform_access` ativo sem `mfa_verified_at` = 401 em qualquer
 endpoint** (inclui sessões anteriores à Fase 90). `PLATFORM_MFA_REQUIRED=false` só vale com `LEVORA_ENVIRONMENT=staging`.
 
-## 2. Migration 0016 (`db/migrations/0016_mfa_foundation.sql`; espelhada em `db/schema.sql`)
+## 2. Migration 0016 (`db/migrations/0027_mfa_foundation.sql`; espelhada em `db/schema.sql`)
 
 ```
 STEP 1  enums + mfa_methods (segredo CIFRADO, last_used_step, falhas/bloqueio, índice único: 1 método pending|active por usuário)

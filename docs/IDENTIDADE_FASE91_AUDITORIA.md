@@ -25,7 +25,7 @@ cliente ──► access-code-check (público, leitura pura, não consome)
 `provisionUserWithAccessCode(rawCode, createUser, now)` **não conhece o método de autenticação**: o callback cria o usuário e a
 credencial que quiser (hoje, senha; amanhã, um `signup_attempt` Google/Microsoft/Apple). Ver §11.
 
-## 2. Modelo de dados (migration `0017_registration_access_codes.sql`, espelhada em `db/schema.sql`)
+## 2. Modelo de dados (migration `0028_registration_access_codes.sql`, espelhada em `db/schema.sql`)
 
 | Objeto | Função |
 |---|---|

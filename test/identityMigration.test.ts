@@ -11,12 +11,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const BASELINE_COMMIT = "a628bd4"; // último commit ANTES da Fase 89
-const MIGRATION = readFileSync(path.resolve(__dirname, "../db/migrations/0015_identity_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
-const MIGRATION_0016 = readFileSync(path.resolve(__dirname, "../db/migrations/0016_mfa_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
-const MIGRATION_0017 = readFileSync(path.resolve(__dirname, "../db/migrations/0017_registration_access_codes.sql"), "utf-8").replace(/\r\n/g, "\n");
-const MIGRATION_0018 = readFileSync(path.resolve(__dirname, "../db/migrations/0018_google_identity.sql"), "utf-8").replace(/\r\n/g, "\n");
-const MIGRATION_0019 = readFileSync(path.resolve(__dirname, "../db/migrations/0019_social_reauth.sql"), "utf-8").replace(/\r\n/g, "\n");
-const MIGRATION_0020 = readFileSync(path.resolve(__dirname, "../db/migrations/0020_microsoft_identity.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION = readFileSync(path.resolve(__dirname, "../db/migrations/0026_identity_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0016 = readFileSync(path.resolve(__dirname, "../db/migrations/0027_mfa_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0017 = readFileSync(path.resolve(__dirname, "../db/migrations/0028_registration_access_codes.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0018 = readFileSync(path.resolve(__dirname, "../db/migrations/0029_google_identity.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0019 = readFileSync(path.resolve(__dirname, "../db/migrations/0030_social_reauth.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0020 = readFileSync(path.resolve(__dirname, "../db/migrations/0031_microsoft_identity.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIG_DB = "levora_f89_mig_test";
 
 function adminUrl(): URL {

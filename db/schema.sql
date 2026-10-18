@@ -775,7 +775,7 @@ CREATE TABLE files (
 CREATE INDEX idx_files_org ON files(organization_id);
 
 -- ============================================================
--- Fase 89 — Fundação de identidade (espelha db/migrations/0015_identity_foundation.sql, sem os trechos só de migração)
+-- Fase 89 — Fundação de identidade (espelha db/migrations/0026_identity_foundation.sql, sem os trechos só de migração)
 -- ============================================================
 -- ------------------------------------------------------------
 -- users.anonymized_at
@@ -886,7 +886,7 @@ ALTER TABLE sessions
 ALTER TABLE user_passwords ADD CONSTRAINT user_passwords_user_id_key UNIQUE (user_id);
 
 -- ============================================================
--- Fase 90 — MFA, auth_challenges, bootstrap do Platform Owner (espelha db/migrations/0016_mfa_foundation.sql)
+-- Fase 90 — MFA, auth_challenges, bootstrap do Platform Owner (espelha db/migrations/0027_mfa_foundation.sql)
 -- ============================================================
 CREATE TYPE mfa_method_type AS ENUM ('totp');
 CREATE TYPE mfa_method_status AS ENUM ('pending', 'active', 'disabled');
@@ -998,7 +998,7 @@ ALTER TABLE login_attempts ADD COLUMN ip_prefix TEXT;
 CREATE INDEX idx_login_attempts_email_ip_time ON login_attempts (email, ip_prefix, attempted_at DESC);
 
 -- ============================================================
--- Fase 91 — códigos de acesso de cadastro (espelha db/migrations/0017_registration_access_codes.sql)
+-- Fase 91 — códigos de acesso de cadastro (espelha db/migrations/0028_registration_access_codes.sql)
 -- ============================================================
 CREATE TABLE registration_access_codes (
   id SERIAL PRIMARY KEY,

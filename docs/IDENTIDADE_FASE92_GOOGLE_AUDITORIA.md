@@ -45,7 +45,7 @@ O código de acesso **nunca** está na URL (nem do nosso callback, nem da URL do
 resolve `access_code_id` e guarda só o id na tentativa; o callback lê o id **da tentativa** (a requisição não fornece código, usuário
 nem intenção — parâmetros extras no callback são ignorados e há teste).
 
-## 3. Dados (migration `0018_google_identity.sql`, espelhada em `db/schema.sql`)
+## 3. Dados (migration `0029_google_identity.sql`, espelhada em `db/schema.sql`)
 
 | Tabela | Conteúdo |
 |---|---|
@@ -172,7 +172,7 @@ vínculo de navegador (1), PKCE sem verifier (4), MFA ignorado (3), checagem de 
 o modelo passa a ser "conta autenticada **+** reautenticação apropriada ⇒ pode excluir". Os métodos de uma conta são `user_passwords`, `user_identities` e `mfa_methods`; `users.id` continua sendo a identidade.
 
 **Mecanismo geral (provider-agnóstico) — "reautenticar identidade":**
-- Migration `0019_social_reauth.sql`: `sessions.primary_reauth_at` (carimbo da última reautenticação do método **primário**, na MESMA sessão, rotacionado junto com o id) e `oauth_attempts.intent='reauth'` + `user_id` (CHECK: `reauth ⇔ user_id`).
+- Migration `0030_social_reauth.sql`: `sessions.primary_reauth_at` (carimbo da última reautenticação do método **primário**, na MESMA sessão, rotacionado junto com o id) e `oauth_attempts.intent='reauth'` + `user_id` (CHECK: `reauth ⇔ user_id`).
 - `google-start {intent:'reauth'}`: exige **sessão** (o usuário vem da sessão, nunca do corpo; `userId`/`provider`/`accessCode` no corpo ⇒ 400) e uma identidade Google vinculada (409 `google_nao_vinculado` caso contrário).
 - Callback `reauth`: mesma cadeia state→vínculo→PKCE→ID token da Fase 92; depois exige (1) identidade `(google, issuer, sub)` **do próprio usuário da tentativa**, (2) sessão corrente do **mesmo** usuário, e então rotaciona a sessão com `primary_reauth_at=now`. Qualquer falha ⇒ `/?reauth=erro` (o usuário continua logado), nada é carimbado.
 - Política (`src/helpers/accountReauth.tsx`): carimbo válido por **5 min**, nunca no futuro; avaliado no **servidor**. Microsoft/Apple/senha/passkey poderão satisfazer o mesmo requisito sem mudar quem o consome.

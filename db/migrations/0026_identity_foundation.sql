@@ -8,7 +8,9 @@
 --   6. sessions         — absolute_expires_at (imposto), primary_method, mfa_verified_at, last_reauth_at.
 --   7. user_passwords   — UNIQUE(user_id).
 --
--- Numeração 0015: a 0014 está reservada à plataforma de agentes (trabalho em andamento fora desta fase).
+-- Numeração: originalmente 0015 (branch fase-89-identidade). Renumerada para 0026 na integração com a master, que já ocupa 0014–0025 com outras migrações.
+-- Mapa: 0015→0026 identity_foundation, 0016→0027 mfa_foundation, 0017→0028 registration_access_codes, 0018→0029 google_identity, 0019→0030 social_reauth, 0020→0031 microsoft_identity.
+-- O runner registra o NOME do arquivo: um banco que aplicou os nomes antigos (0015_identity_foundation.sql etc.) NÃO pode receber estes arquivos sem verificação (ver docs/IDENTIDADE_INTEGRACAO_MIGRATIONS.md).
 --
 -- Designação explícita do owner quando existir MAIS DE UM users.role='admin' (a migration aborta sem isso). Só o designado
 -- recebe platform_access (owner); os demais admins viram usuários comuns (menor privilégio) e o aviso lista os ids:
