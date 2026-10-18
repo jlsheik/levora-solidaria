@@ -28,5 +28,10 @@
     "enabled": true,
     "schedule": "0 */6 * * *",
     "timezone": "UTC"
+  },
+  "retryFileScans": {
+    "enabled": true,
+    "schedule": "*/5 * * * *",
+    "timezone": "UTC"
   }
 }

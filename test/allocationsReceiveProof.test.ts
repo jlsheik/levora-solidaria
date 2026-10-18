@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { storageAdapter } from "../src/helpers/storageAdapter";
 import { db } from "../src/helpers/db";
 import { handle as postFilesUpload } from "../src/endpoints/files-upload_POST";
@@ -22,6 +22,11 @@ async function createAcceptedAllocation(organizationId: number, userId: number) 
     .execute();
   return allocation.id;
 }
+
+// Este arquivo verifica o VÍNCULO do comprovante enviado por upload ao recebimento da atribuição (e o isolamento entre organizações), não a análise antimalware: o recebimento exige arquivo liberado, então o envio precisa nascer liberado.
+// Premissa explícita (modo desligado: envios nascem 'dispensado' e são liberados), restaurada a cada teste; não herda FILE_SCAN_MODE do terminal/.env.test. A análise e o bloqueio do modo obrigatório (409, infectado, legado, fail-closed) são provados em test/fileScan.test.ts.
+beforeEach(() => { vi.stubEnv("FILE_SCAN_MODE", "disabled"); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 describe("recebimento de atribuição com comprovante enviado por upload real", () => {
   let owner: AuthenticatedTestUser;

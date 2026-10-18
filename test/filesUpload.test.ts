@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll, afterEach, vi } from "vitest";
 import { db } from "../src/helpers/db";
 import { handle as postFilesUpload } from "../src/endpoints/files-upload_POST";
 import { handle as getFilesDownload } from "../src/endpoints/files-download_GET";
@@ -11,6 +11,11 @@ const TEST_STORAGE_DIR = path.resolve(process.cwd(), process.env.STORAGE_LOCAL_D
 // Um PNG mínimo válido (1x1 pixel), só para ter bytes reais de imagem no teste.
 const TINY_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+// Este arquivo verifica validação, autorização e cabeçalhos do upload/download básico (comprovação de entrega), não a análise antimalware: o download só serve arquivo liberado, então os envios precisam nascer liberados.
+// Premissa explícita (modo desligado: envios nascem 'dispensado' e são liberados), restaurada a cada teste; não herda FILE_SCAN_MODE do terminal/.env.test. A análise e o bloqueio do modo obrigatório (409, infectado, legado, fail-closed) são provados em test/fileScan.test.ts.
+beforeEach(() => { vi.stubEnv("FILE_SCAN_MODE", "disabled"); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 describe("upload e download de arquivo (comprovação de entrega)", () => {
   let owner: AuthenticatedTestUser;

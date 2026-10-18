@@ -50,3 +50,19 @@ Já existe: auditoria `arquivo.analise_aprovada` / `arquivo.bloqueado_por_analis
 ## 8. Fora do escopo deste plano (decisões externas)
 
 Escolha do provedor/host, orçamento, contas, segredos, política de egress, política de retenção e prazo de assinaturas desatualizadas. Nenhum recurso, conta ou serviço pago foi criado.
+
+## 9. Operação implementada (fase 99L — operação do scanner)
+
+**Status:** código e testes com scanner SIMULADO e PostgreSQL real; o scanner definitivo continua NÃO provisionado. Nada aqui declara produção liberada.
+
+- **Fila durável:** o próprio `files` é a fila (migration 0025: `scan_attempts`, `scan_next_attempt_at`, `scan_lease_until`, `scan_exhausted_at`, `scan_last_reason`). Elegíveis: `pendente` (após carência) e `indisponivel`, sem esgotamento, fora do backoff e sem lease vigente. `infectado`, `aprovado`, `dispensado` e `legado_nao_analisado` nunca entram automaticamente.
+- **Execução:** tarefa agendada `retryFileScans` (`scheduled-jobs.json`, a cada 5 min, UTC), com trava de sessão (id 7) e registro em `background_task_runs` (resumo agregado, sem nomes). Reivindicação por `FOR UPDATE SKIP LOCKED` + lease; a tentativa é contada ao reivindicar. Worker que morre: o lease vence e o arquivo volta; repetidas mortes esgotam.
+- **Backoff:** `min(teto, base·2^(n−1))` com jitter de 50–100%. Esgotar (`FILE_SCAN_RETRY_MAX_ATTEMPTS`) NUNCA libera: o arquivo segue bloqueado e só a reanálise manual autorizada (`files-rescan`) zera tentativas e o retoma (auditado: `arquivo.analise_retomada_manual`).
+- **Sem scanner / análise desligada:** a execução é registrada como `skipped` e não consome tentativas.
+- **Auditoria:** aprovado/infectado sempre; indisponível só na primeira queda; `arquivo.analise_esgotada` uma vez. Tentativas intermediárias ficam em `scan_attempts`.
+- **Saúde do clamd:** `PING`→`PONG` e `VERSION` (motor, versão e data da base CARREGADA pelo daemon). Sem `CLAMD_SIGNATURE_MAX_AGE_HOURS` a idade é `desconhecido` (nunca "atual"). Após `freshclam`, é preciso `clamdscan --reload` para o daemon passar a usar a base nova.
+- **Indicadores globais:** `GET file-scan-operations` — somente administração da plataforma (`requirePlatformAdmin`), `Cache-Control: private, no-store`; só contagens, idades e estados (sem nomes, chaves, organizações ou conteúdo). Alertas são SINAIS calculados, sem envio externo; `FILE_SCAN_ALERT_BACKLOG_MINUTES` e `FILE_SCAN_ALERT_WORKER_MINUTES` ausentes = `nao_definido`.
+- **Conciliação da organização:** `retidosPorAnalise` passou a expor tentativas, próxima tentativa, esgotado, abandonado e último motivo (somente leitura).
+- **Variáveis:** ver `.env.example` (`FILE_SCAN_RETRY_*`, `FILE_SCAN_LEASE_SECONDS`, `FILE_SCAN_PENDING_GRACE_SECONDS`, `CLAMD_SIGNATURE_MAX_AGE_HOURS`, `FILE_SCAN_ALERT_*`). Os padrões são de engenharia e dependem de aprovação.
+- **Diagnóstico:** consultar `file-scan-operations`; backlog crescendo + `scanner_sem_resposta` → verificar o serviço/rede; `tentativas_esgotadas` → reanálise manual após recuperar o scanner; `tarefas_abandonadas` → o worker caiu no meio (recuperação automática pelo lease).
+- **Limitações:** sem notificação externa (alertas só no painel/endpoint); sem UI dedicada; sem teste de carga nem de S3; retenção/LGPD continua pendente (`DECISAO_RETENCAO_COMPROVANTES.md`); reanálise em lote de `legado_nao_analisado` segue como decisão separada.

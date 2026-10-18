@@ -123,6 +123,8 @@ export interface ProofFileListing {
   ageHours: number;
   /** Análise antimalware: só aprovado/dispensado libera o arquivo. */
   scanStatus: string;
+  /** Fila de reanálise (apenas arquivos retidos pela análise). */
+  retry?: { attempts: number; nextAttemptAt: string | null; exhausted: boolean; abandoned: boolean; lastReason: string | null };
 }
 
 /**
@@ -142,14 +144,18 @@ export async function listProofFileReconciliation(db: Kysely<DB> | Transaction<D
   for (const r of rows.rows.filter((x) => x.linked)) if ((await getProofState(db, organizationId, r.id)).state === "removido") removed.push(r);
   const map = (r: (typeof rows.rows)[number]): ProofFileListing => ({ id: r.id, name: r.name, contentType: r.contentType, sizeBytes: Number(r.sizeBytes), uploadedByDisplayName: r.uploader, uploadedAt: r.createdAt.toISOString(), ageHours: Math.round(Number(r.ageHours) * 10) / 10, scanStatus: r.scanStatus });
   // arquivos de QUALQUER finalidade da organização retidos pela análise antimalware (pendente, indisponível, infectado ou anterior à análise)
-  const held = await sql<(typeof rows.rows)[number]>`
+  const held = await sql<(typeof rows.rows)[number] & { attempts: number; nextAttemptAt: Date | null; exhaustedAt: Date | null; leaseUntil: Date | null; lastReason: string | null }>`
     SELECT f.id, f.scan_status, f.original_filename AS name, f.content_type, f.size_bytes, u.display_name AS uploader, f.created_at,
+           f.scan_attempts AS attempts, f.scan_next_attempt_at AS next_attempt_at, f.scan_exhausted_at AS exhausted_at, f.scan_lease_until AS lease_until, f.scan_last_reason AS last_reason,
            extract(epoch FROM (now() - f.created_at)) / 3600 AS age_hours, false AS linked
       FROM files f JOIN users u ON u.id = f.uploaded_by_user_id
      WHERE f.organization_id = ${organizationId} AND f.scan_status IN ('pendente', 'indisponivel', 'infectado', 'legado_nao_analisado')
      ORDER BY f.id DESC LIMIT ${limit}`.execute(db);
   return {
-    retidosPorAnalise: held.rows.map(map),
+    retidosPorAnalise: held.rows.map((r) => ({
+      ...map(r),
+      retry: { attempts: r.attempts, nextAttemptAt: r.nextAttemptAt ? r.nextAttemptAt.toISOString() : null, exhausted: r.exhaustedAt !== null, abandoned: r.leaseUntil !== null && r.leaseUntil.getTime() < Date.now(), lastReason: r.lastReason },
+    })),
     pendentes: rows.rows.filter((r) => !r.linked).slice(0, limit).map(map),
     removidos: removed.slice(0, limit).map(map),
     limit,

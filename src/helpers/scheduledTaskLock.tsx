@@ -40,6 +40,8 @@ const SCHEDULED_TASK_LOCK_IDS: Record<string, number> = {
   // Fase 53 — verificação periódica da audit hash-chain (SEC-06).
   verifyAuditChain: 5,
   expireAssignmentDeadlines: 6,
+  // Hardening pós-99K — reanálise automática dos arquivos retidos.
+  retryFileScans: 7,
 };
 
 export interface ScheduledTaskLockResult<T> {

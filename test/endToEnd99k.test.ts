@@ -3,7 +3,7 @@
  * produto (sem inserir registros artificiais para "avançar" etapas) e, depois de cada passo, um ORÁCULO calcula os mesmos números por SQL independente e os compara com a API de necessidades,
  * o histórico de destinações (99I), o relatório de impacto (99H) e o saldo do estoque. Matriz de rastreabilidade: docs/DESTINACAO_VALIDACAO_99K.md.
  */
-import { describe, it, expect, afterAll, vi } from "vitest";
+import { describe, it, expect, afterAll, vi, beforeEach, afterEach } from "vitest";
 import { randomBytes } from "node:crypto";
 import { rm } from "node:fs/promises";
 import path from "node:path";
@@ -123,6 +123,11 @@ async function oracle(w: World) {
   expect(appliedSql).toBeLessThanOrEqual(Number(needsApi.quantityNeeded));
   return { appliedSql, physicalSql, ledger, needsApi, report: full };
 }
+
+// Esta jornada de ponta a ponta inclui o envio e o vínculo de comprovantes (Jornada E), não a análise antimalware: o vínculo exige arquivo liberado, então os envios precisam nascer liberados.
+// Premissa explícita (modo desligado: envios nascem 'dispensado' e são liberados), restaurada a cada teste; não herda FILE_SCAN_MODE do terminal/.env.test. A análise e o bloqueio do modo obrigatório (409, infectado, legado, fail-closed) são provados em test/fileScan.test.ts.
+beforeEach(() => { vi.stubEnv("FILE_SCAN_MODE", "disabled"); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 describe("Jornada A — oferta da rede → matching → decisão → logística → recebimento → destinação → relatório → comprovante", () => {
   it("percorre os endpoints reais e cada etapa é visível na seguinte, com o oráculo fechando em todas", async () => {

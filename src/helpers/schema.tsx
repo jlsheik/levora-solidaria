@@ -129,6 +129,11 @@ export interface DonationOpportunities {
 }
 
 export interface Files {
+  scanAttempts: Generated<number>;
+  scanNextAttemptAt: Timestamp | null;
+  scanLeaseUntil: Timestamp | null;
+  scanExhaustedAt: Timestamp | null;
+  scanLastReason: string | null;
   scanCheckedAt: Timestamp | null;
   scanEngine: string | null;
   scanSignature: string | null;
