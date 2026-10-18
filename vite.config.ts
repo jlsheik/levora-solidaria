@@ -75,7 +75,8 @@ export default defineConfig({
     headers: DEV_DOCUMENT_HEADERS,
     proxy: {
       "/_api": {
-        target: "http://localhost:3001",
+        // Permite previews isolados em outra porta sem mudar o destino padrão local.
+        target: process.env.LEVORA_API_PROXY_TARGET || "http://localhost:3001",
         changeOrigin: true,
       },
     },
