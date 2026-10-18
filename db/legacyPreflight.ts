@@ -89,6 +89,15 @@ export const CHECKS: readonly Check[] = [
     conflictQuery: `SELECT array_agg(nf.id ORDER BY nf.id) AS ids, count(*)::int AS n FROM need_fulfillments nf WHERE nf.stock_transaction_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM stock_transactions s WHERE s.id = nf.stock_transaction_id AND s.organization_id = nf.organization_id)`,
     fixHint: "o ledger é append-only: investigue cada linha listada (o movimento de estoque é de outra organização) e decida a correção manualmente, com revisão",
   },
+  {
+    migration: "0026_identity_foundation.sql",
+    rule: "user_passwords: no máximo UMA senha por user_id (UNIQUE) e, havendo mais de um users.role = 'admin', o Platform Owner precisa ser designado (levora.platform_owner_user_id)",
+    requires: [{ table: "user_passwords", column: "id" }, { table: "user_passwords", column: "user_id" }, { table: "users", column: "id" }, { table: "users", column: "role" }, { table: "users", column: "email" }],
+    objectExists: `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_passwords_user_id_key' AND conrelid = 'public.user_passwords'::regclass) AS e`,
+    // 1) usuários com mais de uma linha em user_passwords (o UNIQUE falharia); 2) mais de um admin ativo SEM designação válida (a migração aborta). O critério de "ativo" replica o da migração: e-mail anonimizado = usuario-excluido-*@removido.invalid. Só ids saem.
+    conflictQuery: `SELECT array_agg(x.txt ORDER BY x.k) AS ids, count(*)::int AS n FROM (SELECT user_id AS k, 'senhas:' || array_to_string(array_agg(id ORDER BY id), ',') AS txt FROM user_passwords GROUP BY user_id HAVING count(*) > 1 UNION ALL SELECT 0 AS k, 'admins:' || array_to_string(array_agg(id ORDER BY id), ',') AS txt FROM users WHERE role = 'admin' AND email NOT LIKE 'usuario-excluido-%@removido.invalid' HAVING count(*) > 1 AND (NULLIF(current_setting('levora.platform_owner_user_id', true), '') IS NULL OR NULLIF(current_setting('levora.platform_owner_user_id', true), '')::int NOT IN (SELECT id FROM users WHERE role = 'admin' AND email NOT LIKE 'usuario-excluido-%@removido.invalid'))) x`,
+    fixHint: "senhas: mantenha uma linha por usuário em user_passwords; admins: designe o Platform Owner com PGOPTIONS=\"-c levora.platform_owner_user_id=<id>\" (o sistema não escolhe; os demais admins viram usuários comuns)",
+  },
 ];
 
 export interface CheckResult { migration: string; rule: string; state: CheckState; detail: string; offendingGroups?: string[]; conflictingRows?: number; fixHint?: string }
