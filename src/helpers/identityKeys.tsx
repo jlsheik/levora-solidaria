@@ -119,6 +119,8 @@ export function isRelaxedMfaEnvironment(env: NodeJS.ProcessEnv = process.env): b
   if (!primary || (alias && alias !== primary)) return false;
   try {
     const url = new URL(primary);
+    // Parâmetros de conexão na query (estilo libpq) podem redirecionar host/banco: qualquer um deles torna a URL ambígua para esta guarda.
+    for (const key of url.searchParams.keys()) if (/^(host|hostaddr|port|dbname|database|db|service|options)$/i.test(key)) return false;
     const database = decodeURIComponent(url.pathname.slice(1));
     return /^[a-z0-9][a-z0-9_]*_(staging|demo|qa|test)$/.test(database) && RELAXED_MFA_DB_HOSTS.has(url.hostname.toLowerCase());
   } catch {

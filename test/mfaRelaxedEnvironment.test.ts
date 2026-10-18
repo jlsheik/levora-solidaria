@@ -46,6 +46,19 @@ describe("isRelaxedMfaEnvironment: MFA de plataforma só relaxa em ambiente desc
     expect(isRelaxedMfaEnvironment(withEnv({ FLOOT_DATABASE_URL: base.DATABASE_URL }))).toBe(true); // alias idêntico não é ambíguo
   });
 
+  it("parâmetros de conexão na query (host, hostaddr, port, dbname, service...) tornam a URL ambígua: não relaxa", () => {
+    for (const q of ["host=prod.exemplo.com", "hostaddr=10.0.0.5", "port=6543", "dbname=producao", "database=producao", "db=producao", "service=prod", "options=-c%20x%3D1", "HOST=prod"]) {
+      expect(isRelaxedMfaEnvironment(withEnv({ DATABASE_URL: `postgres://u:p@localhost:5433/levora_x_qa?${q}` })), q).toBe(false);
+    }
+    expect(isRelaxedMfaEnvironment(withEnv({ DATABASE_URL: "postgres://u:p@localhost:5433/levora_x_qa?sslmode=disable" }))).toBe(true); // parâmetro inofensivo
+  });
+
+  it("combinações multi-host e credenciais enganosas não passam", () => {
+    for (const u of ["postgres://localhost@db.exemplo.com/levora_x_qa", "postgres://u:p@localhost,prod.exemplo.com:5432/levora_x_qa", "postgres://u:p@/levora_x_qa"]) {
+      expect(isRelaxedMfaEnvironment(withEnv({ DATABASE_URL: u })), u).toBe(false);
+    }
+  });
+
   it("outra variável de ambiente declarando produção vence", () => {
     for (const name of ["APP_ENV", "ENVIRONMENT", "DEPLOY_ENV", "RAILWAY_ENVIRONMENT", "VERCEL_ENV"]) {
       for (const value of ["production", "prod", "live", "Produção"]) {
