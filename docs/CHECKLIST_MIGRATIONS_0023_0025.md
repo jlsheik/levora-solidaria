@@ -24,7 +24,7 @@ O runner executa **cada arquivo `.sql` inteiro em uma única transação**, junt
 
 Outras sessões que tentarem acessar a tabela esperam, e podem formar fila atrás do pedido de bloqueio da migration. **O tempo real de espera depende do tamanho da tabela e do hardware, e nenhuma duração foi medida.** A medição precisa ser feita em ambiente descartável representativo (seções 5.1 e 5.3), e a aceitação da janela é decisão humana.
 
-> **Atenção:** `npm run db:preflight` e a pré-verificação do `db:migrate:incremental` cobrem somente as restrições das migrations **0005, 0007, 0009, 0010 e 0013** **[código: `db/legacyPreflight.ts`]**. **Elas NÃO verificam os dados das migrations 0023, 0024 nem 0025.** As consultas da seção 4 são necessárias.
+> **Atenção:** `npm run db:preflight` e a pré-verificação do `db:migrate:incremental` cobrem somente as restrições das migrations **0005, 0007, 0009, 0010 e 0013** (e, a partir da integração de identidade, **0026**, que ainda não está na `master` quando este checklist foi escrito) **[código: `db/legacyPreflight.ts`]**. **Elas NÃO verificam os dados das migrations 0023, 0024 nem 0025.** As consultas da seção 4 são necessárias.
 
 ## 2. Pré-condições, autorização e isolamento do ambiente
 
@@ -91,7 +91,7 @@ Repita os passos 3 e 4 sempre que abrir um terminal novo ou alterar variáveis d
 pg_dump -d "$ENSAIO_URL_SEM_SENHA" -Fc -Z 6 -f ensaio_pre_migrations.dump
 sha256sum ensaio_pre_migrations.dump
 
-# pré-verificação oficial (somente leitura; cobre 0005/0007/0009/0010/0013); usa a DATABASE_URL do ambiente
+# pré-verificação oficial (somente leitura; cobre 0005/0007/0009/0010/0013, e 0026 quando a identidade for integrada); usa a DATABASE_URL do ambiente
 npm run db:preflight
 ```
 No PowerShell, use `pg_dump -d $env:ENSAIO_URL_SEM_SENHA …` e `Get-FileHash -Algorithm SHA256 ensaio_pre_migrations.dump`.
