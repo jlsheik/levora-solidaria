@@ -40,31 +40,42 @@ Outras sessões que tentarem acessar a tabela esperam, e podem formar fila atrá
 **Por que isto é necessário [código]:** `db/run-migrations.ts`, `db/preflight.ts` e `db/migrate.ts` leem `DATABASE_URL` **ou**, na ausência dela, `FLOOT_DATABASE_URL`; `db/storage-audit.ts` lê `DATABASE_URL`. Todas importam `dotenv/config`, que carrega um arquivo `.env` do diretório de trabalho (`dotenv` 16.x, que por padrão **não** sobrescreve variáveis já definidas no ambiente). **Não encontrei nessas ferramentas nenhuma trava que impeça operar num banco que não seja descartável** (a trava `_test` existe só em `test/global-setup.ts`). Por isso a instrução "confirme a `DATABASE_URL`" não basta; siga todos os passos:
 
 1. **Checkout sem credenciais de produção.** Use um clone novo ou uma worktree nova do repositório. O `.env` está no `.gitignore`, então um clone novo não o tem. Confirme que **não existe** `.env` no diretório (`ls -a | grep -x .env` em POSIX; `Test-Path .env` no PowerShell). Se existir, **não execute**: use outro checkout.
-2. **Definir a conexão explicitamente e neutralizar fallbacks.** Sem escrever a senha na linha de comando nem no histórico. Percent-encode caracteres especiais da senha.
+2. **Definir a conexão explicitamente, sem expor a senha, e neutralizar fontes acidentais de configuração.** Duas formas de conexão são usadas, **derivadas dos mesmos componentes** (nome do banco, usuário, host e porta do alvo registrado no item 1 da seção 2), para que o alvo verificado seja o alvo usado:
+   - `ENSAIO_URL_SEM_SENHA`: URL **sem senha**, usada por `psql` e `pg_dump`. A senha vem do **arquivo de senhas do PostgreSQL** com permissões restritas (`~/.pgpass` com modo `0600` em POSIX; `%APPDATA%\postgresql\pgpass.conf` no Windows) ou da **solicitação interativa** do próprio cliente. **Nunca coloque a senha na URL passada a esses comandos**: um argumento de linha de comando pode ficar visível a outros usuários da máquina (lista de processos) e fica no histórico do shell.
+   - `DATABASE_URL`: URL **com senha**, necessária porque as ferramentas Node do projeto (`db:preflight`, `db:migrate:incremental`, `storage:audit`) leem somente essa variável **[código]**. Ela é passada **por variável de ambiente, nunca por argumento**.
+
+   **Limites a conhecer:** a variável de ambiente é herdada pelos processos filhos do terminal e pode ser visível a outros processos do mesmo usuário e a administradores; não use terminal compartilhado, não habilite `set -x` e feche o terminal ao terminar. **Não adote `PGPASSWORD` como solução geral**: a documentação do PostgreSQL desaconselha seu uso por segurança, porque em alguns sistemas operacionais o ambiente de um processo pode ser visível a outros usuários. O arquivo de senhas é lido pelos clientes libpq (`psql`, `pg_dump`); a forma como as ferramentas Node obtêm a senha é **somente** pela `DATABASE_URL`. Percent-encode caracteres especiais da senha.
 
    POSIX (bash):
    ```bash
    unset FLOOT_DATABASE_URL S3_BUCKET S3_REGION S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY S3_ENDPOINT
-   unset PGHOST PGPORT PGDATABASE PGUSER PGSERVICE PGPASSFILE   # evita que o psql herde alvo de variáveis PG*
-   read -r -s -p "Senha do banco de ENSAIO: " ENSAIO_SENHA; echo
-   export DATABASE_URL="postgres://<usuario_ensaio>:${ENSAIO_SENHA}@<host_ensaio>:<porta>/<banco_ensaio>"
+   unset PGHOST PGPORT PGDATABASE PGUSER PGSERVICE PGSERVICEFILE PGPASSFILE PGPASSWORD PGOPTIONS   # fontes acidentais de configuração do libpq
+   # componentes do alvo REGISTRADO (seção 2, item 1), digitados uma única vez:
+   ENSAIO_USUARIO='<usuario_ensaio>'; ENSAIO_HOST='<host_ensaio>'; ENSAIO_PORTA='<porta>'; ENSAIO_BANCO='<banco_ensaio>'
+   export ENSAIO_URL_SEM_SENHA="postgres://${ENSAIO_USUARIO}@${ENSAIO_HOST}:${ENSAIO_PORTA}/${ENSAIO_BANCO}"
+   read -r -s -p "Senha do banco de ENSAIO (com percent-encoding): " ENSAIO_SENHA; echo
+   export DATABASE_URL="postgres://${ENSAIO_USUARIO}:${ENSAIO_SENHA}@${ENSAIO_HOST}:${ENSAIO_PORTA}/${ENSAIO_BANCO}"
    unset ENSAIO_SENHA
    ```
 
    PowerShell:
    ```powershell
    Remove-Item Env:FLOOT_DATABASE_URL, Env:S3_BUCKET, Env:S3_REGION, Env:S3_ACCESS_KEY_ID, Env:S3_SECRET_ACCESS_KEY, Env:S3_ENDPOINT -ErrorAction SilentlyContinue
-   Remove-Item Env:PGHOST, Env:PGPORT, Env:PGDATABASE, Env:PGUSER, Env:PGSERVICE, Env:PGPASSFILE -ErrorAction SilentlyContinue
-   $s = Read-Host "Senha do banco de ENSAIO" -AsSecureString
+   Remove-Item Env:PGHOST, Env:PGPORT, Env:PGDATABASE, Env:PGUSER, Env:PGSERVICE, Env:PGSERVICEFILE, Env:PGPASSFILE, Env:PGPASSWORD, Env:PGOPTIONS -ErrorAction SilentlyContinue
+   $u = '<usuario_ensaio>'; $h = '<host_ensaio>'; $po = '<porta>'; $b = '<banco_ensaio>'   # componentes do alvo REGISTRADO
+   $env:ENSAIO_URL_SEM_SENHA = "postgres://${u}@${h}:${po}/${b}"
+   $s = Read-Host "Senha do banco de ENSAIO (com percent-encoding)" -AsSecureString
    $p = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
-   $env:DATABASE_URL = "postgres://<usuario_ensaio>:$p@<host_ensaio>:<porta>/<banco_ensaio>"
+   $env:DATABASE_URL = "postgres://${u}:${p}@${h}:${po}/${b}"
    Remove-Variable p, s
    ```
-   As variáveis valem só para o terminal atual. **Nunca** imprima `DATABASE_URL` (`echo`, `Get-ChildItem Env:`, `set -x`).
-3. **Verificar a identidade do servidor e do banco, no mesmo terminal e com a mesma variável**, antes de **cada** comando que se conecte ao banco (`db:preflight`, `db:migrate:incremental`, `storage:audit`, `psql`, `pg_dump`):
+   As variáveis valem só para o terminal atual. **Nunca** imprima `DATABASE_URL` (`echo`, `Get-ChildItem Env:`, `set -x`). **Não edite uma das duas URLs isoladamente**: gere as duas pelo bloco acima, no mesmo terminal.
+3. **Verificar a identidade do servidor e do banco, no mesmo terminal e com a URL sem senha**, antes de **cada** comando que se conecte ao banco (`db:preflight`, `db:migrate:incremental`, `storage:audit`, `psql`, `pg_dump`):
 
-   POSIX: `psql "$DATABASE_URL" -X -A -t -c "SELECT current_database(), inet_server_addr(), inet_server_port(), current_user"`
-   PowerShell: `psql $env:DATABASE_URL -X -A -t -c "SELECT current_database(), inet_server_addr(), inet_server_port(), current_user"`
+   POSIX: `psql "$ENSAIO_URL_SEM_SENHA" -X -A -t -c "SELECT current_database(), inet_server_addr(), inet_server_port(), current_user"`
+   PowerShell: `psql $env:ENSAIO_URL_SEM_SENHA -X -A -t -c "SELECT current_database(), inet_server_addr(), inet_server_port(), current_user"`
+
+   O `psql` usa o arquivo de senhas ou pergunta a senha. Como as duas URLs saem dos mesmos componentes, o servidor e o banco verificados são os que a `DATABASE_URL` das ferramentas Node também usa.
 
 4. **Comparar com o alvo esperado registrado no item 1 da seção 2** (nome do banco, endereço e porta). **Se houver qualquer divergência, ou dúvida, interromper e comunicar o responsável**; não repetir para "ver se muda".
    - **Limites desta verificação:** o resultado só prova que a conexão aponta para o alvo registrado; **não prova**, sozinho, que o alvo registrado seja descartável (isso depende de o responsável ter definido corretamente o alvo). `inet_server_addr()` retorna nulo em conexão por socket Unix; túneis, proxies e apelidos de DNS podem fazer o endereço divergir do esperado sem que haja erro.
@@ -76,14 +87,14 @@ Repita os passos 3 e 4 sempre que abrir um terminal novo ou alterar variáveis d
 
 ```bash
 # (identidade do banco verificada conforme a seção 2.1)
-# backup do banco de ENSAIO (formato custom), conforme docs/DATABASE_RECOVERY.md
-pg_dump -d "$DATABASE_URL" -Fc -Z 6 -f ensaio_pre_migrations.dump
+# backup do banco de ENSAIO (formato custom), conforme docs/DATABASE_RECOVERY.md; sem senha na linha de comando
+pg_dump -d "$ENSAIO_URL_SEM_SENHA" -Fc -Z 6 -f ensaio_pre_migrations.dump
 sha256sum ensaio_pre_migrations.dump
 
-# pré-verificação oficial (somente leitura; cobre 0005/0007/0009/0010/0013)
+# pré-verificação oficial (somente leitura; cobre 0005/0007/0009/0010/0013); usa a DATABASE_URL do ambiente
 npm run db:preflight
 ```
-No PowerShell, use `pg_dump -d $env:DATABASE_URL …` e `Get-FileHash -Algorithm SHA256 ensaio_pre_migrations.dump`.
+No PowerShell, use `pg_dump -d $env:ENSAIO_URL_SEM_SENHA …` e `Get-FileHash -Algorithm SHA256 ensaio_pre_migrations.dump`.
 
 Códigos de saída do `db:preflight`: **0** autorizada · **2** bloqueada (dados legados impeditivos, estrutura ausente ou estado inconsistente) · **3** não verificada. **Interromper** se o código for diferente de 0.
 
@@ -128,43 +139,53 @@ SELECT s.id, f.purpose FROM stock_destinations s JOIN files f ON f.id = s.proof_
 
 ### 4.3 `proof_url` dos eventos de logística (não tem chave estrangeira)
 
-O código aceita como `proofUrl` um caminho relativo do app **ou qualquer URL `http(s)`** **[código: `src/helpers/proofUrl.ts`]**; o recebimento com arquivo grava exatamente `/_api/v1/files-download?fileId=<id>`. Um link `http(s)` pode portanto ser um endereço absoluto **da própria aplicação** (que também será afetado pela 0024) ou um site externo. **Não classifique automaticamente todos os links `http(s)` como externos.**
+**O que o código aceita [código]:** `proofUrl` pode ser um caminho relativo do app **ou qualquer URL `http(s)`** (`src/helpers/proofUrl.ts`); o recebimento com arquivo grava exatamente `/_api/v1/files-download?fileId=<id>`. O endpoint de download lê o parâmetro com `url.searchParams.get("fileId")` (`files-download_GET.ts`), que **diferencia maiúsculas de minúsculas**: um link com `FILEID=` ou `fileid=` **não** é tratado pelo app como link válido de arquivo. Por isso as consultas abaixo diferenciam maiúsculas e minúsculas no caminho e no parâmetro (só o esquema `http`/`https` aceita variações de capitalização) e tratam variações como casos a **inspecionar**, não como links do app. Um `http(s)` pode ser um endereço absoluto **da própria aplicação** (também afetado pela 0024) ou um site externo: **não classifique todos os `http(s)` como externos**.
+
+**Classificação em uma única consulta (as classes são mutuamente exclusivas, pois vêm de um `CASE`; cada linha cai em exatamente uma):**
 
 ```sql
--- (a) caminho relativo do app (formato gravado pelo recebimento; aceita sufixo de parâmetros/âncora)
-SELECT count(*) AS relativo_do_app FROM logistics_events
- WHERE proof_url ~ '^/_api/v1/files-download\?fileId=[0-9]{1,18}([&#].*)?$';
+SELECT classe, count(*) FROM (
+  SELECT CASE
+    -- a) caminho relativo do app (formato gravado pelo recebimento; aceita sufixo de parâmetros/âncora)
+    WHEN proof_url ~ '^/_api/v1/files-download\?fileId=[0-9]{1,18}([&#].*)?$' THEN 'a_relativo_do_app'
+    -- b) URL absoluta cujo caminho é o do app (possível link da própria aplicação; confirme o host abaixo)
+    WHEN proof_url ~ '^[Hh][Tt][Tt][Pp][Ss]?://[^/]+/_api/v1/files-download\?fileId=[0-9]{1,18}([&#].*)?$' THEN 'b_absoluto_com_caminho_do_app'
+    -- c) contém o caminho do app em outra forma (prefixo de caminho antes de /_api, parâmetro diferente etc.): INSPECIONAR
+    WHEN proof_url ~ '/_api/v1/files-download' THEN 'c_caminho_do_app_em_outra_forma_inspecionar'
+    -- d) outros http(s) (externos ou de formato desconhecido)
+    WHEN proof_url ~* '^https?://' THEN 'd_outro_http'
+    -- e) qualquer outro formato não vazio
+    ELSE 'e_outro_formato'
+  END AS classe
+  FROM logistics_events
+  WHERE proof_url IS NOT NULL AND proof_url <> ''
+) t GROUP BY classe ORDER BY classe;
 
--- (b) URL http(s) ABSOLUTA que contém o caminho de download do app (possível link da própria aplicação)
-SELECT count(*) AS absoluto_com_caminho_do_app FROM logistics_events
- WHERE proof_url ~* '^https?://[^/]+/_api/v1/files-download\?fileId=[0-9]{1,18}([&#].*)?$';
+-- conferência: a soma das classes deve ser igual a este total
+SELECT count(*) AS total_nao_vazio FROM logistics_events WHERE proof_url IS NOT NULL AND proof_url <> '';
 
--- hosts dos links do tipo (b), para decidir quais são da própria aplicação
-SELECT substring(proof_url from '^https?://([^/]+)') AS host, count(*) FROM logistics_events
- WHERE proof_url ~* '^https?://[^/]+/_api/v1/files-download\?fileId=[0-9]{1,18}([&#].*)?$'
+-- hosts dos links da classe b, para decidir quais são da própria aplicação
+SELECT substring(proof_url from '^[Hh][Tt][Tt][Pp][Ss]?://([^/]+)') AS host, count(*) FROM logistics_events
+ WHERE proof_url ~ '^[Hh][Tt][Tt][Pp][Ss]?://[^/]+/_api/v1/files-download\?fileId=[0-9]{1,18}([&#].*)?$'
  GROUP BY 1 ORDER BY 2 DESC;
+```
 
--- (c) outros http(s) (externos ou de formato desconhecido)
-SELECT count(*) AS outros_http FROM logistics_events
- WHERE proof_url ~* '^https?://'
-   AND proof_url !~* '^https?://[^/]+/_api/v1/files-download\?fileId=[0-9]{1,18}([&#].*)?$';
+**Integridade dos links das classes a e b** (a extração e o filtro usam os **mesmos** padrões, ambos com diferenciação de maiúsculas):
 
--- (d) qualquer outro formato não vazio
-SELECT count(*) AS outros_formatos FROM logistics_events
- WHERE proof_url IS NOT NULL AND proof_url <> ''
-   AND proof_url !~ '^/_api/v1/files-download\?fileId=[0-9]{1,18}([&#].*)?$'
-   AND proof_url !~* '^https?://';
-
--- links dos tipos (a) e (b) cujo arquivo NÃO existe, ou existe em OUTRA organização
--- (para (b), o resultado só é conclusivo se o host for o da própria aplicação)
+```sql
+-- links cujo arquivo NÃO existe, ou existe em OUTRA organização
+-- (para a classe b, o resultado só é conclusivo se o host for o da própria aplicação)
 SELECT e.id, e.organization_id
   FROM logistics_events e
   LEFT JOIN files f ON f.id = substring(e.proof_url from '/_api/v1/files-download\?fileId=([0-9]{1,18})')::bigint
- WHERE e.proof_url ~* '^(https?://[^/]+)?/_api/v1/files-download\?fileId=[0-9]{1,18}([&#].*)?$'
+ WHERE (e.proof_url ~ '^/_api/v1/files-download\?fileId=[0-9]{1,18}([&#].*)?$'
+     OR e.proof_url ~ '^[Hh][Tt][Tt][Pp][Ss]?://[^/]+/_api/v1/files-download\?fileId=[0-9]{1,18}([&#].*)?$')
    AND (f.id IS NULL OR f.organization_id <> e.organization_id);
 ```
 
-Registrar os totais. Depois da 0024, os links dos tipos (a) e (b) que apontam para arquivos legados passam a responder 409 no modo obrigatório até a reanálise. Os de tipo (c) e (d) não passam pelo sistema.
+**Pendente de comprovação por leitura:** não há, no código, indicação de que a aplicação seja servida sob um prefixo de caminho (o nginx documentado serve `/_api/` na raiz); links com prefixo caem na **classe c**, onde precisam de inspeção manual. Se o ambiente real usar prefixo, a classe c precisa ser reclassificada pelo responsável. Os links das classes d e e não apontam para arquivos do app; a classe c **não** pode ser assumida como externa nem como do app sem inspeção.
+
+Registrar os totais. Depois da 0024, os links das classes a e b que apontam para arquivos legados passam a responder 409 no modo obrigatório até a reanálise.
 
 ## 5. Aplicação incremental e medições
 
@@ -174,11 +195,24 @@ Registrar os totais. Depois da 0024, os links dos tipos (a) e (b) que apontam pa
 # (identidade do banco verificada conforme a seção 2.1; registre a hora de início)
 date -u +"%Y-%m-%dT%H:%M:%SZ"
 time npm run db:migrate:incremental > migrations_ensaio.log 2>&1
-echo "codigo de saida: $?"
+codigo=$?          # capture IMEDIATAMENTE: qualquer comando entre os dois altera $?
+echo "codigo de saida: $codigo"
 date -u +"%Y-%m-%dT%H:%M:%SZ"
 cat migrations_ensaio.log
 ```
-(Redirecionar para arquivo, sem `pipe`, mantém `$?` como o código do `npm`. No PowerShell, use `Measure-Command { npm run db:migrate:incremental *> migrations_ensaio.log }` e `$LASTEXITCODE`.)
+Redirecionar para arquivo (sem `pipe`) mantém `$?` como o código do `npm`.
+
+```powershell
+# (identidade do banco verificada conforme a seção 2.1)
+$t = [Diagnostics.Stopwatch]::StartNew()
+cmd /c "npm run db:migrate:incremental > migrations_ensaio.log 2>&1"
+$codigo = $LASTEXITCODE        # capture IMEDIATAMENTE; não use $? para decidir sucesso
+$t.Stop()
+"codigo de saida: $codigo | duracao: $([math]::Round($t.Elapsed.TotalSeconds, 1)) s"
+Get-Content migrations_ensaio.log -Encoding UTF8
+if ($codigo -ne 0) { "FALHA: interromper e registrar (exceto o código 1 esperado no teste da seção 8)" }
+```
+**Por que `cmd /c` no PowerShell:** no Windows PowerShell 5.1, o redirecionamento `>`/`*>` grava o arquivo em **UTF-16 LE**, e `2>&1` aplicado a um comando nativo converte a saída de erro em registros de erro do PowerShell, o que pode alterar o conteúdo do log e o valor de `$?` mesmo quando o código de saída é 0. Com `cmd /c "… > arquivo 2>&1"` o redirecionamento é feito pelo `cmd`, o arquivo recebe os bytes que o processo escreveu (UTF-8, como o Node emite), e `$LASTEXITCODE` recebe o código de saída que o `cmd` repassa do `npm`. Em PowerShell 7 ou superior, `>` grava UTF-8 sem BOM por padrão e `npm run … *> arquivo` também serve; ainda assim leia `$LASTEXITCODE` logo em seguida. Se preferir `Out-File`/`Tee-Object` no 5.1, defina `-Encoding utf8` (grava com BOM) e confirme o valor de `$LASTEXITCODE` imediatamente depois. **Estas formas não foram ensaiadas**: valide a sintaxe, a codificação do log e o código de saída no ambiente descartável antes de confiar nelas.
 
 Códigos do `db:migrate:incremental`: **0** ok · **1** falha ao aplicar uma migration · **2** bloqueado pela pré-verificação · **3** pré-verificação não concluída. **Interromper** em qualquer código diferente de 0.
 
@@ -217,7 +251,7 @@ Esperado: as três linhas, na ordem. Rodar `npm run db:migrate:incremental` de n
 
 O runner não permite escolher uma migration, então não é possível medi-las "uma a uma" pelo próprio runner. Use **um** dos métodos, declarando suas limitações no relatório:
 
-**Método 1: tempo total.** O `time` / `Measure-Command` da seção 5 dá a duração do runner inteiro (inclui a pré-verificação e a partida do Node).
+**Método 1: tempo total.** O `time` (bash) ou o cronômetro (`Stopwatch`) da seção 5 dá a duração do runner inteiro (inclui a pré-verificação e a partida do Node).
 
 **Método 2: estimativa por `applied_at` (aproximação).** A coluna `schema_migrations.applied_at` tem `DEFAULT now()`, e `now()` devolve o **início da transação**; como o `INSERT` roda dentro da transação de cada migration, `applied_at` marca aproximadamente o **início** dela. A diferença entre linhas consecutivas estima a duração da migration **anterior**.
 ```sql
@@ -259,37 +293,69 @@ SELECT indexname FROM pg_indexes WHERE tablename = 'files' AND indexname IN ('id
 
 ## 8. Teste de rollback em falha controlada (atomicidade da migration 0025)
 
-**Objetivo:** confirmar que a falha de uma migration desfaz **aquele arquivo** inteiro (as colunas `ADD COLUMN` que o precedem na mesma transação), sem desfazer as migrations anteriores já confirmadas.
+**Objetivo:** confirmar que a falha da migration 0025 desfaz **aquele arquivo** inteiro (as cinco colunas `ADD COLUMN` que precedem o `CREATE INDEX` na mesma transação), sem desfazer as migrations anteriores já confirmadas em suas próprias transações. Procedimento **proposto; não executado**. Só no banco descartável confirmado (seção 2.1, repetida antes de cada passo). **Nunca em produção.**
 
-**Somente no banco descartável confirmado** (seção 2.1, repetida antes de cada passo). **Nunca em produção.** O conflito deve ser preparado **antes** de iniciar o runner. O nome e a definição do índice abaixo vêm da migration real (`db/migrations/0025_file_scan_retry.sql`: `CREATE INDEX idx_files_scan_queue ON files(scan_next_attempt_at NULLS FIRST, id) WHERE …`).
+**Princípio: evidência direta.** A ausência das colunas da 0025 e a ausência de seu registro em `schema_migrations` **não bastam** como prova do rollback: o mesmo resultado aparece se o runner falhar **antes** (por exemplo, na 0023, por dados históricos inválidos) e a 0025 nunca começar. O teste só vale se houver, juntos: (1) estado inicial em que **somente a 0025 está pendente**; (2) o conflito confirmado **antes** de iniciar o runner; (3) o **log integral** mostrando a tentativa de aplicar `0025_file_scan_retry.sql` e o erro de índice já existente; (4) código de saída **1**; (5) as duas confirmações do estado final, registradas **separadamente**.
 
-1. Parta de um banco de ensaio com as migrations 0021 a 0024 ainda pendentes **ou** com 0024 já aplicada e a 0025 pendente, e sem o índice abaixo.
-2. **Prepare o conflito** (um índice com o mesmo nome, em outra definição):
+1. **Estado inicial (somente a 0025 pendente).** Banco descartável exclusivo para este teste, com as migrations até a 0024 aplicadas. Obtenha-o restaurando o dump do estado após a 0024 (Método 3 da seção 5.3) ou aplicando o runner de um checkout em que a última migration seja a 0024 (`77d3a01`). Confirme **antes** de prosseguir, e guarde as saídas:
+   ```sql
+   SELECT id FROM schema_migrations WHERE id >= '0021' ORDER BY id;   -- esperado: 0021, 0022, 0023, 0024; sem 0025
+   SELECT column_name FROM information_schema.columns
+    WHERE table_schema = current_schema() AND table_name = 'files'
+      AND column_name IN ('scan_attempts', 'scan_next_attempt_at', 'scan_lease_until', 'scan_exhausted_at', 'scan_last_reason');   -- esperado: 0 linhas
+   ```
+   No checkout usado para o teste (`3348e27`, cuja última migration é a 0025), confirme que **o único arquivo ainda não registrado é a 0025**:
+   ```bash
+   ls db/migrations/*.sql | sed 's#.*/##' | LC_ALL=C sort > arquivos.txt
+   psql "$ENSAIO_URL_SEM_SENHA" -X -A -t -c "SELECT id FROM schema_migrations" > registradas.bruto; echo "psql: $?"   # deve ser 0
+   tr -d '\r' < registradas.bruto | LC_ALL=C sort > registradas.txt
+   comm -23 arquivos.txt registradas.txt          # esperado: somente 0025_file_scan_retry.sql
+   ```
+   (No PowerShell, liste `Get-ChildItem db/migrations/*.sql` e compare com a consulta, ordenando as duas listas do mesmo modo.) Rode `npm run db:preflight` e exija código **0**. **Se qualquer confirmação falhar, interrompa.**
+2. **Preparar o conflito, antes do runner.** O nome vem da migration real (`db/migrations/0025_file_scan_retry.sql`: `CREATE INDEX idx_files_scan_queue ON files(scan_next_attempt_at NULLS FIRST, id) WHERE …`). Crie um índice **com o mesmo nome e outra definição**:
    ```sql
    CREATE INDEX idx_files_scan_queue ON files (id);
    ```
-3. Rode o runner (seção 5). **Esperado:** as migrations anteriores à 0025 (se pendentes) são aplicadas e confirmadas; a 0025 **falha** no `CREATE INDEX` ("relation … already exists"), a mensagem "Falha ao aplicar migração" aparece e o código de saída é **1**.
-4. **Verifique o rollback da transação da 0025** (todas devem confirmar o desfazimento):
+3. **Confirmar o conflito presente e guardar o estado de referência**, antes de iniciar o runner:
    ```sql
-   -- nenhuma das cinco colunas da 0025 deve existir (esperado: 0 linhas)
-   SELECT column_name FROM information_schema.columns
-    WHERE table_name = 'files'
-      AND column_name IN ('scan_attempts', 'scan_next_attempt_at', 'scan_lease_until', 'scan_exhausted_at', 'scan_last_reason');
-   -- a 0025 não pode estar registrada (esperado: 0 linhas)
-   SELECT id FROM schema_migrations WHERE id = '0025_file_scan_retry.sql';
-   -- as anteriores permanecem registradas (esperado: 0024 presente)
-   SELECT id FROM schema_migrations WHERE id = '0024_file_scan_status.sql';
+   SELECT indexname, indexdef FROM pg_indexes
+    WHERE schemaname = current_schema() AND tablename = 'files' AND indexname = 'idx_files_scan_queue';
+   -- esperado: 1 linha, definição "... USING btree (id)" (NÃO a da 0025, que usa scan_next_attempt_at e WHERE)
+   SELECT id FROM schema_migrations ORDER BY id;     -- salve como antes_registradas.txt
    ```
-5. **Registre as evidências** (saídas das consultas, código de saída, log do runner), **antes** da limpeza.
-6. **Limpeza, somente no banco descartável:** `DROP INDEX idx_files_scan_queue;` Reaplique o runner; a 0025 deve concluir com código 0.
+4. **Rodar o runner** com o bloco da seção 5, gravando em `rollback_ensaio.log`, e capturar o código de saída **imediatamente**. Preserve o log integral.
+5. **Evidência direta no log (todas as condições; a falha de qualquer uma invalida o teste, que deve ser interrompido):**
+   - o log existe, não está vazio nem truncado;
+   - contém `Aplicando: 0025_file_scan_retry.sql...`;
+   - contém `Falha ao aplicar migração:` e, na mesma mensagem, o nome `idx_files_scan_queue` com texto indicando que a relação já existe (a mensagem vem do servidor, no idioma configurado em `lc_messages`; em inglês, `relation "idx_files_scan_queue" already exists`);
+   - **não** contém `Aplicada com sucesso: 0025_file_scan_retry.sql` e não contém nenhuma outra linha `Aplicando:` anterior à da 0025 (as anteriores devem aparecer como `Já aplicada, pulando:`);
+   - o código de saída é **1**.
+   ```bash
+   grep -n "Aplicando: 0025_file_scan_retry.sql" rollback_ensaio.log
+   grep -n "Falha ao aplicar migração" rollback_ensaio.log
+   grep -n "idx_files_scan_queue" rollback_ensaio.log
+   grep -c "Aplicada com sucesso" rollback_ensaio.log        # esperado: 0
+   ```
+   (No PowerShell, use `Select-String -Path rollback_ensaio.log -Pattern '…'`.) **Interromper e não aceitar o teste** se houve falha anterior à 0025, se a mensagem não corresponde ao conflito esperado, se não é possível confirmar que a 0025 foi iniciada, se o código não é 1, ou se o log está ausente ou truncado. Não repetir "para ver se muda": registre e comunique.
+6. **Confirmação 1: rollback da 0025.** Registre à parte, depois do passo 5 passar:
+   ```sql
+   SELECT column_name FROM information_schema.columns
+    WHERE table_schema = current_schema() AND table_name = 'files'
+      AND column_name IN ('scan_attempts', 'scan_next_attempt_at', 'scan_lease_until', 'scan_exhausted_at', 'scan_last_reason');   -- esperado: 0 linhas
+   SELECT id FROM schema_migrations WHERE id = '0025_file_scan_retry.sql';                                                          -- esperado: 0 linhas
+   SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'files' AND indexname = 'idx_files_scan_queue'; -- esperado: ainda a definição de conflito (id)
+   ```
+7. **Confirmação 2: migrations anteriores intactas.** Registre à parte: `SELECT id FROM schema_migrations ORDER BY id` deve ser **idêntico** ao `antes_registradas.txt` (compare com `diff`, normalizando fins de linha), com a 0024 presente; e a coluna `files.scan_status` deve existir. As anteriores permanecem aplicadas porque cada arquivo roda na sua própria transação.
+8. **Evidências:** guarde o log integral, o código de saída, as saídas dos passos 1, 3, 5, 6 e 7, **antes** da limpeza.
+9. **Limpeza, somente no banco descartável (identidade verificada) e depois de guardar as evidências:** `DROP INDEX idx_files_scan_queue;` Reexecute o runner; esperado: código **0**, log com `Aplicada com sucesso: 0025_file_scan_retry.sql`, e `pg_indexes` mostrando a definição real da 0025 (com `scan_next_attempt_at` e `WHERE scan_status IN ('pendente', 'indisponivel') AND scan_exhausted_at IS NULL`).
 
-Se, no passo 3, o runner terminar por **outro** motivo (por exemplo, a pré-verificação com código 2 ou 3), registre e interrompa: **não contorne**.
+Se o runner terminar por **qualquer outro motivo** (pré-verificação com código 2 ou 3, falha numa migration anterior, erro de conexão, mensagem diferente), registre e interrompa: **não contorne** e **não use as confirmações 1 e 2 como prova**.
 
 ## 9. Critérios e evidências
 
-**Aprovar o ensaio quando:** a identidade do banco foi verificada e coincide com o alvo registrado antes de cada comando; a pré-verificação sai com 0; as consultas da seção 4.2 não devolvem violações; as migrations aplicam com código 0 e na ordem; as contagens antes/depois são idênticas; o efeito da 0024 é o esperado; o bloqueio e a duração da migration **inteira** (0023, 0024 e 0025) foram medidos em volume representativo e aceitos pela operação; o teste de rollback comprovou o desfazimento. **Nenhum critério depende apenas de CI verde.**
+**Aprovar o ensaio quando:** a identidade do banco foi verificada e coincide com o alvo registrado antes de cada comando; a pré-verificação sai com 0; as consultas da seção 4.2 não devolvem violações; as migrations aplicam com código 0 e na ordem; as contagens antes/depois são idênticas; o efeito da 0024 é o esperado; o bloqueio e a duração da migration **inteira** (0023, 0024 e 0025) foram medidos em volume representativo e aceitos pela operação; o teste de rollback atendeu a **todas** as condições de evidência direta da seção 8 (estado inicial com somente a 0025 pendente, conflito confirmado antes, log integral com a tentativa de `0025_file_scan_retry.sql` e o erro de índice já existente, código 1, e as confirmações 1 e 2 registradas separadamente); a ausência das colunas e do registro da 0025, isoladamente, **não** é prova suficiente. **Nenhum critério depende apenas de CI verde.**
 
-**Interromper quando:** qualquer código de saída diferente de 0 (exceto o código 1 esperado no teste da seção 8); violação nas consultas 4.2; contagem divergente; **divergência ou dúvida na verificação de identidade do banco**.
+**Interromper quando:** qualquer código de saída diferente de 0 (exceto o código 1 esperado no teste da seção 8, e somente se o log mostrar que a falha foi a da 0025); violação nas consultas 4.2; contagem divergente; **divergência ou dúvida na verificação de identidade do banco**; qualquer comando que exigiria colocar a senha na linha de comando.
 
 **Evidências a guardar:** data e hora; commit da aplicação; alvo esperado e a saída da verificação de identidade (sem credenciais); dump pré-migration e seu checksum; saídas de todas as consultas; `migrations_ensaio.log` revisado; códigos de saída; tempos e intervalos de bloqueio medidos, com o tamanho da tabela; resultado do teste de rollback; observações. Nunca guardar dados pessoais, conteúdos de arquivos nem credenciais.
 

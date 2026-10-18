@@ -94,11 +94,11 @@ Cada linha de `files` aponta para o provedor em que foi gravada; o ambiente pode
 -- somente leitura; identidade do banco verificada conforme a seção 5.2
 SELECT storage_provider, count(*), sum(size_bytes) AS bytes_registrados FROM files GROUP BY storage_provider ORDER BY 1;
 ```
-Valores de `storage_provider` diferentes de `local` e `s3` são **metadado inconsistente** e devem ser investigados antes do backup. Use a mesma consulta (parte de `docs/CHECKLIST_MIGRATIONS_0023_0025.md`, seção 4.1) para registrar o inventário. Se houver objetos nos dois provedores, **os dois cenários (seções 6 e 7) se aplicam**, cada um ao seu conjunto de objetos.
+Valores de `storage_provider` diferentes de `local` e `s3` são **metadado inconsistente** e devem ser investigados antes do backup. Registre o resultado desta consulta como inventário. (A consulta da seção 4.1 de `docs/CHECKLIST_MIGRATIONS_0023_0025.md` agrupa por `purpose` e `storage_provider` e **não** soma tamanhos: ela também mostra os provedores, mas por finalidade, e serve de complemento, não de substituta.) Se houver objetos nos dois provedores, **os dois cenários (seções 6 e 7) se aplicam**, cada um ao seu conjunto de objetos.
 
 ### 5.2 Isolamento do ambiente (obrigatório antes de qualquer comando que se conecte ao banco ou ao armazenamento)
 
-As ferramentas do projeto (`db/storage-audit.ts`, `db/preflight.ts`, `db/run-migrations.ts`) importam `dotenv/config` (carrega um `.env` do diretório de trabalho) e **não têm trava contra operar num banco que não seja descartável** **[código]**. Uma execução num checkout com `.env` de produção pode alcançar o banco ou o bucket **reais** (no caso do `storage:audit`, só leitura, mas ainda produção). Siga **integralmente** a seção 2.1 de `docs/CHECKLIST_MIGRATIONS_0023_0025.md` (checkout sem `.env`, conexão definida explicitamente, `FLOOT_DATABASE_URL` e variáveis `PG*` neutralizadas, verificação de `current_database()`, `inet_server_addr()` e `inet_server_port()` comparada com um alvo previamente registrado, interrupção em caso de divergência). Essa verificação **prova só que a conexão aponta para o alvo registrado**, não que o alvo registrado seja descartável.
+As ferramentas do projeto (`db/storage-audit.ts`, `db/preflight.ts`, `db/run-migrations.ts`) importam `dotenv/config` (carrega um `.env` do diretório de trabalho) e **não têm trava contra operar num banco que não seja descartável** **[código]**. Uma execução num checkout com `.env` de produção pode alcançar o banco ou o bucket **reais** (no caso do `storage:audit`, só leitura, mas ainda produção). Siga **integralmente** a seção 2.1 de `docs/CHECKLIST_MIGRATIONS_0023_0025.md` (checkout sem `.env`, conexão definida explicitamente **sem senha em argumento de linha de comando** (`ENSAIO_URL_SEM_SENHA` para `psql`/`pg_dump`, com arquivo de senhas ou solicitação interativa, e `DATABASE_URL` por variável de ambiente para as ferramentas Node), `FLOOT_DATABASE_URL` e variáveis `PG*` neutralizadas, verificação de `current_database()`, `inet_server_addr()` e `inet_server_port()` comparada com um alvo previamente registrado, interrupção em caso de divergência). Essa verificação **prova só que a conexão aponta para o alvo registrado**, não que o alvo registrado seja descartável.
 
 Para o `storage:audit` num ensaio local, além disso:
 - selecione explicitamente o provedor e a raiz de teste, e neutralize as variáveis do S3:
@@ -125,29 +125,52 @@ Para o `storage:audit` num ensaio local, além disso:
 1. Verificar o isolamento (seção 5.2) e registrar o inventário de provedores (seção 5.1).
 2. Registrar o instante de início. Gerar o dump do banco conforme `DATABASE_RECOVERY.md` (`pg_dump -Fc`) e registrar seu checksum.
 3. **Depois do fim do dump**, copiar o diretório de objetos para o destino externo, preservando a estrutura `<organizationId>/<uuid>` (pré-condições da seção 3.1).
-4. **[adicional]** Gerar o **manifesto de checksums** dos objetos copiados e guardá-lo **separado do meio de backup** (conforme o raciocínio de `DATABASE_RECOVERY.md`, seção 4, de não manter o checksum ao lado do backup que ele protege):
+4. **Manifesto de checksums (recomendado; exigido pela verificação de integridade da seção 6.3 sempre que existir).** Gerar o manifesto dos objetos copiados e guardá-lo **separado do meio de backup** (conforme o raciocínio de `DATABASE_RECOVERY.md`, seção 4, de não manter o checksum ao lado do backup que ele protege). Registre o **caminho absoluto** do manifesto:
    ```bash
-   (cd "<raiz_dos_objetos>" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > manifesto_objetos.sha256
+   MANIFESTO="<caminho_absoluto>/manifesto_objetos.sha256"
+   (cd "<raiz_dos_objetos>" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > "$MANIFESTO"
+   codigo=$?; echo "manifesto: codigo=$codigo linhas=$(wc -l < "$MANIFESTO")"   # as linhas devem igualar a contagem de objetos copiados
    ```
-   No PowerShell, `Get-ChildItem -Recurse -File | Get-FileHash -Algorithm SHA256` produz os mesmos dados em outro formato.
+   No PowerShell, `Get-ChildItem -Recurse -File | Get-FileHash -Algorithm SHA256` produz os mesmos dados em outro formato (não ensaiado). **Se o método de backup escolhido não gerar um manifesto, o procedimento não pode alegar que os checksums foram validados** (ver 6.3, item 4, e 6.4).
 5. Registrar contagem de objetos e bytes copiados e a hora de término, e guardar o relatório de `storage:audit` do momento do backup.
 
 ### 6.3 Critério de aceitação da restauração [proposta]
 
-A restauração é feita **num ambiente separado**, com banco e diretório **novos**, nunca sobre a produção, e com o isolamento da seção 5.2. **Só é considerada bem-sucedida se TODAS as verificações abaixo passarem:**
+A restauração é feita **num ambiente separado**, com banco e diretório **novos**, nunca sobre a produção, e com o isolamento da seção 5.2. **Só é considerada bem-sucedida se TODAS as verificações aplicáveis abaixo passarem.** Os itens 1, 2, 3 e 5 são sempre aplicáveis; o item 4 é aplicável **sempre que o backup utilizado contiver um manifesto de checksums**.
 
 1. **Presença:** todos os objetos esperados estão presentes (nenhum **registro sem objeto**).
-2. **Órfãos e metadados:** `storage:audit` com saída **0**, ou todas as inconsistências explicadas e registradas. Órfãos de uploads feitos entre o dump e a cópia são esperados (seção 3.1) e **não devem ser apagados** sem decisão de retenção.
-3. **Tamanho [adicional]:** o tamanho de **cada** objeto restaurado é igual a `files.size_bytes`:
+2. **Órfãos e metadados:** `storage:audit` com saída **0**, ou todas as inconsistências explicadas e registradas. Órfãos de uploads feitos entre o dump e a cópia são esperados (seção 3.1) e **não devem ser apagados** sem decisão de retenção. **A saída 0 é necessária, mas não suficiente.**
+3. **Tamanho [adicional, obrigatório]:** o tamanho de **cada** objeto restaurado é igual a `files.size_bytes`.
    ```bash
-   psql "$DATABASE_URL" -X -A -t -F ' ' -c "SELECT storage_key, size_bytes FROM files WHERE storage_provider = 'local'" | LC_ALL=C sort > esperado_local.txt
-   (cd "<raiz_restaurada>" && find . -type f -printf '%P %s\n' | LC_ALL=C sort) > encontrado_local.txt
-   diff esperado_local.txt encontrado_local.txt
+   # 1) exportar o esperado SEM encadear o psql num pipe, para que o código de saída dele seja verificado
+   psql "$ENSAIO_URL_SEM_SENHA" -X -A -t -F ' ' -c "SELECT storage_key, size_bytes FROM files WHERE storage_provider = 'local'" > esperado_local.bruto
+   echo "psql: $?"      # tem de ser 0; qualquer outro valor invalida a comparação
+   # 2) normalizar fim de linha (o psql nativo do Windows pode gravar CRLF) e ordenar
+   tr -d '\r' < esperado_local.bruto | LC_ALL=C sort > esperado_local.txt
+   # 3) listar o que foi restaurado, com a mesma normalização e a mesma ordenação
+   (cd "<raiz_restaurada>" && find . -type f -printf '%P %s\n') | tr -d '\r' | LC_ALL=C sort > encontrado_local.txt
+   # 4) conferir as contagens e comparar
+   wc -l esperado_local.txt encontrado_local.txt     # esperado_local.txt deve ter tantas linhas quanto o inventário do provedor local (seção 5.1)
+   diff esperado_local.txt encontrado_local.txt; echo "diff: $?"   # 0 = idêntico
    ```
-   (`find -printf` é do GNU find, presente no Git Bash do Windows e em Linux.) Uma chave presente nos dois arquivos com tamanhos diferentes é um objeto truncado ou substituído; uma chave só em `esperado` é registro sem objeto; só em `encontrado`, órfão. No PowerShell, `Get-ChildItem -Recurse -File` fornece `FullName` e `Length`.
-4. **Checksum [adicional], quando tecnicamente viável:** `(cd "<raiz_restaurada>" && sha256sum --quiet -c "<manifesto_objetos.sha256>")` sem nenhuma falha (a opção `--quiet` imprime só as falhas; arquivo ausente também falha).
+   O `tr -d '\r'` só remove o retorno de carro; **não oculta erros do `psql`**, cuja mensagem vai para a saída de erro e cujo código foi conferido no passo 1 (uma saída vazia com código 0 aparece na conferência de contagem do passo 4). **Diferenças entre ambientes:** o `find -printf` é do GNU find (presente em Linux e no Git Bash do Windows, ausente no `find` do macOS); o `psql` nativo do Windows executado no Git Bash pode gravar CRLF (comportamento **não verificado aqui**); no PowerShell, gere as duas listas (`Get-ChildItem -Recurse -File` fornece `FullName` e `Length`) e ordene ambas com a mesma ordenação ordinal. **Este comando não foi ensaiado.** Uma chave presente nos dois arquivos com tamanhos diferentes é um objeto truncado ou substituído; uma chave só em `esperado` é registro sem objeto; só em `encontrado`, órfão.
+4. **Checksum [adicional, obrigatório quando existir manifesto]:**
+   ```bash
+   MANIFESTO="<caminho_absoluto>/manifesto_objetos.sha256"     # ABSOLUTO: a conferência muda de diretório antes de ler o arquivo
+   [ -f "$MANIFESTO" ] || echo "manifesto não encontrado: a conferência NÃO foi feita"
+   (cd "<raiz_restaurada>" && sha256sum --quiet -c "$MANIFESTO"); echo "sha256sum: $?"   # 0 = nenhum arquivo ausente ou divergente
+   ```
+   Regras:
+   - se o backup utilizado **contém** um manifesto, sua verificação é **parte obrigatória** da restauração, e qualquer falha (arquivo ausente ou divergente) **reprova** a restauração;
+   - o caminho do manifesto deve ser **absoluto** (um caminho relativo passaria a apontar para outro lugar depois do `cd`); confirme que o arquivo existe antes de interpretar o resultado;
+   - se o formato de backup escolhido **não produz** manifesto, o procedimento **não pode alegar** que os checksums foram validados: registre "checksums não verificados" e a validação adicional necessária;
+   - o manifesto detecta objetos ausentes ou divergentes **entre os listados**; não detecta objetos extras (órfãos), que ficam a cargo do `storage:audit`.
 5. **Amostra lida no ambiente isolado [adicional]:** ler uma amostra de objetos (por organização e finalidade) e conferir que o tipo detectado (por exemplo, com `file --mime-type`) corresponde ao `content_type` registrado. O download pela aplicação restaurada exige subir a aplicação contra o banco restaurado, o que **requer autorização específica**.
 6. **Preservar** os resultados, contagens, tempos e erros do ensaio (seção 9). Qualquer erro não explicado **reprova** o ensaio.
+
+### 6.4 Aptidão do método de backup para produção
+
+Para considerar uma estratégia de backup **apta à produção**, é necessário que exista: (a) um **método de verificação da integridade dos objetos** (manifesto de checksums ou equivalente definido para o provedor); (b) **critérios de aceitação definidos** (os da seção 6.3); (c) **evidências preservadas** (seção 9) de pelo menos um ensaio completo bem-sucedido em volume representativo. Sem isso, a estratégia **não é apta**, ainda que o `storage:audit` dê saída 0. Se houver limitação técnica (por exemplo, o formato de backup não gera manifesto), **documente a limitação e a validação adicional necessária**; não enfraqueça os critérios para facilitar o procedimento.
 
 ## 7. Cenário B: armazenamento de objetos S3 privado
 
@@ -163,7 +186,7 @@ A restauração é feita **num ambiente separado**, com banco e diretório **nov
 - a decisão de migrar objetos entre `local` e `s3` precisa considerar que cada linha de `files` aponta para o provedor em que foi gravada (seção 5.1).
 
 ### 7.2 Restauração e verificação [proposta]
-Restaurar o banco em ambiente separado, apontar para o bucket (ou uma versão/réplica) **de teste** e rodar `npm run storage:audit -- --provider s3 --out <relatorio>.json` com o isolamento da seção 5.2. O S3 é auditado só com `ListObjectsV2` em todas as páginas; a auditoria só é completa se todas forem lidas. A listagem do S3 informa tamanhos, mas **a ferramenta atual não os compara** com `files.size_bytes`: a verificação de tamanho e de checksum do cenário B é **[adicional]** e precisa ser definida no ensaio.
+Restaurar o banco em ambiente separado, apontar para o bucket (ou uma versão/réplica) **de teste** e rodar `npm run storage:audit -- --provider s3 --out <relatorio>.json` com o isolamento da seção 5.2. O S3 é auditado só com `ListObjectsV2` em todas as páginas; a auditoria só é completa se todas forem lidas. A listagem do S3 informa tamanhos, mas **a ferramenta atual não os compara** com `files.size_bytes`: a verificação de tamanho e de checksum do cenário B é **[adicional]** e precisa ser definida no ensaio. O **mesmo princípio da seção 6.4 vale aqui**: sem um método definido de verificação de integridade dos objetos no S3 (tamanho comparado a `files.size_bytes` e um checksum confiável, cujo método depende do provedor e **não** está definido), com critérios de aceitação e evidências preservadas, o cenário B **não é apto à produção**. Se o método escolhido não permitir comparar checksums de forma confiável, documente a limitação e a validação adicional necessária.
 
 ## 8. O que ainda falta para um runbook completo de recuperação de desastre
 
@@ -175,7 +198,7 @@ Este documento **não** contém uma sequência operacional validada de recupera�
 - **tratamento e controle de acesso aos dados pessoais presentes nas cópias** (o banco restaurado contém usuários, e-mails, hashes de senha e sessões; ensaios devem usar dados sanitizados e o ambiente restaurado deve ser isolado);
 - critérios de decisão de quando promover a restauração para produção, e de reversão.
 
-Nenhum desses itens foi ensaiado. **Não invento sequência operacional validada.**
+Nenhum desses itens foi ensaiado. **Não existe sequência operacional validada de recuperação.**
 
 ## 9. Ensaio recomendado (a executar somente com autorização)
 
@@ -187,7 +210,7 @@ Em ambiente descartável, com dados sanitizados e **sem tocar na produção**, c
 5. Confirmar (ou refutar) a hipótese da seção 3.1, incluindo o efeito de uploads feitos durante a cópia.
 6. Medir tempos de backup e restauração com um volume realista.
 
-**Evidências a guardar após cada ensaio:** data e hora; commit da aplicação; alvo esperado e saída da verificação de identidade do banco (sem credenciais); checksum do dump; inventário de provedores; contagens e bytes de objetos copiados e restaurados; manifesto de checksums e seu resultado de conferência; resultado da comparação de tamanhos; relatórios JSON do `storage:audit`; códigos de saída de cada comando; tempos medidos; divergências observadas e como foram resolvidas. Revisar os registros antes de arquivar. Nunca guardar conteúdo de arquivos, nomes originais, credenciais nem URLs com segredo.
+**Evidências a guardar após cada ensaio:** data e hora; commit da aplicação; alvo esperado e saída da verificação de identidade do banco (sem credenciais); checksum do dump; inventário de provedores; contagens e bytes de objetos copiados e restaurados; manifesto de checksums e seu resultado de conferência (ou o registro expresso de que **checksums não foram verificados**, com o motivo); resultado da comparação de tamanhos; relatórios JSON do `storage:audit`; códigos de saída de cada comando; tempos medidos; divergências observadas e como foram resolvidas. Revisar os registros antes de arquivar. Nunca guardar conteúdo de arquivos, nomes originais, credenciais nem URLs com segredo.
 
 ## 10. O que este documento NÃO afirma
 
@@ -195,6 +218,7 @@ Em ambiente descartável, com dados sanitizados e **sem tocar na produção**, c
 - Que exista rotina de backup de arquivos, destino de cópia, bucket, conta ou credencial.
 - Que a restauração de arquivos tenha sido ensaiada.
 - Que o `storage:audit` valide tamanho ou conteúdo (ele não valida).
+- Que os comandos de comparação de tamanho e de conferência de checksum tenham sido ensaiados (não foram).
 - Que seja um runbook completo de recuperação de desastre.
 - Qualquer valor de frequência, retenção, RPO, RTO, capacidade ou custo.
 
