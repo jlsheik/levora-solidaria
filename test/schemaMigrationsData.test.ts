@@ -21,6 +21,13 @@ const urlFor = (db: string) => { const u = new URL(BASE); u.pathname = `/${db}`;
 const MIGRATIONS = readdirSync(path.join(ROOT, "db", "migrations")).filter((f) => f.endsWith(".sql")).sort();
 const BASELINE = readFileSync(path.join(ROOT, "test", "fixtures", "schema-baseline-590ff60.sql"), "utf8");
 
+// Única alteração de dado do baseline que uma migração faz DE PROPÓSITO (docs/IDENTIDADE_E_AUTENTICACAO_ESPECIFICACAO.md §25.1/§25.3, db/migrations/0026): o admin legado deixa de ter
+// users.role = admin e passa a ter platform_access. Qualquer OUTRA diferença continua reprovando; e a exceção só vale se o efeito esperado (platform_access) existir.
+const EXPECTED_DATA_CHANGES: Record<string, string[]> = { "0026_identity_foundation.sql": ['users#3.role: "admin" → "user"'] };
+// os instantâneos são cumulativos: a mudança prevista da 0026 continua visível nos passos seguintes
+const expectedUpTo = (file: string) => Object.entries(EXPECTED_DATA_CHANGES).filter(([m]) => m <= file).flatMap(([, d]) => d);
+const unexpected = (file: string, diffs: string[]) => diffs.filter((d) => !expectedUpTo(file).includes(d));
+
 let admin: postgres.Sql;
 const open = (name: string) => postgres(urlFor(name), { max: 1, prepare: false, onnotice: () => {} });
 // `skipPreflight`: o harness (passo a passo e falhas) precisa chegar à migração em si; a pré-verificação (db/legacyPreflight.ts) tem os próprios testes em test/legacyPreflight.test.ts
@@ -173,7 +180,14 @@ describe("atualização migração por migração com o runner real", () => {
   });
 
   it("NENHUMA migração altera, perde, troca ou duplica registro do baseline (comparação linha a linha após cada passo)", () => {
-    for (const s of stepLog) expect(s.diffs, `${s.file} alterou dados do baseline`).toEqual([]);
+    for (const s of stepLog) expect(unexpected(s.file, s.diffs), `${s.file} alterou dados do baseline`).toEqual([]);
+    // a exceção é exata: a 0026 TEM de ter feito a mudança prevista (e nenhuma outra migração a faz)
+    for (const s of stepLog) expect(s.diffs.filter((d) => !unexpected(s.file, [d]).length), s.file).toEqual(expectedUpTo(s.file));
+  });
+
+  it("a 0026 move o único admin legado para platform_access (owner) em vez de apagá-lo: nada é perdido", async () => {
+    const rows = await MAIN`SELECT user_id, level, status, grant_origin FROM platform_access`;
+    expect(rows.map((r) => ({ ...r }))).toEqual([{ user_id: 3, level: "owner", status: "active", grant_origin: "migrated_from_users_role" }]);
   });
 
   it("os relacionamentos do baseline continuam íntegros (nenhuma chave estrangeira órfã) e as sequências seguem usáveis", async () => {
@@ -259,7 +273,8 @@ describe("segunda execução e estado final", () => {
     expect(r.status).toBe(0); expect(r.out).toContain("Nenhuma migração pendente"); expect(r.out).not.toContain("Aplicando:");
     const now = await snapshot(MAIN, baselineColumns);
     // os testes de uso só ACRESCENTARAM linhas (as inserções de controle foram removidas): as de referência seguem idênticas
-    const diffs = diffSnapshots(before, now);
+    const allowed = new Set(Object.values(EXPECTED_DATA_CHANGES).flat());
+    const diffs = diffSnapshots(before, now).filter((d) => !allowed.has(d)); // exceção da 0026 (acima); o resto segue idêntico
     const novas = diffs.filter((d) => /linha NOVA/.test(d)); // a linha de audit_log inserida pelo teste da 0003 é a única acrescentada a uma tabela do baseline
     expect(diffs.filter((d) => !/linha NOVA/.test(d))).toEqual([]);
     expect(novas).toEqual([expect.stringContaining("audit_log#4: linha NOVA")]);

@@ -74,7 +74,8 @@ describe("Fase 90.1 — exposição dos recovery codes e acessibilidade (contrat
   it("sem persistência no navegador e sem cache de mutação para os códigos: nenhum localStorage/sessionStorage/persistQueryClient em src; a regeneração usa gcTime 0 e reset()", () => {
     for (const f of walk("src").filter((x) => /\.(ts|tsx)$/.test(x))) {
       const src = read(f);
-      expect(src, f).not.toMatch(/persistQueryClient|localStorage|sessionStorage/);
+      // `localStorageRoot` (src/helpers/storageAdapter.tsx) é o diretório de uploads em disco do SERVIDOR, não o localStorage do navegador: o limite de palavra o exclui.
+      expect(src, f).not.toMatch(/persistQueryClient|\blocalStorage\b|sessionStorage/);
     }
     const page = read("src/pages/seguranca.tsx");
     expect(page).toContain("gcTime: 0");
@@ -94,7 +95,9 @@ describe("Fase 90.1 — exposição dos recovery codes e acessibilidade (contrat
     for (const f of ["src/components/PasswordLoginForm.module.css", "src/components/PasswordRegisterForm.module.css"]) {
       const css = read(f);
       const block = /\.errorMessage \{[^}]*\}/.exec(css)![0];
-      expect(block).toContain("color: var(--foreground)");
+      // A master (Fase 94) usa o token --error-text, cujo contraste ≥ 4,5:1 sobre as superfícies e sobre o fundo tingido de erro é provado em test/tokensContraste.test.ts;
+      // a Fase 90.1 usava --foreground. Qualquer um dos dois passa; o vermelho puro (--error) continua proibido abaixo.
+      expect(block).toMatch(/color: var\(--(?:foreground|error-text)\)/);
       expect(block).not.toMatch(/\n\s*color: var\(--error\)/);
     }
     const mfaCss = read("src/components/mfa.module.css");

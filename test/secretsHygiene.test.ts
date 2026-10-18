@@ -19,6 +19,9 @@ const PATTERNS: Array<[string, RegExp]> = [
 ];
 
 // Valores de teste declaradamente falsos (ex.: sk-ant-teste-...-nao-real) não são segredos.
+// Arquivos que contêm formatos de segredo FALSOS de propósito, para testar o próprio scanner do CI (test/qaCi.test.ts, findSecrets: "token JWT").
+const SCANNER_FIXTURES = new Set(["test/qaCi.test.ts"]);
+
 const PLACEHOLDER = /nao-real|teste|exemplo|example|sintetic/i;
 
 describe("nenhuma credencial em arquivo versionado", () => {
@@ -33,6 +36,7 @@ describe("nenhuma credencial em arquivo versionado", () => {
   it("nenhum formato conhecido de segredo/token/chave privada nos arquivos versionados", () => {
     const hits: string[] = [];
     for (const file of files) {
+      if (SCANNER_FIXTURES.has(file)) continue;
       let text: string;
       try {
         text = readFileSync(file, "utf8");

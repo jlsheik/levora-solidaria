@@ -1,16 +1,16 @@
 /**
- * Migração 0015 (fundação de identidade) aplicada sobre o schema ANTERIOR (HEAD a628bd4) em bancos temporários,
+ * Migração 0026 (fundação de identidade; originalmente 0015) aplicada sobre o schema ANTERIOR (master 26a5a45, fixture test/fixtures/schema-baseline-26a5a45.sql) em bancos temporários,
  * para provar o backfill de users.role='admin' → platform_access SEM adivinhar, a remoção gradual de role='admin',
  * o backfill de sessões e o aborto seguro quando há dados ambíguos (várias senhas por usuário, vários admins).
  * Banco temporário `levora_f89_mig_test` (sufixo _test — mesma guarda dos testes de integração).
  */
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import postgres from "postgres";
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const BASELINE_COMMIT = "a628bd4"; // último commit ANTES da Fase 89
+// Baseline = db/schema.sql da master 26a5a45 (já com as migrations 0014–0025), congelado em fixture: a CI faz checkout raso e não pode usar `git show`.
+const BASELINE_FIXTURE = path.resolve(__dirname, "fixtures/schema-baseline-26a5a45.sql");
 const MIGRATION = readFileSync(path.resolve(__dirname, "../db/migrations/0026_identity_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0016 = readFileSync(path.resolve(__dirname, "../db/migrations/0027_mfa_foundation.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0017 = readFileSync(path.resolve(__dirname, "../db/migrations/0028_registration_access_codes.sql"), "utf-8").replace(/\r\n/g, "\n");
@@ -31,11 +31,7 @@ function migUrl(): string {
 }
 
 function baselineSchema(): string {
-  try {
-    return execFileSync("git", ["show", `${BASELINE_COMMIT}:db/schema.sql`], { cwd: path.resolve(__dirname, ".."), encoding: "utf-8", maxBuffer: 64 * 1024 * 1024 });
-  } catch (e) {
-    throw new Error(`Não foi possível ler o schema anterior (git show ${BASELINE_COMMIT}:db/schema.sql). Este teste precisa do histórico do repositório. ${(e as Error).message}`);
-  }
+  return readFileSync(BASELINE_FIXTURE, "utf-8");
 }
 
 let sql: postgres.Sql;
@@ -180,7 +176,7 @@ describe("migração 0015 — sessões, senhas e triggers", () => {
   it("a migração NÃO é reaplicável por engano (objetos já existem) e o schema.sql novo cria o MESMO conjunto de objetos", async () => {
     await runMigration();
     await expect(runMigration()).rejects.toThrow();
-    // schema.sql atual = baseline + 0015 + 0016 (Fase 90) + 0017 (Fase 91) + 0018 (Fase 92) + 0019 (Fase 92.1) + 0020 (Fase 93)
+    // schema.sql atual = baseline (master 26a5a45) + 0026 (Fase 89) + 0027 (Fase 90) + 0028 (Fase 91) + 0029 (Fase 92) + 0030 (Fase 92.1) + 0031 (Fase 93)
     await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
     await sql.begin((trx) => trx.unsafe(MIGRATION_0017));
     await sql.begin((trx) => trx.unsafe(MIGRATION_0018));
