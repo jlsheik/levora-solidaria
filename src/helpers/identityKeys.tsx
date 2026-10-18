@@ -97,7 +97,36 @@ export function decryptSecret(stored: Buffer, keyId: number, aad: string): Buffe
   return Buffer.concat([decipher.update(data), decipher.final()]);
 }
 
-/** Política de plataforma: MFA obrigatório para titulares de platform_access, exceto staging sintético explícito. */
+/** Hosts de banco aceitos para o relaxamento do MFA: serviço `postgres` do compose de staging + loopback (lista fechada; mesma da guarda do seed, db/seedStagingGuard.ts). */
+const RELAXED_MFA_DB_HOSTS = new Set(["postgres", "localhost", "127.0.0.1", "::1", "[::1]"]);
+/** Variáveis que, se declararem produção, vetam o relaxamento mesmo com o resto "certo". */
+const ENV_DECLARATIONS = ["LEVORA_ENVIRONMENT", "APP_ENV", "ENVIRONMENT", "DEPLOY_ENV", "RAILWAY_ENVIRONMENT", "VERCEL_ENV"] as const;
+const PRODUCTION_LIKE = /^(prod|production|producao|produção|live|prd)$/i;
+
+/**
+ * O relaxamento do MFA de plataforma exige EVIDÊNCIA POSITIVA de ambiente descartável, não só duas variáveis (que um .env ou um compose de produção poderiam trazer por engano):
+ * `PLATFORM_MFA_REQUIRED=false` + `LEVORA_ENVIRONMENT=staging` + nenhuma outra variável declarando produção + banco de nome reservado (`*_staging`, `*_demo`, `*_qa`, `*_test`)
+ * em host local/da lista fechada. Qualquer dúvida (URL ausente/inválida, FLOOT_DATABASE_URL divergente) ⇒ o MFA continua obrigatório.
+ */
+export function isRelaxedMfaEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.PLATFORM_MFA_REQUIRED !== "false" || (env.LEVORA_ENVIRONMENT ?? "").trim().toLowerCase() !== "staging") return false;
+  for (const name of ENV_DECLARATIONS) {
+    const value = (env[name] ?? "").trim();
+    if (value && PRODUCTION_LIKE.test(value)) return false;
+  }
+  const primary = env.DATABASE_URL?.trim();
+  const alias = env.FLOOT_DATABASE_URL?.trim();
+  if (!primary || (alias && alias !== primary)) return false;
+  try {
+    const url = new URL(primary);
+    const database = decodeURIComponent(url.pathname.slice(1));
+    return /^[a-z0-9][a-z0-9_]*_(staging|demo|qa|test)$/.test(database) && RELAXED_MFA_DB_HOSTS.has(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/** Política de plataforma: MFA obrigatório para titulares de platform_access, exceto ambiente descartável explícito (ver isRelaxedMfaEnvironment). */
 export function isPlatformMfaRequired(): boolean {
-  return !(process.env.PLATFORM_MFA_REQUIRED === "false" && process.env.LEVORA_ENVIRONMENT === "staging");
+  return !isRelaxedMfaEnvironment();
 }

@@ -5,6 +5,14 @@
  * Só aceita configurações do namespace `levora.` (`-c levora.x=y` ou `--levora.x=y`): qualquer outra coisa (statement_timeout, search_path...) é recusada
  * em vez de ser aplicada em silêncio a uma migração.
  */
+/**
+ * LISTA FECHADA: cada configuração aceita, com o formato exato do valor. Um namespace aberto (`levora.*`) deixaria uma migração futura ou um gatilho que leia
+ * `current_setting('levora.…')` ser influenciado pelo ambiente do operador; hoje só a migração 0026 lê `levora.platform_owner_user_id`.
+ */
+const ALLOWED_SETTINGS: Record<string, RegExp> = {
+  "levora.platform_owner_user_id": /^[1-9][0-9]{0,9}$/,
+};
+
 export function parseLevoraPgOptions(raw: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   if (!raw || !raw.trim()) return out;
@@ -18,9 +26,13 @@ export function parseLevoraPgOptions(raw: string | undefined): Record<string, st
     throw new Error(`PGOPTIONS: opção não suportada "${t}" (só -c levora.<nome>=<valor>)`);
   }
   for (const s of settings) {
-    const m = /^(levora\.[a-z_][a-z0-9_]*)=([A-Za-z0-9_.:-]*)$/.exec(s);
-    if (!m) throw new Error(`PGOPTIONS: configuração recusada "${s}" (só levora.<nome>=<valor> com caracteres simples)`);
-    out[m[1]] = m[2];
+    const eq = s.indexOf("=");
+    const name = eq < 0 ? s : s.slice(0, eq);
+    const value = eq < 0 ? "" : s.slice(eq + 1);
+    const rule = ALLOWED_SETTINGS[name];
+    if (!rule) throw new Error(`PGOPTIONS: configuração recusada "${name}" (permitidas: ${Object.keys(ALLOWED_SETTINGS).join(", ")})`);
+    if (!rule.test(value)) throw new Error(`PGOPTIONS: valor inválido para ${name}`);
+    out[name] = value;
   }
   return out;
 }
