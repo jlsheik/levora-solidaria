@@ -104,10 +104,11 @@ describe("Platform Owner único — todos os caminhos EXISTENTES que poderiam in
     expect(await owners()).toEqual([owner.userId]);
   });
 
-  it("não existem (no HEAD desta fase) endpoints de troca de senha, logout global, desativação/suspensão de usuário nem alteração de e-mail/role — nada mais a auditar", async () => {
+  it("não existem endpoints de recuperação de senha, logout global, desativação/suspensão de usuário nem alteração de e-mail/role de OUTRA conta — nada mais a auditar (a Conta, sobre o PRÓPRIO usuário, existe desde a integração da página Conta)", async () => {
     const { readdirSync } = await import("node:fs");
     const files = [...readdirSync("src/endpoints"), ...readdirSync("src/endpoints/auth")].join("\n");
-    expect(files).not.toMatch(/password-change|password-reset|sessions-revoke|logout-all|users-status|users-suspend|users-role|profile_POST|platform-access(?!-codes)/);
+    // password-change, sessions-revoke* e profile_POST agora EXISTEM (Conta; só atuam no usuário da sessão: ver test/userAccount.test.ts, IDOR e autorização). O que segue proibido:
+    expect(files).not.toMatch(/password-reset|logout-all|users-status|users-suspend|users-role|platform-access(?!-codes)/);
   });
 });
 
@@ -305,9 +306,9 @@ describe("senha — bytes, não caracteres", () => {
 });
 
 describe("rotateSession — consumidores nesta fase", () => {
-  it("rotateSession só tem os consumidores previstos (ativar/desativar MFA, step-up e reauth por identidade); troca de senha/vínculos ficam para fases seguintes", async () => {
+  it("rotateSession só tem os consumidores previstos (ativar/desativar MFA, step-up, reauth por identidade e troca de senha da Conta); vínculos ficam para fases seguintes", async () => {
     const { readFileSync, readdirSync, statSync } = await import("node:fs");
-    const ALLOWED = ["mfa-disable_POST.ts", "mfa-setup-confirm_POST.ts", "oauthCallback.tsx", "step-up_POST.ts"]; // Fase 90 (MFA/step-up) + Fase 92.1/93 (reauth por identidade no callback OAuth compartilhado)
+    const ALLOWED = ["mfa-disable_POST.ts", "mfa-setup-confirm_POST.ts", "oauthCallback.tsx", "password-change_POST.ts", "step-up_POST.ts"]; // Fase 90 (MFA/step-up) + Fase 92.1/93 (reauth por identidade no callback OAuth compartilhado) + Conta (troca de senha rotaciona a sessão atual)
     const { join } = await import("node:path");
     const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? walk(join(dir, f)) : [join(dir, f)]));
     const users = walk("src").concat(walk("server")).filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes("sessionLifecycle")).filter((f) => readFileSync(f, "utf8").includes("rotateSession"));
