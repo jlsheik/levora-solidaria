@@ -1,0 +1,34 @@
+.page { min-height: 100vh; background: var(--background); color: var(--foreground); padding: var(--spacing-8); max-width: 44rem; margin: 0 auto; box-sizing: border-box; }
+.backLink { display: inline-flex; align-items: center; gap: var(--spacing-1); color: var(--muted-foreground); font-size: 0.875rem; text-decoration: none; margin-bottom: var(--spacing-4); }
+.backLink:hover { color: var(--foreground); }
+.title { font-family: var(--font-family-display); font-size: 1.5rem; font-weight: 600; margin: 0 0 var(--spacing-1) 0; }
+.subtitle { color: var(--muted-foreground); font-size: 0.875rem; margin: 0 0 var(--spacing-6) 0; line-height: 1.5; overflow-wrap: anywhere; }
+.section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6); }
+.sectionTitle { font-family: var(--font-family-display); font-size: 1.0625rem; font-weight: 600; margin: 0 0 var(--spacing-1) 0; color: var(--card-foreground); }
+.sectionHint { font-size: 0.8125rem; color: var(--muted-foreground); margin: 0 0 var(--spacing-4) 0; line-height: 1.5; }
+.form { display: flex; flex-direction: column; gap: var(--spacing-4); }
+.field { display: flex; flex-direction: column; gap: var(--spacing-1); min-width: 0; }
+.label { font-size: 0.8125rem; font-weight: 500; color: var(--card-foreground); }
+.field input { width: 100%; min-width: 0; box-sizing: border-box; }
+.fieldHelp { font-size: 0.75rem; color: var(--muted-foreground); }
+.fieldError { font-size: 0.75rem; color: var(--destructive); }
+.inputWrap { position: relative; display: flex; }
+.inputWrap input { width: 100%; min-width: 0; box-sizing: border-box; padding-right: 2.5rem; }
+.toggle { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); }
+.readonlyValue { font-size: 0.875rem; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.actions { display: flex; gap: var(--spacing-3); flex-wrap: wrap; align-items: center; }
+.sessionHead { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing-3); flex-wrap: wrap; margin-bottom: var(--spacing-3); }
+.sessionList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-3); }
+.sessionItem { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-3); padding: var(--spacing-3); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); flex-wrap: wrap; }
+.sessionInfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 0.8125rem; color: var(--card-foreground); }
+.sessionMeta { font-size: 0.75rem; color: var(--muted-foreground); }
+.sessionTop { display: flex; align-items: center; gap: var(--spacing-2); flex-wrap: wrap; }
+.emptyText { color: var(--muted-foreground); font-size: 0.875rem; margin: 0; }
+.errorBox { padding: var(--spacing-3); font-size: 0.8125rem; color: var(--card-foreground); background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); }
+.skeleton { height: 4rem; border-radius: var(--radius); }
+
+@media (max-width: 640px) {
+  .page { padding: var(--spacing-4); }
+  .section { padding: var(--spacing-4); }
+  .actions > button, .sessionItem > button { width: 100%; }
+}
