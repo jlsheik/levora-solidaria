@@ -16,7 +16,7 @@ const OLD = "senha-de-teste-123"; // ver test/helpers.ts#createTestUser
 const NEW = "nova-senha-segura-456";
 
 type Err = { message?: string; code?: string; error?: string };
-type SessionsOut = { sessions: { sessionHandle: string; createdAt: Date | null; lastAccessed: Date | null; current: boolean }[] };
+type SessionsOut = { sessions: { sessionHandle: string; createdAt: Date | null; lastAccessed: Date | null; absoluteExpiresAt: Date; primaryMethod: string | null; current: boolean }[] };
 
 const change = (cookie: string, body: unknown, ip?: string) =>
   postPasswordChange(buildRequest("auth/password-change", { method: "POST", cookie, body, ip }));
@@ -39,7 +39,11 @@ describe("conta do usuário — troca de senha", () => {
     expect(res.status).toBe(200);
     expect((await parseJson<{ revokedSessions: number }>(res)).revokedSessions).toBe(2);
 
-    expect((await whoAmI(u.cookie)).status).toBe(200);
+    // Identidade: a sessão atual é ROTACIONADA na troca de senha (id novo; cookie novo na resposta); o cookie ANTIGO deixa de valer.
+    expect((await whoAmI(u.cookie)).status).toBe(401);
+    const rotatedCookie = res.headers.get("set-cookie")!.split(";")[0];
+    expect(rotatedCookie).not.toBe(u.cookie);
+    expect((await whoAmI(rotatedCookie)).status).toBe(200);
     expect((await whoAmI(other1)).status).toBe(401);
     expect((await whoAmI(other2)).status).toBe(401);
     expect(await sessionIdOf(u.userId)).toHaveLength(1);
@@ -178,7 +182,7 @@ describe("conta do usuário — sessões", () => {
     const realIds = [...(await sessionIdOf(a.userId)), ...(await sessionIdOf(b.userId))];
     const dump = JSON.stringify(out);
     for (const id of realIds) expect(dump).not.toContain(id);
-    expect(Object.keys(out.sessions[0]).sort()).toEqual(["createdAt", "current", "lastAccessed", "sessionHandle"]);
+    expect(Object.keys(out.sessions[0]).sort()).toEqual(["absoluteExpiresAt", "createdAt", "current", "lastAccessed", "primaryMethod", "sessionHandle"]);
     const fromA2 = await list(a2);
     expect(fromA2.sessions.find((s) => s.current)?.sessionHandle).not.toBe(out.sessions.find((s) => s.current)?.sessionHandle);
     expect((await getSessions(buildRequest("auth/sessions"))).status).toBe(401);

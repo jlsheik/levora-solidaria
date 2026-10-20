@@ -2,7 +2,7 @@ import { db } from "../../helpers/db.js";
 import { getServerUserSession } from "../../helpers/getServerUserSession.js";
 import { NotAuthenticatedError } from "../../helpers/getSetServerSession.js";
 import { recordAuditLogEntry } from "../../helpers/auditLog.js";
-import { lockUserSessions } from "../../helpers/userSessions.js";
+import { lockUserAndSessions } from "../../helpers/userSessions.js";
 import { buildErrorResponse } from "../../helpers/errorResponse.js";
 import superjson from "superjson";
 
@@ -15,7 +15,7 @@ export async function handle(request: Request) {
     const { user, session } = await getServerUserSession(request);
 
     const revoked = await db.transaction().execute(async (trx) => {
-      const rows = await lockUserSessions(trx, user.id, session.id);
+      const rows = await lockUserAndSessions(trx, user.id, session.id);
       const others = rows.filter((r) => r.id !== session.id).map((r) => r.id);
       if (others.length === 0) return 0;
       await trx.deleteFrom("sessions").where("userId", "=", user.id).where("id", "in", others).execute();

@@ -2,7 +2,7 @@ import { db } from "../../helpers/db.js";
 import { getServerUserSession } from "../../helpers/getServerUserSession.js";
 import { NotAuthenticatedError } from "../../helpers/getSetServerSession.js";
 import { recordAuditLogEntry } from "../../helpers/auditLog.js";
-import { lockUserSessions, sessionHandle } from "../../helpers/userSessions.js";
+import { lockUserAndSessions, sessionHandle } from "../../helpers/userSessions.js";
 import { buildErrorResponse } from "../../helpers/errorResponse.js";
 import { schema } from "./sessions-revoke_POST.schema.js";
 import superjson from "superjson";
@@ -22,7 +22,7 @@ export async function handle(request: Request) {
     const input = schema.parse(superjson.parse(await request.text()));
 
     const result = await db.transaction().execute(async (trx) => {
-      const rows = await lockUserSessions(trx, user.id, session.id);
+      const rows = await lockUserAndSessions(trx, user.id, session.id);
       const target = rows.find((r) => sessionHandle(r.id) === input.sessionHandle);
       if (!target) return "nao_encontrada" as const;
       if (target.id === session.id) return "atual" as const;

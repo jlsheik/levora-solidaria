@@ -1,19 +1,9 @@
 import { z } from "zod";
 import superjson from "superjson";
 import { ApiRequestError } from "../../helpers/apiRequestError.js";
+import { newPasswordSchema } from "../../helpers/passwordPolicy.js";
 
-/**
- * Política da nova senha (Fase 88): a MESMA do cadastro (mínimo de 8 caracteres) mais o teto técnico do bcrypt — 72
- * BYTES (acima disso o bcrypt ignora o resto em silêncio). Nada de regras de complexidade novas. A nova senha também
- * precisa ser diferente da atual (verificado no servidor, contra o hash).
- */
-export const PASSWORD_MIN_LENGTH = 8;
-export const PASSWORD_MAX_BYTES = 72;
-
-export const newPasswordSchema = z
-  .string()
-  .min(PASSWORD_MIN_LENGTH, `A nova senha deve ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres`)
-  .refine((v) => new TextEncoder().encode(v).length <= PASSWORD_MAX_BYTES, `A nova senha pode ter no máximo ${PASSWORD_MAX_BYTES} bytes`);
+export { PASSWORD_MIN_LENGTH, PASSWORD_MAX_BYTES, newPasswordSchema } from "../../helpers/passwordPolicy.js";
 
 export const schema = z
   .object({

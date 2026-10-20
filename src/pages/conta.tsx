@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Eye, EyeOff, Monitor } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Monitor, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, AUTH_QUERY_KEY } from "../helpers/useAuth";
 import { postProfile, DISPLAY_NAME_MAX } from "../endpoints/auth/profile_POST.schema";
@@ -14,7 +14,11 @@ import { Button } from "../components/Button";
 import { Badge } from "../components/Badge";
 import { Skeleton } from "../components/Skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/Dialog";
+import { StepUpDialog } from "../components/StepUpDialog";
+import { ApiRequestError } from "../helpers/apiRequestError";
 import styles from "./conta.module.css";
+
+const METHOD_LABEL: Record<string, string> = { password: "senha", google: "Google", microsoft: "Microsoft" };
 
 const errMsg = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
@@ -70,6 +74,8 @@ export default function AccountPage() {
   const [confirm, setConfirm] = useState("");
   const [touched, setTouched] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  // Conta com segundo fator ativo: o servidor exige um step-up RECENTE (403 reauth_required); o diálogo confirma e a troca é repetida.
+  const [stepUpOpen, setStepUpOpen] = useState(false);
   const parsedNew = newPasswordSchema.safeParse(next);
   const currentError = touched && current.length === 0 ? "Informe sua senha atual" : null;
   const newError = touched && !parsedNew.success ? parsedNew.error.issues[0].message : touched && next === current && next ? "A nova senha precisa ser diferente da atual" : null;
@@ -82,6 +88,7 @@ export default function AccountPage() {
       void queryClient.invalidateQueries({ queryKey: SESSIONS_KEY });
     },
     onError: (e) => {
+      if (e instanceof ApiRequestError && e.code === "reauth_required") { setServerError(null); setStepUpOpen(true); return; }
       setServerError(errMsg(e, "Não foi possível alterar a senha"));
     },
   });
@@ -134,6 +141,14 @@ export default function AccountPage() {
         </form>
       </section>
 
+      <section className={styles.section} aria-labelledby="seguranca-titulo">
+        <h2 id="seguranca-titulo" className={styles.sectionTitle}>Segundo fator</h2>
+        <p className={styles.sectionHint}>Autenticador (TOTP) e códigos de recuperação ficam em uma página própria.</p>
+        <div className={styles.actions}>
+          <Button asChild variant="outline"><Link to="/seguranca"><ShieldCheck size={14} /> Segurança da conta</Link></Button>
+        </div>
+      </section>
+
       <section className={styles.section} aria-labelledby="senha-titulo">
         <h2 id="senha-titulo" className={styles.sectionTitle}>Senha</h2>
         <p className={styles.sectionHint}>Ao trocar a senha, as suas outras sessões (outros dispositivos e navegadores) são encerradas. Esta continua ativa.</p>
@@ -178,6 +193,7 @@ export default function AccountPage() {
                     </div>
                     <span className={styles.sessionMeta}>Iniciada em {formatDateTime(s.createdAt)}</span>
                     <span className={styles.sessionMeta}>Último acesso {formatDateTime(s.lastAccessed)}</span>
+                    <span className={styles.sessionMeta}>Expira em {formatDateTime(s.absoluteExpiresAt)} no máximo{s.primaryMethod ? ` · entrou com ${METHOD_LABEL[s.primaryMethod] ?? s.primaryMethod}` : ""}</span>
                   </div>
                   {!s.current && (
                     <Button variant="outline" size="sm" disabled={revokeMutation.isPending} onClick={() => revokeMutation.mutate(s.sessionHandle)}>Encerrar</Button>
@@ -189,6 +205,8 @@ export default function AccountPage() {
           </>
         )}
       </section>
+
+      <StepUpDialog open={stepUpOpen} onOpenChange={setStepUpOpen} onConfirmed={() => { setStepUpOpen(false); passwordMutation.mutate(); }} />
 
       <Dialog open={confirmAll} onOpenChange={setConfirmAll}>
         <DialogContent>

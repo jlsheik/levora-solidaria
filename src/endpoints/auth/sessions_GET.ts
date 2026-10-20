@@ -7,14 +7,14 @@ import superjson from "superjson";
 
 /**
  * Lista as sessões do PRÓPRIO usuário (Fase 88). Sem id real de sessão, sem IP e sem user agent (não são gravados);
- * `expiresAt` também fica de fora (a coluna nunca é lida pela validação — mostrá-la seria enganoso).
+ * `absoluteExpiresAt` é o teto absoluto REAL imposto pela política de sessão (sessionPolicy.tsx); `expiresAt` fica de fora (legado).
  */
 export async function handle(request: Request) {
   try {
     const { user, session } = await getServerUserSession(request);
     const rows = await db
       .selectFrom("sessions")
-      .select(["id", "createdAt", "lastAccessed"])
+      .select(["id", "createdAt", "lastAccessed", "absoluteExpiresAt", "primaryMethod"])
       .where("userId", "=", user.id)
       .orderBy("createdAt", "desc")
       .orderBy("id", "asc")
@@ -23,6 +23,8 @@ export async function handle(request: Request) {
       sessionHandle: sessionHandle(r.id),
       createdAt: r.createdAt,
       lastAccessed: r.lastAccessed,
+      absoluteExpiresAt: r.absoluteExpiresAt,
+      primaryMethod: r.primaryMethod,
       current: r.id === session.id,
     }));
     return new Response(superjson.stringify({ sessions }), { status: 200, headers: { "Content-Type": "application/json" } });
