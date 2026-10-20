@@ -214,6 +214,15 @@ async function xss(b, ctx) {
     add(b.name, b.version, `xss:página${sub || "/"}`, url, "XSS", bad ? STATUS.FAIL : STATUS.PASS, bad ? `EXECUÇÃO/INJEÇÃO: avisos recebidos=[${hit.join(", ")}] elementos injetados=${scan.markers}` : `nenhuma carga executou (0 avisos) e nenhum elemento foi injetado; carga visível como texto=${scan.literal}`, { state: "armazenado" });
   }
 
+  // páginas da conta (Conta e identidade): o nome do dono carrega a carga de XSS e aparece no campo "Nome", no cabeçalho e na sessão; /seguranca não exibe dado livre, mas é página autenticada nova
+  for (const sub of ["/conta", "/seguranca"]) {
+    const url = `${baseUrl}${sub}`; const before = hitsNow().length;
+    if (!(await navigate(cdp, url))) { add(b.name, b.version, `xss:página${sub}`, url, "XSS", STATUS.UNMEASURABLE, "a página não carregou"); continue; }
+    await sleep(2000);
+    const scan = await scanPage(cdp); noteRendered(scan.text, sub); const hit = seen(before); const bad = hit.length > 0 || scan.markers > 0;
+    add(b.name, b.version, `xss:página${sub}`, url, "XSS", bad ? STATUS.FAIL : STATUS.PASS, bad ? `EXECUÇÃO/INJEÇÃO: avisos recebidos=[${hit.join(", ")}] elementos injetados=${scan.markers}` : "nenhum aviso do coletor e nenhum elemento injetado", { state: "armazenado" });
+  }
+
   // administrador da plataforma: a lista de organizações mostra nome/cidade guardados (só /plataforma)
   if (await login(cdp, baseUrl, "admin")) {
     const before = hitsNow().length;
