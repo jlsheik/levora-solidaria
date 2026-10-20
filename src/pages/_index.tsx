@@ -36,7 +36,7 @@ import {
 } from "../components/Select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/DropdownMenu";
 import { z } from "zod";
-import { HeartHandshake, Plus, Building2, LogOut, Network, MoreVertical, Trash2, ShieldCheck } from "lucide-react";
+import { HeartHandshake, Plus, Building2, LogOut, Network, MoreVertical, Trash2, ShieldCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import styles from "./_index.module.css";
 
@@ -136,6 +136,9 @@ export default function DashboardPage() {
             </Button>
           )}
           <span className={styles.userGreeting}>Olá, {userName}</span>
+          <Button variant="outline" size="sm" onClick={() => navigate("/conta")}>
+            <UserRound size={14} /> Minha conta
+          </Button>
           <Button variant="ghost" size="icon-sm" onClick={() => logout()} title="Sair">
             <LogOut size={18} />
           </Button>
