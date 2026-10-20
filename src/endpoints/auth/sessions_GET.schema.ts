@@ -6,6 +6,10 @@ export type UserSessionInfo = {
   sessionHandle: string;
   createdAt: Date | null;
   lastAccessed: Date | null;
+  /** Teto absoluto da sessão (30 dias para usuários comuns): nunca é estendido por uso. */
+  absoluteExpiresAt: Date;
+  /** Como a sessão foi aberta: "password", "google" ou "microsoft". */
+  primaryMethod: string | null;
   current: boolean;
 };
 

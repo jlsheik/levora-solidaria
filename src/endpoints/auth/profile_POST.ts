@@ -2,7 +2,7 @@ import { db } from "../../helpers/db.js";
 import { getServerUserSession } from "../../helpers/getServerUserSession.js";
 import { NotAuthenticatedError } from "../../helpers/getSetServerSession.js";
 import { recordAuditLogEntry } from "../../helpers/auditLog.js";
-import { lockUserSessions } from "../../helpers/userSessions.js";
+import { lockUserAndSessions } from "../../helpers/userSessions.js";
 import { buildErrorResponse } from "../../helpers/errorResponse.js";
 import type { User } from "../../helpers/User.js";
 import { schema } from "./profile_POST.schema.js";
@@ -21,7 +21,7 @@ export async function handle(request: Request) {
     const input = schema.parse(superjson.parse(await request.text()));
 
     const updated = await db.transaction().execute(async (trx) => {
-      await lockUserSessions(trx, user.id, session.id);
+      await lockUserAndSessions(trx, user.id, session.id);
       const current = await trx.selectFrom("users").select(["displayName"]).where("id", "=", user.id).forUpdate().executeTakeFirstOrThrow();
       if (current.displayName === input.displayName) return null;
       await trx.updateTable("users").set({ displayName: input.displayName, updatedAt: new Date() }).where("id", "=", user.id).execute();
