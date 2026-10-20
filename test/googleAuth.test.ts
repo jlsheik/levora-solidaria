@@ -296,11 +296,53 @@ describe("CADASTRO: exige código de acesso e provisiona atomicamente", () => {
     expect(location(other.res)).toBe("/login?google=erro&motivo=nao_vinculada");
   });
 
-  it("e-mail não verificado NÃO impede o cadastro, mas fica registrado como não verificado", async () => {
-    const { code } = await makeAccessCode();
-    const { res } = await signupWithGoogle({ ...GOOGLE_USER, email_verified: false }, code);
+  it("decisão C: cadastro Google com email_verified ausente, falso ou de TIPO incorreto é RECUSADO antes de criar usuário ou consumir o código", async () => {
+    const { code, id } = await makeAccessCode();
+    const variantes: unknown[] = [false, undefined, "true", "false", 1, 0, null, "yes", {}, []];
+    for (const [i, v] of variantes.entries()) {
+      const claims = { sub: `sub-nv-${i}`, email: `nv${i}@gmail.com`, name: "Sem Verificação" } as Record<string, unknown>;
+      if (v !== undefined) claims.email_verified = v;
+      const { res } = await signupWithGoogle(claims as typeof GOOGLE_USER, code);
+      expect(location(res), JSON.stringify(v)).toBe("/login?google=erro&motivo=email_nao_verificado");
+      expect(sessionCookieOf(res)).toBeUndefined();
+    }
+    expect(await signedUpCount()).toBe(0);
+    expect(await identityRows()).toHaveLength(0);
+    expect(await db.selectFrom("users").select("id").where("email", "like", "nv%@gmail.com").execute()).toHaveLength(0);
+    const row = await codeRow(id);
+    expect(row.redeemedAt).toBeNull();
+    expect(row.redeemedByUserId).toBeNull();
+    expect(JSON.stringify(await audits("usuario.cadastro_google_falhou"))).toContain("email_nao_verificado");
+    expect(await audits("usuario.cadastro_google", "codigo_acesso.consumido")).toHaveLength(0);
+  });
+
+  it("decisão C: cadastro Google com email_verified=true (booleano) continua funcionando e o código É consumido; a identidade guarda email_verified=true do PROVEDOR", async () => {
+    const { code, id } = await makeAccessCode();
+    const { res } = await signupWithGoogle({ ...GOOGLE_USER, email_verified: true }, code);
     expect(location(res)).toBe("/");
-    expect((await identityRows())[0].emailVerified).toBe(false);
+    expect((await identityRows())[0].emailVerified).toBe(true);
+    expect((await codeRow(id)).redeemedAt).not.toBeNull();
+    expect(await signedUpCount()).toBe(1);
+  });
+
+  it("decisão C: um e-mail NÃO verificado nunca vincula nem entra: login por e-mail coincidente sem identidade vinculada é recusado, e o e-mail não vira chave", async () => {
+    const existing = await createTestUser({ email: "dono-do-email@gmail.com" });
+    const { res } = await loginWithGoogle({ sub: "sub-desconhecido", email: "dono-do-email@gmail.com", email_verified: false });
+    expect(location(res)).toBe("/login?google=erro&motivo=nao_vinculada");
+    expect(sessionCookieOf(res)).toBeUndefined();
+    expect(await identityRows()).toHaveLength(0);
+    expect(await db.selectFrom("sessions").selectAll().where("userId", "=", existing.id).execute()).toHaveLength(0);
+    const verified = await loginWithGoogle({ sub: "sub-desconhecido-2", email: "dono-do-email@gmail.com", email_verified: true });
+    expect(location(verified.res)).toBe("/login?google=erro&motivo=nao_vinculada"); // mesmo VERIFICADO, o e-mail não vincula (sem auto-link)
+    expect(await identityRows()).toHaveLength(0);
+  });
+
+  it("decisão C: login por identidade JÁ vinculada não depende de email_verified (o e-mail é só snapshot e users.email não muda)", async () => {
+    const user = await linkedUser("sub-ja-vinculado", "dono@example.com");
+    const { res } = await loginWithGoogle({ sub: "sub-ja-vinculado", email: "outro@gmail.com", email_verified: false });
+    expect(location(res)).toBe("/");
+    expect((await db.selectFrom("users").select("email").where("id", "=", user.id).executeTakeFirstOrThrow()).email).toBe("dono@example.com");
+    expect((await identityRows())[0].emailVerified).toBe(false); // nunca apresentado como verificado
   });
 
   it("e-mail do Google já pertence a um usuário LEVORA ⇒ nada é criado, o código NÃO é consumido, resposta neutra (sem 'já existe conta', sem auto-link)", async () => {

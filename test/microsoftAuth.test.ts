@@ -184,10 +184,10 @@ describe("TIPOS DE CONTA: pessoal, corporativa/escolar, convidada e a política 
     expect(location(same.res)).toBe("/login?microsoft=erro&motivo=nao_vinculada");
     expect(sessionCookieOf(same.res)).toBeUndefined();
     expect(await db.selectFrom("sessions").selectAll().where("userId", "=", home.id).execute()).toHaveLength(0);
-    // cadastro do convidado: guarda o issuer do tenant B e o idp na metadata (nunca como chave)
-    const { code } = await makeAccessCode();
-    const signed = await signupWithMicrosoft({ ...MS_USER, sub: "sub-guest", tid: OTHER_CORP_TID, idp: CORP_ISSUER }, code);
-    expect(location(signed.res)).toBe("/");
+    // convidado JÁ vinculado (o cadastro Microsoft está desabilitado, decisão C): o login guarda o issuer do tenant B e o idp na metadata (nunca como chave)
+    await linkedUser({ sub: "sub-guest", tid: OTHER_CORP_TID, email: "convidado@example.com" });
+    const guestLogin = await loginWithMicrosoft({ ...MS_USER, sub: "sub-guest", tid: OTHER_CORP_TID, idp: CORP_ISSUER });
+    expect(location(guestLogin.res)).toBe("/");
     const [identity] = (await identityRows()).filter((i) => i.subject === "sub-guest");
     expect(identity.issuer).toBe(microsoftIssuerFor(OTHER_CORP_TID));
     expect(identity.providerMetadata).toMatchObject({ tid: OTHER_CORP_TID, idp: CORP_ISSUER, ver: "2.0" });
@@ -320,25 +320,20 @@ describe("LOGIN: nunca cria conta", () => {
 });
 
 describe("CADASTRO: exige código de acesso e provisiona atomicamente", () => {
-  it("fluxo completo: users(role=user, vínculo ao código) + identidade (issuer do tid, sub, metadata tid/oid/ver, e-mail NÃO verificado) + código consumido + sessão; sem MFA/platform_access", async () => {
+  it("CADASTRO Microsoft RECUSADO (decisão C): a Microsoft não comprova a posse do e-mail ⇒ nenhum usuário, identidade, sessão nem consumo do código; o motivo fica na auditoria", async () => {
     const { code, id } = await makeAccessCode();
-    const { res, flow } = await signupWithMicrosoft({ ...MS_USER }, code);
-    expect(location(res)).toBe("/");
-    const user = await db.selectFrom("users").selectAll().where("email", "=", MS_USER.email).executeTakeFirstOrThrow();
-    expect(user).toMatchObject({ role: "user", registeredViaCodeId: id, displayName: MS_USER.name });
-    const [identity] = await identityRows();
-    expect(identity).toMatchObject({ userId: user.id, provider: "microsoft", issuer: CORP_ISSUER, subject: MS_USER.sub, emailSnapshot: MS_USER.email, emailVerified: false });
-    expect(identity.providerMetadata).toEqual({ tid: CORP_TID, ver: "2.0", oid: MS_USER.oid });
+    const { res } = await signupWithMicrosoft({ ...MS_USER }, code);
+    expect(location(res)).toBe("/login?microsoft=erro&motivo=email_nao_verificado");
+    expect(sessionCookieOf(res)).toBeUndefined();
+    expect(await signedUpCount()).toBe(0);
+    expect(await identityRows()).toHaveLength(0);
+    expect(await db.selectFrom("users").selectAll().where("email", "=", MS_USER.email).execute()).toHaveLength(0);
+    expect(await db.selectFrom("sessions").selectAll().execute()).toHaveLength(0);
     const row = await codeRow(id);
-    expect(row.redeemedAt).not.toBeNull();
-    expect(row.redeemedByUserId).toBe(user.id);
-    const [session] = await db.selectFrom("sessions").selectAll().where("userId", "=", user.id).execute();
-    expect(session.primaryMethod).toBe("microsoft");
-    expect(await db.selectFrom("platformAccess").selectAll().where("userId", "=", user.id).execute()).toHaveLength(0);
-    expect(await db.selectFrom("userPasswords").selectAll().where("userId", "=", user.id).execute()).toHaveLength(0); // nenhuma senha (nem fake)
-    expect((await db.selectFrom("oauthAttempts").select("status").where("stateHash", "is not", null).executeTakeFirstOrThrow()).status).toBe("completed");
-    expect((await audits("usuario.cadastro_microsoft")).map((a) => a.actorUserId)).toEqual([user.id]);
-    expect(flow.state).toBeTruthy();
+    expect(row.redeemedAt).toBeNull();
+    expect(row.redeemedByUserId).toBeNull();
+    expect(JSON.stringify(await audits("usuario.cadastro_microsoft_falhou"))).toContain("email_nao_verificado");
+    expect(await audits("usuario.cadastro_microsoft", "codigo_acesso.consumido")).toHaveLength(0);
   });
 
   it("o back-channel envia code_verifier (PKCE), client_secret e redirect URI da configuração; o access_token da Microsoft é descartado e NADA de token fica no banco", async () => {
@@ -378,20 +373,22 @@ describe("CADASTRO: exige código de acesso e provisiona atomicamente", () => {
     expect(JSON.stringify(await audits("usuario.cadastro_microsoft_falhou"))).toContain("email_ausente");
   });
 
-  it("`email_verified` do token NUNCA marca a identidade Microsoft como verificada (a Microsoft não garante a posse do e-mail)", async () => {
-    const { code } = await makeAccessCode();
-    const res = await signupWithMicrosoft({ ...MS_USER, email_verified: true } as MsClaims, code);
-    expect(location(res.res)).toBe("/");
-    expect((await identityRows())[0].emailVerified).toBe(false);
-    const [event] = await audits("usuario.cadastro_microsoft");
-    expect(event.metadata).toMatchObject({ emailVerificado: false });
+  it("`email_verified` do token NUNCA é aceito como prova pela Microsoft: mesmo com email_verified=true o cadastro é recusado e nada é criado", async () => {
+    const { code, id } = await makeAccessCode();
+    for (const claim of [true, "true", 1, null]) {
+      const res = await signupWithMicrosoft({ ...MS_USER, sub: `sub-${String(claim)}`, email_verified: claim } as unknown as MsClaims, code);
+      expect(location(res.res), String(claim)).toBe("/login?microsoft=erro&motivo=email_nao_verificado");
+    }
+    expect(await identityRows()).toHaveLength(0);
+    expect(await signedUpCount()).toBe(0);
+    expect((await codeRow(id)).redeemedAt).toBeNull();
   });
 
   it("e-mail da Microsoft já pertence a um usuário LEVORA ⇒ nada é criado, o código NÃO é consumido, nada é vinculado (sem auto-link) e a resposta é neutra", async () => {
     const existing = await createTestUser({ email: "pessoa@contoso.com" });
     const { code, id } = await makeAccessCode();
     const { res } = await signupWithMicrosoft({ ...MS_USER }, code);
-    expect(location(res)).toBe("/login?microsoft=erro&motivo=falha");
+    expect(location(res)).toBe("/login?microsoft=erro&motivo=email_nao_verificado");
     expect(await signedUpCount()).toBe(0);
     expect(await identityRows()).toHaveLength(0);
     expect((await codeRow(id)).redeemedAt).toBeNull();

@@ -273,7 +273,8 @@ export async function verifyGoogleIdToken(config: GoogleConfig, idToken: string,
   if (typeof sub !== "string" || sub.length === 0 || sub.length > 255) throw new GoogleOidcError("subject_ausente");
 
   const email = typeof claims.email === "string" && claims.email.length > 0 && claims.email.length <= 320 ? claims.email.trim().toLowerCase() : null;
-  const emailVerified = claims.email_verified === true || claims.email_verified === "true";
+  // Decisão C: SÓ o booleano `true` do ID token comprova o e-mail. String ("true"), número, null, objeto ou ausência valem como NÃO verificado.
+  const emailVerified = claims.email_verified === true;
   const name = typeof claims.name === "string" && claims.name.trim() ? claims.name.trim().slice(0, 120) : null;
   // Identidade = (provider, issuer, subject). O emissor guardado é o CANÔNICO configurado, nunca uma string escolhida pelo token.
   return { issuer: GOOGLE_ISSUER, subject: sub, email, emailVerified, name };

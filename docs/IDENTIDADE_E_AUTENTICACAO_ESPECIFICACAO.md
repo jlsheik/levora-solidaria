@@ -823,7 +823,7 @@ mantido) e, quando houver MFA, exigem sessão **plena** (§25.14).
 
 > **Comportamento OFICIAL implementado (Fase 89/89.1) quando existirem 2 ou mais usuários com o legado `users.role='admin'`:**
 >
-> - **sem designação explícita:** a migration **aborta integralmente** (rollback total; nada é alterado);
+> - **sem designação explícita** (com **um ou mais** admins ativos; a integração com a master removeu a promoção automática do admin único): a migration **aborta integralmente** (rollback total; nada é alterado); designação com valor inválido, de usuário inelegível ou sem nenhum admin ativo também aborta;
 > - **com designação explícita** (`PGOPTIONS="-c levora.platform_owner_user_id=<id>"`): o usuário designado recebe
 >   `platform_access.level='owner'`; **os demais deixam de possuir acesso de plataforma e retornam ao estado de usuário
 >   comum** (`users.role='user'`, sem linha em `platform_access`).

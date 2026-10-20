@@ -302,29 +302,29 @@ describe("state, nonce, PKCE, vínculo e replay", () => {
     expect((await codeRow(id)).redeemedAt).toBeNull();
   });
 
-  it("REPLAY do callback completo: a 2ª chamada (mesmo state/code) não cria nada, não rotaciona nem cria 2ª sessão", async () => {
-    const { code } = await makeAccessCode();
-    const { flow, code: mscode, res } = await signup(U, code);
-    expect(location(res)).toBe("/");
+  it("REPLAY do callback completo (login por identidade vinculada): a 2ª chamada (mesmo state/code) não rotaciona nem cria 2ª sessão", async () => {
+    const user = await createTestUser({ email: "replay@example.com" });
+    await linkIdentity(user.id, U.sub);
+    const flow = await startFlow("login");
+    const mscode = approve(sim, flow, U);
+    expect(location(await callback(flow, mscode))).toBe("/");
     const sessionsBefore = await db.selectFrom("sessions").selectAll().execute();
     const replay = await callback(flow, mscode);
     expect(location(replay)).toBe("/login?microsoft=erro&motivo=falha");
     expect(sessionCookieOf(replay)).toBeUndefined();
     expect(await db.selectFrom("sessions").selectAll().execute()).toHaveLength(sessionsBefore.length);
-    expect(await signedUpCount()).toBe(1);
   });
 
-  it("o code é de uso único: reutilizá-lo em outra tentativa falha na troca (invalid_grant) e nada é criado", async () => {
-    const a = await makeAccessCode();
-    const b = await makeAccessCode();
-    const flowA = await startFlow("signup", a.code);
+  it("o code é de uso único: reutilizá-lo em outra tentativa falha na troca (invalid_grant) e nenhuma sessão nova é criada", async () => {
+    const user = await createTestUser({ email: "uso-unico@example.com" });
+    await linkIdentity(user.id, U.sub);
+    const flowA = await startFlow("login");
     const mscode = approve(sim, flowA, U);
     expect(location(await callback(flowA, mscode))).toBe("/");
-    const flowB = await startFlow("signup", b.code);
-    approve(sim, flowB, { ...U, sub: "outro" });
+    const flowB = await startFlow("login");
+    approve(sim, flowB, U);
     expect(location(await callback(flowB, mscode))).toBe("/login?microsoft=erro&motivo=falha");
-    expect(await signedUpCount()).toBe(1);
-    expect((await codeRow(b.id)).redeemedAt).toBeNull();
+    expect(await db.selectFrom("sessions").selectAll().where("userId", "=", user.id).execute()).toHaveLength(1);
   });
 
   it("vínculo de navegador: sem cookie ou com o cookie de OUTRA tentativa ⇒ rejeitado (state de B não funciona no navegador de A)", async () => {
@@ -412,16 +412,17 @@ describe("IDOR / ownership — nada enviado pelo navegador escolhe a identidade 
     expect(JSON.stringify(await audits("usuario.microsoft_identity_rejected"))).toContain("nonce_invalido");
   });
 
-  it("o id do código na tentativa não é alterável pelo cliente; um código revogado depois do start não cadastra", async () => {
+  it("o id do código na tentativa não é alterável pelo cliente e o cadastro Microsoft é RECUSADO (e-mail não verificado): nenhum código é consumido", async () => {
     const mine = await makeAccessCode();
     const other = await makeAccessCode();
     const flow = await startFlow("signup", mine.code);
     expect((await db.selectFrom("oauthAttempts").select("accessCodeId").executeTakeFirstOrThrow()).accessCodeId).toBe(mine.id);
     const qs = new URLSearchParams({ state: flow.state, code: approve(sim, flow, U), accessCodeId: String(other.id), accessCode: other.code });
     const res = await callbackHandler(buildRequest(`auth/microsoft-callback?${qs}`, { method: "GET", cookie: flow.binding }));
-    expect(location(res)).toBe("/");
-    expect((await codeRow(mine.id)).redeemedAt).not.toBeNull();
+    expect(location(res)).toBe("/login?microsoft=erro&motivo=email_nao_verificado");
+    expect((await codeRow(mine.id)).redeemedAt).toBeNull();
     expect((await codeRow(other.id)).redeemedAt).toBeNull();
+    expect(await signedUpCount()).toBe(0);
   });
 
   it("tentativa de signup de OUTRO navegador/usuário: state+cookie de A com o code de B não cadastram ninguém", async () => {
@@ -436,41 +437,40 @@ describe("IDOR / ownership — nada enviado pelo navegador escolhe a identidade 
 });
 
 describe("CONCORRÊNCIA (A–J) — sem sleeps, sem retries", () => {
-  it("A: dois callbacks para a MESMA tentativa (state único) ⇒ exatamente um prossegue", async () => {
-    const { code } = await makeAccessCode();
-    const flow = await startFlow("signup", code);
+  it("A: dois callbacks para a MESMA tentativa (state único, login) ⇒ exatamente um prossegue", async () => {
+    const user = await createTestUser({ email: "a-conc@example.com" });
+    await linkIdentity(user.id, U.sub);
+    const flow = await startFlow("login");
     const [r1, r2] = await Promise.all([callback(flow, approve(sim, flow, U)), callback(flow, approve(sim, flow, U))]);
     expect([location(r1), location(r2)].sort()).toEqual(["/", "/login?microsoft=erro&motivo=falha"]);
-    expect(await signedUpCount()).toBe(1);
-    expect(await identityRows()).toHaveLength(1);
-    expect(await db.selectFrom("sessions").selectAll().execute()).toHaveLength(1);
+    expect(await db.selectFrom("sessions").selectAll().where("userId", "=", user.id).execute()).toHaveLength(1);
   });
 
-  it("B: dois cadastros com o MESMO código e a MESMA identidade ⇒ 1 usuário, 1 identidade, código consumido 1 vez", async () => {
+  it("B: dois cadastros simultâneos com o MESMO código e a MESMA identidade ⇒ AMBOS recusados; nenhum usuário, nenhuma identidade, código intacto", async () => {
     const { code, id } = await makeAccessCode();
     const f1 = await startFlow("signup", code);
     const f2 = await startFlow("signup", code);
     const results = await Promise.all([callback(f1, approve(sim, f1, U)), callback(f2, approve(sim, f2, U))]);
-    expect(results.filter((r) => location(r) === "/")).toHaveLength(1);
-    expect(await signedUpCount()).toBe(1);
-    expect(await identityRows()).toHaveLength(1);
-    expect((await codeRow(id)).redeemedAt).not.toBeNull();
-    expect(await audits("codigo_acesso.consumido")).toHaveLength(1);
+    expect(results.map(location)).toEqual(["/login?microsoft=erro&motivo=email_nao_verificado", "/login?microsoft=erro&motivo=email_nao_verificado"]);
+    expect(await signedUpCount()).toBe(0);
+    expect(await identityRows()).toHaveLength(0);
+    expect((await codeRow(id)).redeemedAt).toBeNull();
+    expect(await audits("codigo_acesso.consumido")).toHaveLength(0);
   });
 
-  it("C: a MESMA identidade Microsoft tentando criar duas contas com DOIS códigos ⇒ 1 conta; o código perdedor NÃO é queimado", async () => {
+  it("C: a MESMA identidade Microsoft com DOIS códigos ⇒ ambos recusados; nenhum código é queimado", async () => {
     const c1 = await makeAccessCode();
     const c2 = await makeAccessCode();
     const f1 = await startFlow("signup", c1.code);
     const f2 = await startFlow("signup", c2.code);
     const results = await Promise.all([callback(f1, approve(sim, f1, U)), callback(f2, approve(sim, f2, { ...U, email: "outro-email@contoso.com" }))]);
-    expect(results.filter((r) => location(r) === "/")).toHaveLength(1);
-    expect(await signedUpCount()).toBe(1);
-    expect(await identityRows()).toHaveLength(1);
-    expect([await codeRow(c1.id), await codeRow(c2.id)].filter((c) => c.redeemedAt !== null)).toHaveLength(1);
+    expect(results.map(location)).toEqual(["/login?microsoft=erro&motivo=email_nao_verificado", "/login?microsoft=erro&motivo=email_nao_verificado"]);
+    expect(await signedUpCount()).toBe(0);
+    expect(await identityRows()).toHaveLength(0);
+    expect([await codeRow(c1.id), await codeRow(c2.id)].filter((c) => c.redeemedAt !== null)).toHaveLength(0);
   });
 
-  it("D: identidades Microsoft DIFERENTES com o MESMO código ⇒ exatamente 1 conta", async () => {
+  it("D: identidades Microsoft DIFERENTES com o MESMO código ⇒ ambos recusados; o código não é consumido", async () => {
     const { code, id } = await makeAccessCode();
     const f1 = await startFlow("signup", code);
     const f2 = await startFlow("signup", code);
@@ -478,18 +478,17 @@ describe("CONCORRÊNCIA (A–J) — sem sleeps, sem retries", () => {
       callback(f1, approve(sim, f1, { sub: "d1", email: "d1@contoso.com" })),
       callback(f2, approve(sim, f2, { sub: "d2", email: "d2@contoso.com", tid: OTHER_CORP_TID })),
     ]);
-    expect(results.filter((r) => location(r) === "/")).toHaveLength(1);
-    expect(results.filter((r) => location(r) === "/login?microsoft=erro&motivo=codigo_indisponivel")).toHaveLength(1);
-    expect(await signedUpCount()).toBe(1);
-    expect(await identityRows()).toHaveLength(1);
-    expect((await codeRow(id)).redeemedByUserId).not.toBeNull();
+    expect(results.map(location)).toEqual(["/login?microsoft=erro&motivo=email_nao_verificado", "/login?microsoft=erro&motivo=email_nao_verificado"]);
+    expect(await signedUpCount()).toBe(0);
+    expect(await identityRows()).toHaveLength(0);
+    expect((await codeRow(id)).redeemedByUserId).toBeNull();
   });
 
-  it("E: código revogado antes do callback ⇒ nada criado; revogação SIMULTÂNEA ao callback ⇒ ou conta+código consumido, ou nada (nunca ambos)", async () => {
+  it("E: código revogado (antes ou durante o callback) ⇒ cadastro Microsoft recusado por e-mail não verificado; nada criado e o código nunca fica consumido", async () => {
     const pre = await makeAccessCode();
     const f0 = await startFlow("signup", pre.code);
     await db.updateTable("registrationAccessCodes").set({ revokedAt: new Date(), revokedByUserId: pre.creatorId }).where("id", "=", pre.id).execute();
-    expect(location(await callback(f0, approve(sim, f0, U)))).toBe("/login?microsoft=erro&motivo=codigo_indisponivel");
+    expect(location(await callback(f0, approve(sim, f0, U)))).toBe("/login?microsoft=erro&motivo=email_nao_verificado");
     expect(await signedUpCount()).toBe(0);
     for (let round = 0; round < 4; round++) {
       const c = await makeAccessCode();
@@ -499,24 +498,18 @@ describe("CONCORRÊNCIA (A–J) — sem sleeps, sem retries", () => {
         callback(flow, g),
         db.updateTable("registrationAccessCodes").set({ revokedAt: new Date(), revokedByUserId: c.creatorId }).where("id", "=", c.id).where("redeemedAt", "is", null).execute(),
       ]);
+      expect(location(res)).toBe("/login?microsoft=erro&motivo=email_nao_verificado");
       const row = await codeRow(c.id);
-      expect(row.redeemedAt !== null && row.revokedAt !== null).toBe(false);
-      const created = await db.selectFrom("users").select("id").where("email", "=", `g${round}@contoso.com`).executeTakeFirst();
-      if (location(res) === "/") {
-        expect(created).toBeDefined();
-        expect(row.redeemedByUserId).toBe(created!.id);
-      } else {
-        expect(created).toBeUndefined();
-        expect(row.redeemedAt).toBeNull();
-      }
+      expect(row.redeemedAt).toBeNull();
+      expect(await db.selectFrom("users").select("id").where("email", "=", `g${round}@contoso.com`).executeTakeFirst()).toBeUndefined();
     }
   });
 
-  it("F: código expirado antes do callback (e expirando DURANTE) ⇒ nada criado, código não queimado", async () => {
+  it("F: código expirado (antes ou durante o callback) ⇒ cadastro Microsoft recusado; nada criado e o código não é queimado", async () => {
     const c = await makeAccessCode({ validityMs: 6 * 60 * 1000 });
     const flow = await startFlow("signup", c.code);
     await db.updateTable("registrationAccessCodes").set({ createdAt: new Date(Date.now() - 3 * 3600_000), expiresAt: new Date(Date.now() - 1000) }).where("id", "=", c.id).execute();
-    expect(location(await callback(flow, approve(sim, flow, U)))).toBe("/login?microsoft=erro&motivo=codigo_indisponivel");
+    expect(location(await callback(flow, approve(sim, flow, U)))).toBe("/login?microsoft=erro&motivo=email_nao_verificado");
     expect(await signedUpCount()).toBe(0);
     expect(await identityRows()).toHaveLength(0);
 
@@ -527,13 +520,9 @@ describe("CONCORRÊNCIA (A–J) — sem sleeps, sem retries", () => {
       callback(flow2, g),
       db.updateTable("registrationAccessCodes").set({ createdAt: new Date(Date.now() - 3 * 3600_000), expiresAt: new Date(Date.now() - 1000) }).where("id", "=", d.id).execute(),
     ]);
-    const row = await codeRow(d.id);
-    const created = await db.selectFrom("users").select("id").where("email", "=", "exp@contoso.com").executeTakeFirst();
-    if (location(res) === "/") expect(row.redeemedByUserId).toBe(created!.id);
-    else {
-      expect(created).toBeUndefined();
-      expect(row.redeemedAt).toBeNull();
-    }
+    expect(location(res)).toBe("/login?microsoft=erro&motivo=email_nao_verificado");
+    expect((await codeRow(d.id)).redeemedAt).toBeNull();
+    expect(await signedUpCount()).toBe(0);
   });
 
   it("G: MFA ativado ao mesmo tempo que o login Microsoft ⇒ nunca uma sessão plena para quem já tem MFA ativo ao final", async () => {
@@ -585,20 +574,24 @@ describe("rate limit, enumeração e auditoria", () => {
   });
 
   it("eventos de auditoria existem e NUNCA contêm code, tokens, nonce, verifier, state, segredos, senha ou e-mail", async () => {
-    const { code } = await makeAccessCode();
-    const ok = await signup(U, code);
-    const failed = await signup({ ...U, sub: "x", email: "x@contoso.com" }, (await makeAccessCode()).code);
+    const user = await createTestUser({ email: "auditoria@example.com" });
+    await linkIdentity(user.id, U.sub);
+    const flowOk = await startFlow("login");
+    const okCode = approve(sim, flowOk, U);
+    const okRes = await callback(flowOk, okCode);
+    const failed = await signup({ ...U, sub: "x", email: "x@contoso.com" }, (await makeAccessCode()).code); // cadastro recusado (e-mail não verificado)
     const rejected = await (async () => {
       const flow = await startFlow("login");
       return callback(flow, approve(sim, flow, U, { tamper: (c) => ({ ...c, nonce: "errado" }) }));
     })();
-    expect(location(ok.res)).toBe("/");
-    expect(location(failed.res)).toBeTruthy();
+    expect(location(okRes)).toBe("/");
+    expect(location(failed.res)).toBe("/login?microsoft=erro&motivo=email_nao_verificado");
     expect(location(rejected)).toBe("/login?microsoft=erro&motivo=falha");
-    const events = await audits("usuario.cadastro_microsoft", "usuario.login_microsoft_falhou", "usuario.cadastro_microsoft_falhou", "usuario.microsoft_identity_rejected");
-    expect(events.length).toBeGreaterThanOrEqual(2);
+    const events = await audits("usuario.login_microsoft", "usuario.login_microsoft_falhou", "usuario.cadastro_microsoft_falhou", "usuario.microsoft_identity_rejected");
+    expect(events.map((e) => e.action)).toEqual(expect.arrayContaining(["usuario.login_microsoft", "usuario.cadastro_microsoft_falhou", "usuario.microsoft_identity_rejected"]));
+    expect(JSON.stringify(events.filter((e) => e.action === "usuario.cadastro_microsoft_falhou"))).toContain("email_nao_verificado");
     const dump = JSON.stringify(await db.selectFrom("auditLog").selectAll().execute());
-    for (const secret of ["eyJ", "EwB", ok.flow.state, ok.flow.nonce, ok.code, "segredo-sintetico", "pessoa@contoso.com", "code_verifier", U.oid]) expect(dump, secret).not.toContain(secret);
+    for (const secret of ["eyJ", "EwB", flowOk.state, flowOk.nonce, okCode, "segredo-sintetico", "pessoa@contoso.com", "code_verifier", U.oid]) expect(dump, secret).not.toContain(secret);
   });
 });
 

@@ -140,13 +140,13 @@ describe("claims controlados por quem administra o tenant (email, name): higiene
     expect((await verify({ name: "João da Conceição" })).name).toBe("João da Conceição");
   });
 
-  it("e2e: o display_name gravado vem do name higienizado (nunca com controle/bidi) e a identidade segue a chave (issuer, sub)", async () => {
-    const { code } = await makeAccessCode();
+  it("e2e: o cadastro Microsoft é recusado (e-mail não verificado) e NENHUM display_name é gravado; a higiene do name é provada na validação do token (teste acima)", async () => {
+    const { code, id } = await makeAccessCode();
     const flow = await startFlow("signup", code);
     const res = await callback(flow, approve(sim, flow, { ...U, name: "Ana\u0000‮ Silva" }));
-    expect(location(res)).toBe("/");
-    const user = await db.selectFrom("users").select(["displayName", "email"]).where("email", "=", U.email).executeTakeFirstOrThrow();
-    expect(user.displayName).toBe("Ana Silva");
+    expect(location(res)).toBe("/login?microsoft=erro&motivo=email_nao_verificado");
+    expect(await db.selectFrom("users").select("id").where("email", "=", U.email).executeTakeFirst()).toBeUndefined();
+    expect((await codeRow(id)).redeemedAt).toBeNull();
     expect(CORP_TID).toBeTruthy();
   });
 });

@@ -18,7 +18,7 @@ import type { NormalizedIdentity, OauthProviderAdapter } from "./oauthProviders.
 const IP_LIMIT = { limit: 30, windowMs: 15 * 60 * 1000 };
 
 /** Motivos mostrados ao usuário: um conjunto FECHADO de constantes (nunca texto do provedor, nunca detalhes de validação). */
-type Motivo = "nao_vinculada" | "ja_cadastrada" | "codigo_indisponivel" | "cancelado" | "falha" | "limite";
+type Motivo = "nao_vinculada" | "ja_cadastrada" | "codigo_indisponivel" | "email_nao_verificado" | "cancelado" | "falha" | "limite";
 
 /** Redirecionamento RELATIVO (nunca depende de Host/cabeçalhos do cliente) e sem cache. O cookie de vínculo é sempre apagado. */
 function redirect(location: string): Response {
@@ -163,6 +163,10 @@ export async function handleOauthCallback<C>(request: Request, adapter: OauthPro
     if (attempt.accessCodeId === null) return await fail("falha", "tentativa_sem_codigo"); // inalcançável (CHECK no banco); defesa em profundidade
     if (existing) return await fail("ja_cadastrada", "identidade_ja_cadastrada"); // nada é criado e o código NÃO é consumido
     if (!identity.email) return await fail("falha", "email_ausente");
+    // POLÍTICA (decisão C): o e-mail de um provedor NUNCA é tratado como verificado sem evidência. Só `email_verified === true` do próprio provedor (Google) permite criar conta;
+    // a Microsoft não traz essa evidência (emailVerified é sempre false), então o NOVO cadastro Microsoft fica indisponível até existir verificação suportada e testada
+    // (docs/IDENTIDADE_DECISOES_AUTENTICACAO.md). A recusa vem ANTES de criar usuário ou consumir o código de acesso. Login por identidade já vinculada não passa por aqui.
+    if (identity.emailVerified !== true) return await fail("email_nao_verificado", "email_nao_verificado");
 
     let session: { id: string; absoluteExpiresAt: Date } | null = null;
     const email = identity.email;

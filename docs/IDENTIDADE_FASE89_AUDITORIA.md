@@ -63,7 +63,7 @@ STEP 5  tabela platform_state (singleton id=1) + linha inicial
 STEP 6  trigger platform_access_guard (sem DELETE; user_id imutável)
 STEP 7  constraint trigger DEFERIDO platform_access_keep_owner (só reage a UPDATE/DELETE — INSERT do backfill não o dispara)
 STEP 8  (só migração) BACKFILL: conta admins ativos (não anonimizados)
-          0 ⇒ nada; 1 ⇒ vira owner; >1 ⇒ exige levora.platform_owner_user_id, senão ABORTA
+          0 ⇒ nada (designação informada ⇒ ABORTA); >= 1 ⇒ EXIGE levora.platform_owner_user_id designando um admin ativo, senão ABORTA (ninguém é promovido por contagem; política da integração, decisão B)
           INSERT owner (origem migrated_from_users_role) + platform_state.owner_bootstrapped_at
           os OUTROS admins NÃO recebem acesso (menor privilégio; ids no NOTICE)
           UPDATE users SET role='user' WHERE role='admin'   (inclui zumbis)

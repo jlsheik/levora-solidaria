@@ -32,9 +32,12 @@ O projeto exige que toda migration seja classificada. Esta integração acrescen
 | 0030 social_reauth | safe (restrição satisfeita por construção) | coluna anulável e CHECKs satisfeitos pelas linhas existentes |
 | 0031 microsoft_identity | safe (restrição satisfeita por construção) | CHECK de provider e coluna com DEFAULT `{}` |
 
-A verificação nova da 0026 (`CHECKS`) lista **só ids** e é **somente leitura**. Ela bloqueia (`db:preflight` e início do `db:migrate:incremental`, código 2) quando:
+A verificação nova da 0026 (`CHECKS`) lista **só ids e rótulos** e é **somente leitura**. Ela bloqueia (`db:preflight` e início do `db:migrate:incremental`, código 2) quando:
 - existe usuário com mais de uma linha em `user_passwords`; ou
-- existe mais de um admin ativo e a variável `levora.platform_owner_user_id` não designa um deles.
+- existe **qualquer** admin ativo e `levora.platform_owner_user_id` está ausente, inválida ou não designa um deles (**ninguém é promovido por contagem**); ou
+- a designação existe mas não há admin ativo.
+
+Sem admin ativo e sem designação nada é promovido; o owner nasce pelo bootstrap offline (`npm run platform:bootstrap-owner`). `PGOPTIONS` aceita **só** `levora.platform_owner_user_id` (inteiro positivo de até 9 dígitos), uma única vez.
 
 Ensaio em banco de **desenvolvimento local** (`levora_solidaria`, 13 migrations aplicadas, leitura apenas): a verificação bloqueou com `admins:1,18,63`, ou seja, **três** admins sem designação. Isso confirma o comportamento, e mostra que aplicar a 0026 nesse banco exige uma decisão humana sobre quem é o Platform Owner.
 

@@ -18,7 +18,7 @@ import { issueRecoveryCodes } from "../src/helpers/mfa";
 import { buildRequest, createSessionCookie, createTestUser, enrollTestMfa, makeAccessCode, parseJson, testTotp } from "./helpers";
 import { installGoogle } from "./googleHarness";
 import {
-  approve, callback, challengeCookieOf, installMicrosoft, location, reauthWithMicrosoft, REDIRECT_URI, sessionCookieOf, sessionPair, startFlow, type MicrosoftSim, type MsClaims,
+  approve, callback, challengeCookieOf, installMicrosoft, location, reauthWithMicrosoft, REDIRECT_URI, seedMicrosoftOnlyAccount, sessionCookieOf, sessionPair, startFlow, type MicrosoftSim, type MsClaims,
 } from "./microsoftHarness";
 
 let sim: MicrosoftSim;
@@ -39,14 +39,12 @@ const userRow = (id: number) => db.selectFrom("users").selectAll().where("id", "
 const sessionsOf = (userId: number) => db.selectFrom("sessions").selectAll().where("userId", "=", userId).execute();
 const audits = (...actions: string[]) => db.selectFrom("auditLog").selectAll().where("action", "in", actions).orderBy("id").execute();
 
-/** Cadastro REAL (código → Microsoft) de uma conta Microsoft-only; devolve o cookie de sessão. */
+/**
+ * Conta Microsoft-only no estado PÓS-CADASTRO (semeada no banco): o NOVO cadastro Microsoft está desabilitado por política (decisão C), então o ciclo de vida parte daqui.
+ * O que o cadastro recusa é provado em microsoftAuth.test.ts. Devolve o cookie de uma sessão aberta com a Microsoft.
+ */
 async function microsoftOnly(claims: MsClaims = U) {
-  const { code } = await makeAccessCode();
-  const flow = await startFlow("signup", code);
-  const res = await callback(flow, approve(sim, flow, claims));
-  expect(location(res)).toBe("/");
-  const user = await db.selectFrom("users").selectAll().where("email", "=", claims.email!).executeTakeFirstOrThrow();
-  return { userId: user.id, cookie: sessionPair(res)! };
+  return seedMicrosoftOnlyAccount(claims);
 }
 
 describe("conta Microsoft-only: estado e métodos", () => {

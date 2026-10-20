@@ -336,8 +336,8 @@ describe("CONCORRÊNCIA (A–J) — sem sleeps, sem retries", () => {
     const f1 = await startFlow("signup", code);
     const f2 = await startFlow("signup", code);
     const results = await Promise.all([
-      callback(f1, approve(sim, f1, { sub: "d1", email: "d1@gmail.com" })),
-      callback(f2, approve(sim, f2, { sub: "d2", email: "d2@gmail.com" })),
+      callback(f1, approve(sim, f1, { sub: "d1", email: "d1@gmail.com", email_verified: true })),
+      callback(f2, approve(sim, f2, { sub: "d2", email: "d2@gmail.com", email_verified: true })),
     ]);
     expect(results.filter((r) => location(r) === "/")).toHaveLength(1);
     expect(results.filter((r) => location(r) === "/login?google=erro&motivo=codigo_indisponivel")).toHaveLength(1);

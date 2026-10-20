@@ -8,7 +8,9 @@ import { randomBytes, createHash } from "node:crypto";
 import { __setMicrosoftTransportForTests, MICROSOFT_PERSONAL_TENANT_ID } from "../src/helpers/microsoftOidc";
 import { handle as startHandler } from "../src/endpoints/auth/microsoft-start_POST";
 import { handle as callbackHandler } from "../src/endpoints/auth/microsoft-callback_GET";
-import { buildRequest } from "./helpers";
+import { buildRequest, createSessionCookie, makeAccessCode } from "./helpers";
+import { db } from "../src/helpers/db";
+import { microsoftIssuerFor } from "../src/helpers/microsoftOidc";
 import { IP, makeKey, type CallbackOptions, type Flow, type SigningKey } from "./googleHarness";
 
 export { IP, location, sessionCookieOf, challengeCookieOf, sessionPair } from "./googleHarness";
@@ -203,4 +205,25 @@ export async function reauthWithMicrosoft(sim: MicrosoftSim, sessionCookie: stri
   const res = await callback(flow, code, { cookie: `${sessionCookie}; ${flow.binding}` });
   const pair = res.headers.getSetCookie().find((c) => c.startsWith("floot_built_app_session="))?.split(";")[0];
   return { flow, code, res, cookie: pair };
+}
+
+/**
+ * Estado PÓS-CADASTRO de uma conta Microsoft-only (usuário sem senha, código de acesso resgatado, identidade vinculada, sessão aberta com a Microsoft), criado direto no
+ * banco. O NOVO cadastro Microsoft está desabilitado por política (decisão C: a Microsoft não comprova a posse do e-mail), então os testes de ciclo de vida, reautenticação
+ * e exclusão partem deste estado em vez do fluxo de cadastro. O que o cadastro recusa é provado em microsoftAuth.test.ts.
+ */
+export async function seedMicrosoftOnlyAccount(claims: MsClaims, opts: { tid?: string } = {}): Promise<{ userId: number; cookie: string }> {
+  const { id: codeId } = await makeAccessCode();
+  const tid = opts.tid ?? claims.tid ?? CORP_TID;
+  const sub = claims.sub ?? "sem-sub";
+  const email = (claims.email ?? `${sub}@contoso.com`).toLowerCase();
+  const user = await db.insertInto("users").values({ email, displayName: claims.name ?? email, role: "user", registeredViaCodeId: codeId }).returning("id").executeTakeFirstOrThrow();
+  await db.updateTable("registrationAccessCodes").set({ redeemedAt: new Date(), redeemedByUserId: user.id }).where("id", "=", codeId).execute();
+  await db
+    .insertInto("userIdentities")
+    .values({ userId: user.id, provider: "microsoft", issuer: microsoftIssuerFor(tid), subject: sub, emailSnapshot: email, emailVerified: false, providerMetadata: { tid, ver: "2.0", oid: stableOid(tid, sub) } })
+    .execute();
+  const cookie = await createSessionCookie(user.id);
+  await db.updateTable("sessions").set({ primaryMethod: "microsoft" }).where("userId", "=", user.id).execute();
+  return { userId: user.id, cookie };
 }

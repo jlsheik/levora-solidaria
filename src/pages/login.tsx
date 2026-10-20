@@ -15,6 +15,9 @@ const messagesFor = (name: string): Record<string, string> => ({
   nao_vinculada: `Não encontramos uma conta LEVORA vinculada a esta conta ${name}. Para criar uma conta, use um código de acesso na aba “Criar conta”.`,
   ja_cadastrada: `Esta conta ${name} já está cadastrada. Use “Entrar com ${name}” na aba “Entrar”.`,
   codigo_indisponivel: "O código de acesso não está mais disponível. Peça um novo à plataforma.",
+  email_nao_verificado: name === "Microsoft"
+    ? "O cadastro pela Microsoft está indisponível por enquanto. Crie a conta com e-mail e senha usando o seu código de acesso (o código não foi usado)."
+    : `O ${name} não confirmou que este e-mail é seu, então a conta não foi criada. Confirme o e-mail na sua conta ${name} e tente de novo, ou crie a conta com e-mail e senha (o código de acesso não foi usado).`,
   cancelado: `O login com ${name === "Microsoft" ? "a" : "o"} ${name} foi cancelado.`,
   limite: "Muitas tentativas. Aguarde um pouco antes de tentar de novo.",
   falha: `Não foi possível concluir o login com ${name === "Microsoft" ? "a" : "o"} ${name}. Tente novamente.`,
