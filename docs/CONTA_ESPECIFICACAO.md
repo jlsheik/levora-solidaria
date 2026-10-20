@@ -1,6 +1,6 @@
 # Página Conta: o que existe, o que muda e a especificação de recuperação
 
-> **Status:** branch `integration/conta-20261018` (base: a branch de identidade do PR #20, `15561a0`). **Não mesclada.** A seção 3 (recuperação de senha e de MFA) é **especificação**: **nada dela está implementado**. Nada foi validado em staging ou produção.
+> **Status:** branch `integration/conta-pr-20261020` (PR empilhado sobre `integration/identity-master-20261018`, PR #20). A branch original `integration/conta-20261018` (base `15561a0`) foi **preservada sem alteração**. **Não mesclada.** A seção 3 (recuperação de senha e de MFA) é **especificação**: **nada dela está implementado**. Nada foi validado em staging ou produção.
 
 ## 1. Origem e escopo
 
