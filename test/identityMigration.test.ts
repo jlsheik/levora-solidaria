@@ -48,7 +48,7 @@ async function freshOldDatabase() {
   await sql.unsafe(baselineSchema());
 }
 
-async function runMigration(designatedOwnerId?: number) {
+async function runMigration(designatedOwnerId?: number | string) {
   await sql.begin(async (trx) => {
     if (designatedOwnerId !== undefined) await trx.unsafe(`SET LOCAL levora.platform_owner_user_id = '${designatedOwnerId}'`);
     await trx.unsafe(MIGRATION);
@@ -87,10 +87,18 @@ describe("migração 0015 — backfill de platform_access", () => {
     expect(state.owner_bootstrapped_at).toBeNull();
   });
 
-  it("exatamente 1 admin: vira OWNER (migrated_from_users_role), platform_state preenchido e users.role volta a 'user'", async () => {
+  it("exatamente 1 admin SEM designação: ABORTA (ninguém é promovido por contagem) e nada é aplicado (rollback)", async () => {
     const admin = await addUser("admin@x.com", "admin");
     await addUser("comum@x.com");
-    await runMigration();
+    await expect(runMigration()).rejects.toThrow(/Designe o Platform Owner/);
+    await expect(sql`SELECT 1 FROM platform_access`).rejects.toThrow();
+    expect((await sql`SELECT role FROM users WHERE id = ${admin}`)[0].role).toBe("admin");
+  });
+
+  it("exatamente 1 admin COM designação explícita: vira OWNER (migrated_from_users_role), platform_state preenchido e users.role volta a 'user'", async () => {
+    const admin = await addUser("admin@x.com", "admin");
+    await addUser("comum@x.com");
+    await runMigration(admin);
     expect(await access()).toEqual([{ user_id: admin, level: "owner", status: "active", grant_origin: "migrated_from_users_role" }]);
     const [state] = await sql`SELECT owner_bootstrapped_at FROM platform_state WHERE id = 1`;
     expect(state.owner_bootstrapped_at).not.toBeNull();
@@ -126,14 +134,35 @@ describe("migração 0015 — backfill de platform_access", () => {
     await sql.end();
     await freshOldDatabase();
     const only = await addUser("only@x.com", "admin");
-    await expect(runMigration(only + 100)).rejects.toThrow(/não é o único admin/);
+    await expect(runMigration(only + 100)).rejects.toThrow(/não é um admin ativo/);
     void a1;
+  });
+
+  it("0 admins COM designação: ABORTA (a designação não corresponde a ninguém) e nada é promovido", async () => {
+    const plain = await addUser("plain@x.com");
+    await expect(runMigration(plain)).rejects.toThrow(/não existe administrador legado ativo/);
+    await expect(sql`SELECT 1 FROM platform_access`).rejects.toThrow();
+  });
+
+  it("valor da designação inválido (não numérico, zero, decimal, zeros à esquerda, grande demais, negativo, injeção): ABORTA antes de qualquer promoção", async () => {
+    const admin = await addUser("admin@x.com", "admin");
+    for (const bad of ["abc", "0", "1.5", "007", "1234567890", "-1", "1; DROP TABLE users", " "]) {
+      await expect(runMigration(bad), bad).rejects.toThrow(/inválido|Designe o Platform Owner/);
+    }
+    await expect(sql`SELECT 1 FROM platform_access`).rejects.toThrow();
+    expect((await sql`SELECT role FROM users WHERE id = ${admin}`)[0].role).toBe("admin");
+  });
+
+  it("designado que é um admin ANONIMIZADO (zumbi) é inelegível: ABORTA", async () => {
+    const zombie = await addUser("z@x.com", "admin", { anonymized: true });
+    await addUser("real@x.com", "admin");
+    await expect(runMigration(zombie)).rejects.toThrow(/não é um admin ativo/);
   });
 
   it("'admin zumbi' (já anonimizado pela exclusão LGPD) NÃO recebe acesso e perde role='admin'", async () => {
     const zombie = await addUser("z@x.com", "admin", { anonymized: true });
     const real = await addUser("real@x.com", "admin");
-    await runMigration(); // 1 admin ATIVO + 1 zumbi ⇒ sem ambiguidade
+    await runMigration(real); // 1 admin ATIVO + 1 zumbi: a designação continua explícita
     expect((await access()).map((r) => r.user_id)).toEqual([real]);
     const [z] = await sql`SELECT role, anonymized_at FROM users WHERE id = ${zombie}`;
     expect(z.role).toBe("user");
@@ -230,7 +259,7 @@ describe("migração 0015 — atomicidade, ordem e ausência de auto-bloqueio", 
 
   it("1 admin: o backfill INSERE o owner com o trigger do último owner já instalado e a migração conclui; depois o trigger está ATIVO (revogar o único owner falha)", async () => {
     const admin = await addUser("admin@x.com", "admin");
-    await runMigration();
+    await runMigration(admin);
     expect((await access()).map((r) => r.user_id)).toEqual([admin]);
     await expect(sql`UPDATE platform_access SET status = 'revoked', revoked_at = now() WHERE user_id = ${admin}`).rejects.toThrow(/último Platform Owner/);
     await expect(sql`UPDATE users SET role = 'admin' WHERE id = ${admin}`).rejects.toThrow(/platform_access/);
@@ -296,7 +325,7 @@ describe("migração 0016 (MFA) sobre o estado da Fase 89", () => {
   it("aplica sem bloquear um owner migrado SEM MFA (o trigger só protege quem já tem TOTP ativo), mantém login_attempts e cria as tabelas vazias", async () => {
     const admin = await addUser("admin@x.com", "admin");
     await sql`INSERT INTO login_attempts (email, success) VALUES ('a@x.com', false)`;
-    await runMigration();
+    await runMigration(admin);
     await sql.begin((trx) => trx.unsafe(MIGRATION_0016));
     expect((await access()).map((r) => r.user_id)).toEqual([admin]);
     expect(await sql`SELECT id FROM mfa_methods`).toHaveLength(0);

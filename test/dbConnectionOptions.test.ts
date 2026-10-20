@@ -21,10 +21,20 @@ describe("db/connectionOptions: ponte de PGOPTIONS (lista fechada de levora.*) p
       "-c statement_timeout=1", "-c search_path=public", "-c session_replication_role=replica", // parâmetros do servidor
       "-c levora.outro=1", "-c levora.platform_owner_user_id.x=1", "-c levora.bypass_guard=on", // namespace aberto não vale
       "-c levora.platform_owner_user_id=0", "-c levora.platform_owner_user_id=007", "-c levora.platform_owner_user_id=-1", "-c levora.platform_owner_user_id=1;DROP",
-      "-c levora.platform_owner_user_id='1'", "-c levora.platform_owner_user_id=", "-c levora.platform_owner_user_id=12345678901", "-c levora.platform_owner_user_id",
+      "-c levora.platform_owner_user_id='1'", "-c levora.platform_owner_user_id=", "-c levora.platform_owner_user_id=1234567890", "-c levora.platform_owner_user_id=12345678901", "-c levora.platform_owner_user_id",
       "-x levora.platform_owner_user_id=1", "levora.platform_owner_user_id=1",
     ];
     for (const b of bad) expect(() => parseLevoraPgOptions(b), b).toThrow(/PGOPTIONS/);
+  });
+
+  it("o mesmo parâmetro informado mais de uma vez é ambíguo e recusa (mesmo com valores iguais ou em formas diferentes)", () => {
+    for (const dup of ["-c levora.platform_owner_user_id=3 -c levora.platform_owner_user_id=4", "-c levora.platform_owner_user_id=3 --levora.platform_owner_user_id=3", "-clevora.platform_owner_user_id=3 -clevora.platform_owner_user_id=3"]) {
+      expect(() => parseLevoraPgOptions(dup), dup).toThrow(/mais de uma vez/);
+    }
+  });
+
+  it("aceita o maior valor de 9 dígitos", () => {
+    expect(parseLevoraPgOptions("-c levora.platform_owner_user_id=999999999")).toEqual({ "levora.platform_owner_user_id": "999999999" });
   });
 
   it("uma opção válida acompanhada de uma inválida recusa tudo (nada é aplicado pela metade)", () => {

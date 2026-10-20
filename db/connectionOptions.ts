@@ -10,7 +10,7 @@
  * `current_setting('levora.…')` ser influenciado pelo ambiente do operador; hoje só a migração 0026 lê `levora.platform_owner_user_id`.
  */
 const ALLOWED_SETTINGS: Record<string, RegExp> = {
-  "levora.platform_owner_user_id": /^[1-9][0-9]{0,9}$/,
+  "levora.platform_owner_user_id": /^[1-9][0-9]{0,8}$/, // até 9 dígitos: o mesmo formato que a migração 0026 valida
 };
 
 export function parseLevoraPgOptions(raw: string | undefined): Record<string, string> {
@@ -32,6 +32,7 @@ export function parseLevoraPgOptions(raw: string | undefined): Record<string, st
     const rule = ALLOWED_SETTINGS[name];
     if (!rule) throw new Error(`PGOPTIONS: configuração recusada "${name}" (permitidas: ${Object.keys(ALLOWED_SETTINGS).join(", ")})`);
     if (!rule.test(value)) throw new Error(`PGOPTIONS: valor inválido para ${name}`);
+    if (name in out) throw new Error(`PGOPTIONS: ${name} informado mais de uma vez (ambíguo)`);
     out[name] = value;
   }
   return out;

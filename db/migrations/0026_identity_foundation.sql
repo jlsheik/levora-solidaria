@@ -12,10 +12,12 @@
 -- Mapa: 0015→0026 identity_foundation, 0016→0027 mfa_foundation, 0017→0028 registration_access_codes, 0018→0029 google_identity, 0019→0030 social_reauth, 0020→0031 microsoft_identity.
 -- O runner registra o NOME do arquivo: um banco que aplicou os nomes antigos (0015_identity_foundation.sql etc.) NÃO pode receber estes arquivos sem verificação (ver docs/IDENTIDADE_INTEGRACAO_MIGRATIONS.md).
 --
--- Designação explícita do owner quando existir MAIS DE UM users.role='admin' (a migration aborta sem isso). Só o designado
--- recebe platform_access (owner); os demais admins viram usuários comuns (menor privilégio) e o aviso lista os ids:
---   PGOPTIONS="-c levora.platform_owner_user_id=<id>"  npm run db:migrate:incremental
---
+-- POLÍTICA DE DESIGNAÇÃO (Platform Owner): NINGUÉM é promovido por contagem. Existindo QUALQUER users.role='admin' ativo, a migração exige a designação explícita
+-- do responsável e aborta (rollback total) sem ela, com valor inválido, ou se o designado não for um admin legado ativo:
+--   PGOPTIONS="-c levora.platform_owner_user_id=<id>"  npm run db:migrate:incremental      (db/connectionOptions.ts aceita SÓ este parâmetro, uma única vez)
+-- Só o designado recebe platform_access (owner); os demais admins viram usuários comuns (menor privilégio) e o aviso lista os ids. Sem NENHUM admin legado ativo
+-- nada é promovido, platform_state fica sem bootstrap e o owner nasce pelo bootstrap offline autorizado (npm run platform:bootstrap-owner); informar uma designação
+-- nesse caso também aborta (a designação não corresponderia a ninguém). O preflight (db:preflight) verifica as mesmas condições sem alterar nada.
 -- Os trechos entre os marcadores MIGRATION_ONLY só rodam em banco existente; db/schema.sql (banco novo) os omite.
 
 -- @@MIGRATION_ONLY_BEGIN
@@ -104,33 +106,38 @@ CREATE CONSTRAINT TRIGGER platform_access_keep_owner AFTER UPDATE OR DELETE ON p
 DO $$
 DECLARE
   admin_count INTEGER;
-  designated INTEGER := NULLIF(current_setting('levora.platform_owner_user_id', true), '')::INTEGER;
-  chosen INTEGER;
+  designated_raw TEXT := NULLIF(current_setting('levora.platform_owner_user_id', true), '');
+  designated INTEGER;
 BEGIN
+  IF designated_raw IS NOT NULL THEN
+    IF designated_raw !~ '^[1-9][0-9]{0,8}$' THEN
+      RAISE EXCEPTION 'Migração abortada: levora.platform_owner_user_id inválido (esperado: inteiro positivo de até 9 dígitos).';
+    END IF;
+    designated := designated_raw::INTEGER;
+  END IF;
+
   SELECT count(*) INTO admin_count FROM users WHERE role = 'admin' AND anonymized_at IS NULL;
 
-  IF admin_count = 1 THEN
-    SELECT id INTO chosen FROM users WHERE role = 'admin' AND anonymized_at IS NULL;
-    IF designated IS NOT NULL AND designated <> chosen THEN
-      RAISE EXCEPTION 'Migração abortada: levora.platform_owner_user_id=% não é o único admin (id %).', designated, chosen;
+  IF admin_count = 0 THEN
+    IF designated IS NOT NULL THEN
+      RAISE EXCEPTION 'Migração abortada: levora.platform_owner_user_id=% foi informado, mas não existe administrador legado ativo para designar. Nada é promovido; retire a designação e use o bootstrap offline (npm run platform:bootstrap-owner).', designated;
     END IF;
-  ELSIF admin_count > 1 THEN
+  ELSE
     IF designated IS NULL THEN
-      RAISE EXCEPTION 'Migração abortada: existem % usuários com role=admin. Designe o Platform Owner explicitamente (PGOPTIONS="-c levora.platform_owner_user_id=<id>"); o sistema não escolhe.', admin_count;
+      RAISE EXCEPTION 'Migração abortada: existem % usuário(s) com role=admin. Designe o Platform Owner explicitamente (PGOPTIONS="-c levora.platform_owner_user_id=<id>"); o sistema não promove ninguém apenas por contagem.', admin_count;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM users WHERE id = designated AND role = 'admin' AND anonymized_at IS NULL) THEN
       RAISE EXCEPTION 'Migração abortada: o usuário designado (%) não é um admin ativo.', designated;
     END IF;
-    chosen := designated;
-  END IF;
 
-  IF chosen IS NOT NULL THEN
-    INSERT INTO platform_access (user_id, level, status, grant_origin) VALUES (chosen, 'owner', 'active', 'migrated_from_users_role');
-    -- Regra de menor privilégio: os OUTROS admins NÃO recebem platform_access (viram usuários comuns). O owner pode
-    -- reconceder o nível admin depois, de forma auditada. Nada é perdido em silêncio: os ids ficam no aviso abaixo.
+    INSERT INTO platform_access (user_id, level, status, grant_origin) VALUES (designated, 'owner', 'active', 'migrated_from_users_role');
+    -- Regra de menor privilégio: os OUTROS admins NÃO recebem platform_access (viram usuários comuns). O owner pode reconceder o nível admin depois, de forma
+    -- auditada. Nada é perdido em silêncio: os ids ficam no aviso abaixo (o log do runner é a evidência; arquive-o junto do backup anterior à migração).
     IF admin_count > 1 THEN
-      RAISE NOTICE 'platform_access: owner = %; admins sem acesso de plataforma após a migração: %', chosen,
-        (SELECT string_agg(id::text, ', ' ORDER BY id) FROM users WHERE role = 'admin' AND anonymized_at IS NULL AND id <> chosen);
+      RAISE NOTICE 'platform_access: owner = % (designado); admins sem acesso de plataforma após a migração: %', designated,
+        (SELECT string_agg(id::text, ', ' ORDER BY id) FROM users WHERE role = 'admin' AND anonymized_at IS NULL AND id <> designated);
+    ELSE
+      RAISE NOTICE 'platform_access: owner = % (designado); nenhum outro admin ativo', designated;
     END IF;
     UPDATE platform_state SET owner_bootstrapped_at = now() WHERE id = 1;
   END IF;

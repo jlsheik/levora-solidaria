@@ -23,6 +23,8 @@ const BASELINE = readFileSync(path.join(ROOT, "test", "fixtures", "schema-baseli
 
 // Única alteração de dado do baseline que uma migração faz DE PROPÓSITO (docs/IDENTIDADE_E_AUTENTICACAO_ESPECIFICACAO.md §25.1/§25.3, db/migrations/0026): o admin legado deixa de ter
 // users.role = admin e passa a ter platform_access. Qualquer OUTRA diferença continua reprovando; e a exceção só vale se o efeito esperado (platform_access) existir.
+// Designação EXPLÍCITA do owner (política da migração 0026: ninguém é promovido por contagem). O usuário 3 é o admin SINTÉTICO do baseline (nenhuma identidade real).
+const OWNER_DESIGNATION = "-c levora.platform_owner_user_id=3";
 const EXPECTED_DATA_CHANGES: Record<string, string[]> = { "0026_identity_foundation.sql": ['users#3.role: "admin" → "user"'] };
 // os instantâneos são cumulativos: a mudança prevista da 0026 continua visível nos passos seguintes
 const expectedUpTo = (file: string) => Object.entries(EXPECTED_DATA_CHANGES).filter(([m]) => m <= file).flatMap(([, d]) => d);
@@ -31,7 +33,7 @@ const unexpected = (file: string, diffs: string[]) => diffs.filter((d) => !expec
 let admin: postgres.Sql;
 const open = (name: string) => postgres(urlFor(name), { max: 1, prepare: false, onnotice: () => {} });
 // `skipPreflight`: o harness (passo a passo e falhas) precisa chegar à migração em si; a pré-verificação (db/legacyPreflight.ts) tem os próprios testes em test/legacyPreflight.test.ts
-const runner = (dbName: string, skipPreflight = false) => { const r = spawnSync(process.execPath, [path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs"), "db/run-migrations.ts"], { encoding: "utf8", env: { ...process.env, NODE_ENV: "test", DATABASE_URL: urlFor(dbName), ...(skipPreflight ? { LEVORA_SKIP_PREFLIGHT: "1" } : {}) }, timeout: 120000 }); return { status: r.status, out: `${r.stdout}${r.stderr}` }; };
+const runner = (dbName: string, skipPreflight = false, pgOptions?: string) => { const r = spawnSync(process.execPath, [path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs"), "db/run-migrations.ts"], { encoding: "utf8", env: { ...process.env, NODE_ENV: "test", DATABASE_URL: urlFor(dbName), ...(skipPreflight ? { LEVORA_SKIP_PREFLIGHT: "1" } : {}), ...(pgOptions ? { PGOPTIONS: pgOptions } : {}) }, timeout: 120000 }); return { status: r.status, out: `${r.stdout}${r.stderr}` }; };
 async function recreate(name: string) {
   if (!name.endsWith("_test") || !name.includes("_mig_")) throw new Error(`banco descartável fora do padrão: ${name}`); // só mexe em bancos que ESTE arquivo nomeia
   await admin.unsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`); await admin.unsafe(`CREATE DATABASE "${name}"`); created.add(name);
@@ -136,7 +138,7 @@ beforeAll(async () => {
   for (const f of MIGRATIONS) await MAIN`INSERT INTO schema_migrations (id) VALUES (${f})`;
   for (const f of MIGRATIONS) {
     await MAIN`DELETE FROM schema_migrations WHERE id = ${f}`;
-    const r = runner(NAMES.main, true);
+    const r = runner(NAMES.main, true, OWNER_DESIGNATION);
     const applied = [...r.out.matchAll(/Aplicada com sucesso: (\S+)/g)].map((m) => m[1]);
     if (r.status !== 0 || applied.join() !== f) throw new Error(`o passo ${f} não aplicou exatamente essa migração (status ${r.status}): ${r.out.slice(-300)}`);
     stepLog.push({ file: f, diffs: diffSnapshots(before, await snapshot(MAIN, baselineColumns)), out: r.out });
@@ -296,7 +298,7 @@ async function failure(name: string, seedBad: string, expectFailAt: string, abse
     expect((await sql.unsafe(absent))[0].n).toBe(0); // atomicidade: nada da migração que falhou ficou aplicado
     expect(diffSnapshots(snap, await snapshot(sql, cols))).toEqual([]); // e nenhum dado foi alterado ou perdido
     await sql.unsafe(fix); // recuperação: corrige o dado antigo e roda de novo
-    const again = runner(name);
+    const again = runner(name, false, OWNER_DESIGNATION); // com a pré-verificação; o admin sintético do baseline exige a designação EXPLÍCITA (0026)
     expect(again.status, again.out).toBe(0);
     expect((await sql`SELECT id FROM schema_migrations ORDER BY id`).map((x) => x.id)).toEqual(MIGRATIONS);
   } finally { await sql.end({ timeout: 2 }).catch(() => undefined); }
