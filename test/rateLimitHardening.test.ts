@@ -9,6 +9,7 @@
  * provar que a extração de IP (server/index.ts) resiste a spoofing via
  * X-Forwarded-For, porque o helper puro nunca vê esse header.
  */
+import { makeAccessCode } from "./helpers";
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -50,6 +51,7 @@ describe("Fase 52 — resistência a spoofing de IP via X-Forwarded-For", () => 
 
   it("sem TRUST_PROXY configurado (padrão), 11 requisições com X-Forwarded-For FORJADO e DIFERENTE a cada vez ainda compartilham o mesmo bucket (XFF é ignorado) — a 11ª é bloqueada (limite de cadastro é 10/hora/IP)", async () => {
     const results: number[] = [];
+    const codes = await Promise.all(Array.from({ length: 11 }, () => makeAccessCode())); // Fase 91: o cadastro exige código ativo
     for (let i = 0; i < 11; i++) {
       const response = await fetch(`${baseUrl}/_api/v1/auth/register_with_password`, {
         method: "POST",
@@ -61,7 +63,7 @@ describe("Fase 52 — resistência a spoofing de IP via X-Forwarded-For", () => 
           // IP novo).
           "X-Forwarded-For": `10.99.0.${i}`,
         },
-        body: JSON.stringify({ json: { email: `spoof-sem-proxy-${i}@example.com`, password: "senha-valida-123", displayName: `Spoof ${i}` } }),
+        body: JSON.stringify({ json: { email: `spoof-sem-proxy-${i}@example.com`, password: "senha-valida-123", displayName: `Spoof ${i}`, accessCode: codes[i].code } }),
       });
       results.push(response.status);
     }
@@ -86,6 +88,7 @@ describe("Fase 52 — TRUST_PROXY configurado explicitamente passa a honrar X-Fo
 
   it("com TRUST_PROXY=1, 11 requisições com X-Forwarded-For diferente a cada vez recebem buckets INDEPENDENTES — nenhuma bloqueada", async () => {
     const results: number[] = [];
+    const codes = await Promise.all(Array.from({ length: 11 }, () => makeAccessCode()));
     for (let i = 0; i < 11; i++) {
       const response = await fetch(`${baseUrl}/_api/v1/auth/register_with_password`, {
         method: "POST",
@@ -93,7 +96,7 @@ describe("Fase 52 — TRUST_PROXY configurado explicitamente passa a honrar X-Fo
           "Content-Type": "application/json",
           "X-Forwarded-For": `203.0.113.${i}`,
         },
-        body: JSON.stringify({ json: { email: `trust-proxy-${i}@example.com`, password: "senha-valida-123", displayName: `TP ${i}` } }),
+        body: JSON.stringify({ json: { email: `trust-proxy-${i}@example.com`, password: "senha-valida-123", displayName: `TP ${i}`, accessCode: codes[i].code } }),
       });
       results.push(response.status);
     }
@@ -115,11 +118,12 @@ describe("Fase 52 — concorrência: o limite nunca é ultrapassado sob requisi�
   });
 
   it("50 requisições de cadastro disparadas ao mesmo tempo, mesmo IP: no máximo 10 permitidas, nunca mais (prova que checkRateLimit não tem race condition — a seção crítica roda inteira de forma síncrona, sem nenhum await no meio)", async () => {
+    const codes = await Promise.all(Array.from({ length: 50 }, () => makeAccessCode()));
     const requests = Array.from({ length: 50 }, (_, i) =>
       fetch(`${baseUrl}/_api/v1/auth/register_with_password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ json: { email: `concorrencia-http-${i}@example.com`, password: "senha-valida-123", displayName: `C ${i}` } }),
+        body: JSON.stringify({ json: { email: `concorrencia-http-${i}@example.com`, password: "senha-valida-123", displayName: `C ${i}`, accessCode: codes[i].code } }),
       })
     );
     const responses = await Promise.all(requests);

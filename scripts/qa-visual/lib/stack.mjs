@@ -82,7 +82,10 @@ export async function startStack({ root, databaseUrl, onSpawn, seedScript = path
   const vite = path.join(root, "node_modules", "vite", "bin", "vite.js");
   for (const p of [tsx, vite]) if (!existsSync(p)) throw new Error(`dependência de desenvolvimento ausente: ${path.relative(root, p)} (rode npm install)`);
   const apiPort = await pickFreePort(); const webPort = await pickFreePort();
-  const env = { ...process.env, DATABASE_URL: databaseUrl, JWT_SECRET: `qa-efemero-${Math.random().toString(36).slice(2)}${Date.now()}-0123456789abcdef`, PORT: String(apiPort), QA_API_PORT: String(apiPort), QA_WEB_PORT: String(webPort), NODE_ENV: "development", ...extraEnv };
+  const env = { ...process.env, DATABASE_URL: databaseUrl, JWT_SECRET: `qa-efemero-${Math.random().toString(36).slice(2)}${Date.now()}-0123456789abcdef`, PORT: String(apiPort), QA_API_PORT: String(apiPort), QA_WEB_PORT: String(webPort), NODE_ENV: "development",
+    // Identidade (Fase 90): titulares de platform_access exigem MFA. A pilha de QA é descartável, sintética e protegida por assertDisposableDatabase (banco *_qa local); a própria
+    // aplicação só aceita relaxar o MFA com PLATFORM_MFA_REQUIRED=false + LEVORA_ENVIRONMENT=staging (src/helpers/identityKeys.tsx). Aqui vale SÓ para os filhos desta pilha.
+    PLATFORM_MFA_REQUIRED: "false", LEVORA_ENVIRONMENT: "staging", ...extraEnv };
   const children = [];
   const stop = async () => { for (const c of children.reverse()) killTree(c); await sleep(300); };
   try {

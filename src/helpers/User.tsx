@@ -11,6 +11,8 @@ export interface User {
   email: string;
   displayName: string;
   avatarUrl: string | null;
-  // adjust this as necessary
+  // Derivado de `platformLevel` (compatibilidade com o frontend): "admin" ⇔ possui platform_access ativo.
+  // A autorização de plataforma NÃO vem deste campo — ver helpers/platformAccess.
   role: "admin" | "user";
+  platformLevel: "owner" | "admin" | null;
 }

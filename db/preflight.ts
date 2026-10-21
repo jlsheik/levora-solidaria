@@ -7,6 +7,7 @@
  */
 import "dotenv/config";
 import postgres from "postgres";
+import { pgConnectionFromEnv } from "./connectionOptions.js";
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -17,7 +18,7 @@ const MIGRATIONS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 async function main(): Promise<number> {
   const connectionString = process.env.DATABASE_URL || process.env.FLOOT_DATABASE_URL;
   if (!connectionString) { console.error("DATABASE_URL não definida. Configure o .env (veja .env.example)."); return PREFLIGHT_EXIT.UNVERIFIED; }
-  const sql = postgres(connectionString, { max: 1, prepare: false, onnotice: () => {} });
+  const sql = postgres(connectionString, { max: 1, prepare: false, onnotice: () => {}, ...pgConnectionFromEnv() });
   try {
     let files: string[];
     try {

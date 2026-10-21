@@ -35,14 +35,14 @@ export async function createTestUser(overrides: { email?: string; displayName?: 
 }
 
 /** Cria uma sessão de verdade na tabela `sessions` e devolve o cookie assinado. */
-export async function createSessionCookie(userId: number): Promise<string> {
+export async function createSessionCookie(userId: number, options: { mfaVerified?: boolean } = {}): Promise<string> {
   const sessionId = randomBytes(32).toString("hex");
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SessionExpirationSeconds * 1000);
 
   await db
     .insertInto("sessions")
-    .values({ id: sessionId, userId, createdAt: now, lastAccessed: now, expiresAt })
+    .values({ id: sessionId, userId, createdAt: now, lastAccessed: now, expiresAt, ...(options.mfaVerified ? { mfaVerifiedAt: now, lastReauthAt: now } : {}) })
     .execute();
 
   const probe = new Response();
@@ -112,12 +112,83 @@ export async function addMembership(organizationId: number, userId: number, role
     .execute();
 }
 
-/** Usuário com `role: "admin"` — o único papel que passa por `requirePlatformAdmin`. */
+/** Segredo TOTP FIXO dos usuários de teste com MFA (nunca usado fora de teste). */
+export const TEST_TOTP_SECRET = Buffer.from("12345678901234567890");
+
+/** Ativa um TOTP (segredo `TEST_TOTP_SECRET`, cifrado como em produção) para o usuário. */
+export async function enrollTestMfa(userId: number): Promise<void> {
+  const { encryptSecret } = await import("../src/helpers/identityKeys");
+  const { ciphertext, keyId } = encryptSecret(TEST_TOTP_SECRET, `mfa:${userId}`);
+  await db
+    .insertInto("mfaMethods")
+    .values({ userId, status: "active", secretCiphertext: ciphertext, secretKeyId: keyId, confirmedAt: new Date() })
+    .execute();
+}
+
+/** Código TOTP do usuário de teste para o passo (relativo ao relógio atual). */
+export async function testTotp(stepOffset = 0, nowMs = Date.now()): Promise<string> {
+  const { totpCodeAtStep, stepAt } = await import("../src/helpers/totp");
+  return totpCodeAtStep(TEST_TOTP_SECRET, stepAt(nowMs) + stepOffset);
+}
+
+/** Usuário com `platform_access` ativo (nível `admin`) E MFA ativo (poder de plataforma exige MFA) — sessão com MFA concluído. */
 export async function createPlatformAdmin(overrides?: { email?: string; displayName?: string }): Promise<AuthenticatedTestUser> {
   const user = await createTestUser(overrides);
-  await db.updateTable("users").set({ role: "admin" }).where("id", "=", user.id).execute();
-  const cookie = await createSessionCookie(user.id);
+  await db.insertInto("platformAccess").values({ userId: user.id, level: "admin", status: "active", grantOrigin: "test" }).execute();
+  await enrollTestMfa(user.id);
+  const cookie = await createSessionCookie(user.id, { mfaVerified: true });
   return { userId: user.id, email: user.email, cookie };
+}
+
+/** Platform Owner (no máximo 1 ativo por vez — índice único parcial). */
+export async function createPlatformOwner(overrides?: { email?: string; displayName?: string }): Promise<AuthenticatedTestUser> {
+  const user = await createTestUser(overrides);
+  await db.insertInto("platformAccess").values({ userId: user.id, level: "owner", status: "active", grantOrigin: "test" }).execute();
+  await enrollTestMfa(user.id);
+  const cookie = await createSessionCookie(user.id, { mfaVerified: true });
+  return { userId: user.id, email: user.email, cookie };
+}
+
+/**
+ * Fase 91 — emissor de códigos para os testes. Um "criador de códigos" barato (usuário com platform_access, SEM senha/MFA — o helper
+ * de dados não passa pelo endpoint, que é quem exige MFA/step-up) é criado uma vez por teste. `state` fabrica códigos em qualquer
+ * estado terminal/derivado.
+ */
+export async function ensureCodeCreator(): Promise<number> {
+  // Idempotente e seguro sob concorrência (vários códigos fabricados em paralelo): ON CONFLICT DO NOTHING + releitura.
+  await db.insertInto("users").values({ email: "criador-de-codigos@example.com", displayName: "Criador de códigos", role: "user" }).onConflict((oc) => oc.doNothing()).execute();
+  const creator = await db.selectFrom("users").select("id").where("email", "=", "criador-de-codigos@example.com").executeTakeFirstOrThrow();
+  await db.insertInto("platformAccess").values({ userId: creator.id, level: "admin", status: "active", grantOrigin: "test" }).onConflict((oc) => oc.column("userId").doNothing()).execute();
+  return creator.id;
+}
+
+export type CodeFixtureState = "active" | "expired" | "revoked" | "redeemed";
+
+export async function makeAccessCode(options: { state?: CodeFixtureState; label?: string; creatorId?: number; validityMs?: number } = {}): Promise<{ code: string; id: number; creatorId: number }> {
+  const { createAccessCode } = await import("../src/helpers/registrationCodes");
+  const creatorId = options.creatorId ?? (await ensureCodeCreator());
+  const state = options.state ?? "active";
+  const now = new Date();
+  const createdAt = state === "expired" ? new Date(now.getTime() - 2 * 3600 * 1000) : now;
+  const expiresAt = state === "expired" ? new Date(now.getTime() - 3600 * 1000) : new Date(now.getTime() + (options.validityMs ?? 24 * 3600 * 1000));
+  const created = await db.transaction().execute((trx) => createAccessCode(trx, { actorUserId: creatorId, label: options.label ?? null, expiresAt, now: createdAt }));
+  if (state === "revoked") {
+    await db.updateTable("registrationAccessCodes").set({ revokedAt: new Date(), revokedByUserId: creatorId }).where("id", "=", created.id).execute();
+  } else if (state === "redeemed") {
+    const redeemer = await createTestUser();
+    await db.updateTable("registrationAccessCodes").set({ redeemedAt: new Date(), redeemedByUserId: redeemer.id }).where("id", "=", created.id).execute();
+    await db.updateTable("users").set({ registeredViaCodeId: created.id }).where("id", "=", redeemer.id).execute();
+  }
+  return { code: created.code, id: created.id, creatorId };
+}
+
+/** Envolve o handler do cadastro: injeta um código ATIVO novo quando o corpo não traz `accessCode` (testes antigos de cadastro/enumeração). */
+export function withFreshAccessCode(handler: (request: Request) => Promise<Response>) {
+  return async (request: Request): Promise<Response> => {
+    const body = superjson.parse<Record<string, unknown>>(await request.clone().text());
+    if (body && body.accessCode === undefined) body.accessCode = (await makeAccessCode()).code;
+    return handler(new Request(request.url, { method: request.method, headers: request.headers, body: superjson.stringify(body) }));
+  };
 }
 
 /** Fonte "manual" — único connectorKey que nasce `ativa` sem configuração externa (ver connectorsManual.tsx). */

@@ -6,8 +6,13 @@ import { schema } from "./account-delete_POST.schema.js";
 import { compare } from "bcryptjs";
 import { checkRateLimit, rateLimitResponse } from "../../helpers/rateLimit.js";
 import superjson from "superjson";
-import { ConflictError, buildErrorResponse } from "../../helpers/errorResponse.js";
+import { ConflictError, SocialReauthRequiredError, buildErrorResponse } from "../../helpers/errorResponse.js";
+import { NotAuthenticatedError } from "../../helpers/getSetServerSession.js";
+import { isPrimaryReauthFresh } from "../../helpers/accountReauth.js";
+import { requireRecentAuth } from "../../helpers/stepUp.js";
+import { getMfaMethod } from "../../helpers/mfa.js";
 import { lockOrganizationsInOrder } from "../../helpers/membershipAdmin.js";
+import { lockPlatformAccessInOrder, lockUsersInOrder } from "../../helpers/lockOrder.js";
 
 // Fase 52 (SEC-07): achado da varredura "qualquer endpoint com bcrypt" —
 // este endpoint comparava a senha (bcrypt.compare) sem nenhum limite,
@@ -36,7 +41,7 @@ const USER_RATE_LIMIT = { limit: 5, windowMs: 15 * 60 * 1000 };
  */
 export async function handle(request: Request) {
   try {
-    const { user } = await getServerUserSession(request);
+    const { user, session } = await getServerUserSession(request);
 
     const userLimit = checkRateLimit({ bucket: "account-delete", identifier: String(user.id), ...USER_RATE_LIMIT });
     if (!userLimit.allowed) {
@@ -52,19 +57,28 @@ export async function handle(request: Request) {
       .where("userId", "=", user.id)
       .executeTakeFirst();
 
-    if (!passwordRow) {
-      return new Response(superjson.stringify({ message: "Não foi possível confirmar sua senha" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const passwordValid = await compare(input.password, passwordRow.passwordHash);
-    if (!passwordValid) {
-      return new Response(superjson.stringify({ message: "Senha incorreta" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (passwordRow) {
+      // Conta COM senha: a confirmação é a senha (comportamento anterior, inalterado).
+      if (!input.password) {
+        return new Response(superjson.stringify({ message: "Informe sua senha para confirmar", code: "senha_necessaria" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      }
+      const passwordValid = await compare(input.password, passwordRow.passwordHash);
+      if (!passwordValid) {
+        return new Response(superjson.stringify({ message: "Senha incorreta" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+    } else {
+      // Conta SEM senha (ex.: só Google): NÃO se inventa senha. Exige uma identidade vinculada, confirmação digitada e — dentro da
+      // transação, sob o lock do usuário — reautenticação recente da identidade (+ MFA recente, se houver MFA).
+      const hasIdentity = await db.selectFrom("userIdentities").select("id").where("userId", "=", user.id).executeTakeFirst();
+      if (!hasIdentity) {
+        return new Response(superjson.stringify({ message: "Não foi possível confirmar sua identidade" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      }
+      if (input.confirmation !== "EXCLUIR") {
+        return new Response(superjson.stringify({ message: "Digite EXCLUIR para confirmar.", code: "confirmacao_necessaria" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      }
     }
 
     await db.transaction().execute(async (trx) => {
@@ -81,6 +95,29 @@ export async function handle(request: Request) {
         .where("status", "=", "ativo")
         .execute();
       await lockOrganizationsInOrder(trx, memberships.map((row) => row.organizationId));
+
+      // Ordem canônica de locks (lockOrder.tsx): organizações → users → platform_access → credenciais → sessões → audit.
+      // Fase 89: titular de platform_access ATIVO (owner ou admin) não exclui a conta — o último owner nunca some, e a
+      // anonimização nunca deixa "acesso de plataforma sem identidade". O trigger de banco é a defesa final.
+      await lockUsersInOrder(trx, [user.id]);
+      // Revalida SOB O LOCK (duas exclusões simultâneas, reauth × logout, sessão expirada): a sessão ainda existe e a conta ainda não foi excluída.
+      const freshSession = await trx.selectFrom("sessions").select(["primaryReauthAt", "mfaVerifiedAt", "lastReauthAt"]).where("id", "=", session.id).executeTakeFirst();
+      const owner = await trx.selectFrom("users").select("anonymizedAt").where("id", "=", user.id).executeTakeFirst();
+      if (!freshSession || !owner || owner.anonymizedAt) throw new NotAuthenticatedError();
+      if (!passwordRow) {
+        if (!isPrimaryReauthFresh(freshSession)) throw new SocialReauthRequiredError();
+        // Google NÃO substitui o MFA LEVORA: com MFA ativo, o step-up do 2º fator também tem de ser recente.
+        if (await getMfaMethod(trx, user.id, "active")) requireRecentAuth(freshSession);
+      }
+      const [platformRow] = await lockPlatformAccessInOrder(trx, [user.id]);
+      if (platformRow && platformRow.status === "active") {
+        throw new ConflictError(
+          platformRow.level === "owner"
+            ? "Você é o proprietário da plataforma. Transfira a propriedade antes de excluir a conta."
+            : "Você possui acesso de plataforma. Peça ao proprietário para revogá-lo antes de excluir a conta.",
+          "plataforma_acesso_ativo"
+        );
+      }
 
       const blockingOrgs = await trx
         .selectFrom("memberships")
@@ -128,7 +165,14 @@ export async function handle(request: Request) {
         .where("userId", "=", user.id)
         .execute();
 
+      // Fase 90: segredo TOTP, recovery codes e challenges são dados de credencial — saem junto com a senha.
+      await trx.deleteFrom("mfaMethods").where("userId", "=", user.id).execute();
+      await trx.deleteFrom("mfaRecoveryCodes").where("userId", "=", user.id).execute();
+      await trx.deleteFrom("authChallenges").where("userId", "=", user.id).execute();
       await trx.deleteFrom("userPasswords").where("userId", "=", user.id).execute();
+      // Fase 92: identidades externas (Google) são credenciais — somem com a conta. O código de acesso consumido NÃO volta: o vínculo
+      // users.registered_via_code_id e redeemed_by_user_id permanecem na linha anonimizada.
+      await trx.deleteFrom("userIdentities").where("userId", "=", user.id).execute();
       await trx.deleteFrom("sessions").where("userId", "=", user.id).execute();
 
       await trx
@@ -137,6 +181,7 @@ export async function handle(request: Request) {
           email: `usuario-excluido-${user.id}@removido.invalid`,
           displayName: "Usuário removido",
           avatarUrl: null,
+          anonymizedAt: new Date(),
           updatedAt: new Date(),
         })
         .where("id", "=", user.id)

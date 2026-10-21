@@ -11,8 +11,10 @@ const COLLECTOR = process.env.QA_SEC_COLLECTOR ?? "";
 if (!QA_PASSWORD || !COLLECTOR) throw new Error("QA_PASSWORD/QA_SEC_COLLECTOR não definidas (a semente deve ser executada por scripts/qa-visual/security.mjs)");
 const P = (field: string) => combined(COLLECTOR, field);
 
-const mk = async (email: string, name: string, role: "admin" | "user" = "user") => {
-  const u = await db.insertInto("users").values({ email, displayName: name, role }).returning("id").executeTakeFirstOrThrow();
+const mk = async (email: string, name: string, platformLevel?: "admin") => {
+  const u = await db.insertInto("users").values({ email, displayName: name, role: "user" }).returning("id").executeTakeFirstOrThrow();
+  // Identidade (Fase 89): users.role = admin foi abolido; o poder de plataforma é platform_access.
+  if (platformLevel) await db.insertInto("platformAccess").values({ userId: u.id, level: platformLevel, status: "active", grantOrigin: "qa" }).execute();
   await db.insertInto("userPasswords").values({ userId: u.id, passwordHash: await generatePasswordHash(QA_PASSWORD) }).execute();
   return u.id;
 };

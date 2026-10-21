@@ -4,11 +4,14 @@ import { sql } from "kysely";
 import { z } from "zod";
 import { schema } from "./login_with_password_POST.schema.js";
 import { compare } from "bcryptjs";
-import { randomBytes } from "crypto";
-import {
-  setServerSession,
-  SessionExpirationSeconds,
-} from "../../helpers/getSetServerSession.js";
+import { setServerSession } from "../../helpers/getSetServerSession.js";
+import { createSession } from "../../helpers/sessionLifecycle.js";
+import { auditLoginFailure, auditLoginSuccess, auditLoginSuspicious, ipPrefix } from "../../helpers/loginAudit.js";
+import { createChallenge, setChallengeCookie } from "../../helpers/authChallenges.js";
+import { getMfaMethod } from "../../helpers/mfa.js";
+import { isPlatformMfaRequired } from "../../helpers/identityKeys.js";
+import { recordAuditLogEntry } from "../../helpers/auditLog.js";
+import { lockUsersInOrder } from "../../helpers/lockOrder.js";
 import { User } from "../../helpers/User.js";
 import { checkRateLimit, getClientIp, rateLimitResponse } from "../../helpers/rateLimit.js";
 import superjson from "superjson";
@@ -38,6 +41,14 @@ const RATE_LIMIT_CONFIG = {
 // protege uma CONTA específica sendo atacada; este protege o servidor de
 // alguém varrendo muitos e-mails diferentes a partir do mesmo IP.
 const IP_RATE_LIMIT = { limit: 20, windowMs: 15 * 60 * 1000 };
+
+// Fase 90 — ESTRATÉGIA DO LOCK (docs/IDENTIDADE_FASE90_AUDITORIA.md §login lock). O bloqueio por e-mail (qualquer origem) deixava
+// qualquer pessoa travar o login do Platform Owner. Agora, para contas PROTEGIDAS por segundo fator (MFA ativo ou titular de
+// platform_access) o bloqueio é por (e-mail, rede /24): quem erra senha de outra rede NÃO trava o dono; a força bruta continua
+// limitada por rede (5/15 min), por IP (20/15 min) e, sobretudo, pelo TOTP (que exige o 2º fator mesmo com a senha certa, com
+// bloqueio progressivo próprio). Contas SEM 2º fator mantêm o bloqueio por e-mail (a senha é a única defesa). Falhas somadas
+// de várias redes (>= 20 em 15 min) geram um evento de auditoria "login_suspeito" — alerta, não bloqueio.
+const SUSPICIOUS_FAILURES_THRESHOLD = 20;
 
 // Helper function to safely convert union type to Date
 function safeToDate(
@@ -86,8 +97,20 @@ export async function handle(request: Request) {
         trx
       );
 
+      // Fase 90: a conta é "protegida" (2º fator ou poder de plataforma)? Define o ESCOPO do bloqueio (ver acima).
+      const prefix = ipPrefix(ip);
+      const candidate = await trx
+        .selectFrom("users")
+        .leftJoin("platformAccess", (join) => join.onRef("platformAccess.userId", "=", "users.id").on("platformAccess.status", "=", "active"))
+        .select(["users.id", "platformAccess.level as platformLevel"])
+        .where(sql`LOWER(users.email)`, "=", normalizedEmail)
+        .limit(1)
+        .executeTakeFirst();
+      const candidateMfa = candidate ? await getMfaMethod(trx, candidate.id, "active") : undefined;
+      const protectedAccount = Boolean(candidate && (candidate.platformLevel || candidateMfa));
+
       // Get rate limiting info efficiently - use COUNT and MAX instead of SELECT *
-      const rateLimitQuery = await trx
+      let attemptsQuery = trx
         .selectFrom("loginAttempts")
         .select([
           trx.fn.countAll<number>().as("failedCount"),
@@ -96,8 +119,9 @@ export async function handle(request: Request) {
         .where("email", "=", normalizedEmail)
         .where("success", "=", false)
         .where("attemptedAt", ">=", windowStart)
-        .where("attemptedAt", "is not", null) // Ensure null safety
-        .executeTakeFirst();
+        .where("attemptedAt", "is not", null); // Ensure null safety
+      if (protectedAccount) attemptsQuery = attemptsQuery.where("ipPrefix", "=", prefix);
+      const rateLimitQuery = await attemptsQuery.executeTakeFirst();
 
       const { failedCount = 0, lastFailedAt = null } = rateLimitQuery || {};
       const safeLastFailedAt = safeToDate(lastFailedAt);
@@ -118,6 +142,8 @@ export async function handle(request: Request) {
             (lockoutEnd.getTime() - now.getTime()) / (60 * 1000)
           );
           // DO NOT log blocked attempts to prevent extending lockout indefinitely
+          // (loginAttempts). A auditoria é outra trilha: 1 evento por e-mail+IP a cada 10 min (loginAudit).
+          await auditLoginFailure(trx, { userId: null, email: normalizedEmail, ip, method: "senha", reason: "bloqueio_temporario" });
           return {
             type: "rate_limited" as const,
             remainingMinutes,
@@ -138,7 +164,6 @@ export async function handle(request: Request) {
           "users.email",
           "users.displayName",
           "users.avatarUrl",
-          "users.role",
           "userPasswords.passwordHash",
         ])
         .where(sql`LOWER(users.email)`, "=", normalizedEmail)
@@ -159,9 +184,11 @@ export async function handle(request: Request) {
             email: normalizedEmail,
             attemptedAt: now,
             success: false,
+            ipPrefix: prefix,
           })
           .execute();
 
+        await auditLoginFailure(trx, { userId: null, email: normalizedEmail, ip, method: "senha", reason: "credenciais_invalidas" });
         return {
           type: "auth_failed" as const,
         };
@@ -179,9 +206,19 @@ export async function handle(request: Request) {
             email: normalizedEmail,
             attemptedAt: now,
             success: false,
+            ipPrefix: prefix,
           })
           .execute();
 
+        await auditLoginFailure(trx, { userId: user.id, email: normalizedEmail, ip, method: "senha", reason: "credenciais_invalidas" });
+        const accountWide = await trx
+          .selectFrom("loginAttempts")
+          .select((eb) => eb.fn.countAll<string>().as("n"))
+          .where("email", "=", normalizedEmail)
+          .where("success", "=", false)
+          .where("attemptedAt", ">=", windowStart)
+          .executeTakeFirstOrThrow();
+        if (Number(accountWide.n) >= SUSPICIOUS_FAILURES_THRESHOLD) await auditLoginSuspicious(trx, { userId: user.id });
         return {
           type: "auth_failed" as const,
         };
@@ -194,39 +231,56 @@ export async function handle(request: Request) {
           email: normalizedEmail,
           attemptedAt: now,
           success: true,
-        })
-        .execute();
-
-      // Create session inside the same transaction to ensure atomicity
-      const sessionId = randomBytes(32).toString("hex");
-      const expiresAt = new Date(
-        now.getTime() + SessionExpirationSeconds * 1000
-      );
-
-      await trx
-        .insertInto("sessions")
-        .values({
-          id: sessionId,
-          userId: user.id,
-          createdAt: now,
-          lastAccessed: now,
-          expiresAt: expiresAt,
+          ipPrefix: prefix,
         })
         .execute();
 
       // Reset failed attempts counter by deleting previous failed attempts
-      // This preserves audit trail of successful logins
-      await trx
-        .deleteFrom("loginAttempts")
-        .where("email", "=", normalizedEmail)
-        .where("success", "=", false)
-        .execute();
+      // This preserves audit trail of successful logins. Conta protegida: só as falhas DESTA rede (quem erra de fora não
+      // perde o histórico; quem acerta a senha não apaga a evidência de tentativas de outras redes).
+      let resetQuery = trx.deleteFrom("loginAttempts").where("email", "=", normalizedEmail).where("success", "=", false);
+      if (protectedAccount) resetQuery = resetQuery.where("ipPrefix", "=", prefix);
+      await resetQuery.execute();
+
+      // CORRIDA login × ativação/desativação de MFA (e concessão/revogação de plataforma): a decisão "precisa de 2º fator?" e a
+      // criação da sessão acontecem SOB o lock da linha do usuário (o mesmo que a ativação do MFA toma). Sem isto, um login que
+      // leu "sem MFA" antes do COMMIT da ativação podia inserir uma sessão pré-MFA DEPOIS de a ativação revogar as outras.
+      await lockUsersInOrder(trx, [user.id]);
+      const freshAccess = await trx.selectFrom("platformAccess").select("level").where("userId", "=", user.id).where("status", "=", "active").executeTakeFirst();
+      const freshMfa = await getMfaMethod(trx, user.id, "active");
+      const platform = freshAccess ? { level: freshAccess.level } : undefined;
+
+      // Fase 90: senha correta NÃO é login completo para quem tem 2º fator (ou poder de plataforma). Emite-se um
+      // auth_challenge (cookie próprio, sem sessão) — a sessão só nasce em mfa-verify / mfa-setup-confirm.
+      const needsEnrollment = !freshMfa && Boolean(platform) && isPlatformMfaRequired();
+      if (freshMfa || needsEnrollment) {
+        const challenge = await createChallenge(trx, {
+          purpose: freshMfa ? "mfa_login" : "mfa_enroll",
+          userId: user.id,
+          primaryMethod: "password",
+          now,
+        });
+        await recordAuditLogEntry(
+          { organizationId: null, actorUserId: user.id, action: "mfa.desafio_emitido", entityType: "user", entityId: String(user.id), metadata: { metodo: "senha", tipo: freshMfa ? "verificacao" : "inscricao", ipPrefix: prefix } },
+          trx
+        );
+        return { type: "challenge" as const, user, challenge, kind: freshMfa ? ("verify" as const) : ("enroll" as const) };
+      }
+
+      // Create session inside the same transaction to ensure atomicity
+      const createdSession = await createSession(trx, { userId: user.id, primaryMethod: "password", now });
+      const sessionId = createdSession.id;
+
+      // Auditoria por último (a hash-chain toma um advisory lock global).
+      await auditLoginSuccess(trx, { userId: user.id, method: "senha", ip });
 
       return {
         type: "success" as const,
         user,
         sessionId,
         sessionCreatedAt: now,
+        absoluteExpiresAt: createdSession.absoluteExpiresAt,
+        platformLevel: platform?.level ?? null,
       };
     });
 
@@ -274,6 +328,20 @@ export async function handle(request: Request) {
       );
     }
 
+    // Fase 90: segundo fator pendente — resposta SEM sessão e SEM dados do usuário (só o necessário para a próxima etapa).
+    if (result.type === "challenge") {
+      const challengeResponse = new Response(
+        superjson.stringify({
+          mfaRequired: true as const,
+          mfaKind: result.kind,
+          expiresInSeconds: Math.max(1, Math.floor((result.challenge.expiresAt.getTime() - now.getTime()) / 1000)),
+        }),
+        { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } }
+      );
+      setChallengeCookie(challengeResponse, result.challenge.secret, result.challenge.expiresAt, now);
+      return challengeResponse;
+    }
+
     // Success case - session was already created in transaction
     const user = result.user;
 
@@ -283,7 +351,8 @@ export async function handle(request: Request) {
       email: user.email,
       avatarUrl: user.avatarUrl,
       displayName: user.displayName,
-      role: user.role,
+      role: result.platformLevel ? "admin" : "user",
+      platformLevel: result.platformLevel,
     };
 
     const response = new Response(
@@ -298,11 +367,15 @@ export async function handle(request: Request) {
     );
 
     // Set session cookie
-    await setServerSession(response, {
-      id: result.sessionId,
-      createdAt: result.sessionCreatedAt.getTime(),
-      lastAccessed: result.sessionCreatedAt.getTime(),
-    });
+    await setServerSession(
+      response,
+      {
+        id: result.sessionId,
+        createdAt: result.sessionCreatedAt.getTime(),
+        lastAccessed: result.sessionCreatedAt.getTime(),
+      },
+      { absoluteExpiresAt: result.absoluteExpiresAt }
+    );
 
     return response;
   } catch (error) {

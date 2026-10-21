@@ -12,6 +12,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { db } from "../src/helpers/db";
 import { SessionExpirationSeconds } from "../src/helpers/getSetServerSession";
+import { SESSION_POLICY } from "../src/helpers/sessionPolicy";
 import { handle as getSession } from "../src/endpoints/auth/session_GET";
 import { handle as postLogout } from "../src/endpoints/auth/logout_POST";
 import { handle as postLogin } from "../src/endpoints/auth/login_with_password_POST";
@@ -134,16 +135,18 @@ describe("o que autoriza uma requisição", () => {
     expect((await getSession(asSession(u.cookie))).status).toBe(401);
   });
 
-  it("login cria uma sessão por login (ids distintos, `expires_at` ≈ agora + 7 dias) e as sessões são independentes: revogar uma não afeta a outra", async () => {
+  it("login cria uma sessão por login (ids distintos, `expires_at` = teto absoluto de 30 dias, cookie com prazo ocioso de 7 dias) e as sessões são independentes: revogar uma não afeta a outra", async () => {
     const user = await createTestUser({ email: `multi-${Date.now()}@teste.org` });
     const cookies: string[] = [];
     for (let i = 0; i < 2; i++) {
       const res = await postLogin(buildRequest("auth/login_with_password", { method: "POST", body: { email: user.email, password: "senha-de-teste-123" } }));
       expect(res.status).toBe(200); cookies.push(res.headers.get("set-cookie")!.split(";")[0]);
+      // identidade (§25.15): o cookie/JWT vive no máximo o prazo ocioso (7 dias), mesmo que a linha guarde o teto absoluto de 30 dias
+      expect(Number(/Max-Age=(\d+)/.exec(res.headers.get("set-cookie") ?? "")?.[1])).toBe(SessionExpirationSeconds);
     }
     const rows = await db.selectFrom("sessions").select(["id", "createdAt", "expiresAt"]).where("userId", "=", user.id).execute();
     expect(rows).toHaveLength(2); expect(new Set(rows.map((r) => r.id)).size).toBe(2);
-    for (const r of rows) expect(Math.abs(r.expiresAt.getTime() - (r.createdAt!.getTime() + SessionExpirationSeconds * 1000))).toBeLessThan(2000);
+    for (const r of rows) expect(Math.abs(r.expiresAt.getTime() - (r.createdAt!.getTime() + SESSION_POLICY.standard.absoluteMs))).toBeLessThan(2000);
     expect((await postLogout(buildRequest("auth/logout", { method: "POST", cookie: cookies[0] }))).status).toBe(200);
     expect((await getSession(asSession(cookies[0]))).status).toBe(401);
     expect((await getSession(asSession(cookies[1]))).status).toBe(200);

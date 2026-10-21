@@ -1,0 +1,31 @@
+.stack { display: flex; flex-direction: column; gap: var(--spacing-4); min-width: 0; }
+.title { font-family: var(--font-family-display); font-size: 1.125rem; font-weight: 600; margin: 0; color: var(--card-foreground); }
+.hint { font-size: 0.8125rem; color: var(--muted-foreground); line-height: 1.5; margin: 0; overflow-wrap: anywhere; }
+.field { display: flex; flex-direction: column; gap: var(--spacing-1); min-width: 0; }
+.field input { width: 100%; min-width: 0; box-sizing: border-box; }
+.label { font-size: 0.8125rem; font-weight: 500; color: var(--card-foreground); }
+.codeInput { font-family: var(--font-family-monospace); font-size: 1.5rem; letter-spacing: 0.35em; text-align: center; min-height: 3rem; }
+.errorBox { padding: var(--spacing-3); font-size: 0.8125rem; color: var(--card-foreground); background: color-mix(in srgb, var(--error) 14%, transparent); border: 1px solid var(--error); border-radius: var(--radius); overflow-wrap: anywhere; }
+.infoBox { padding: var(--spacing-3); font-size: 0.8125rem; color: var(--card-foreground); background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); overflow-wrap: anywhere; }
+.actions { display: flex; gap: var(--spacing-3); flex-wrap: wrap; align-items: center; }
+.actions > button { min-height: 2.75rem; }
+.linkButton { align-self: flex-start; }
+.qrWrap { display: flex; flex-direction: column; align-items: center; gap: var(--spacing-3); }
+.qrBox { background: #fff; padding: var(--spacing-2); border-radius: var(--radius); border: 1px solid var(--border); line-height: 0; max-width: 100%; }
+.qrBox svg { width: min(100%, 12rem); height: auto; display: block; }
+.manualKey { font-family: var(--font-family-monospace); font-size: 0.9375rem; letter-spacing: 0.08em; padding: var(--spacing-2) var(--spacing-3); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow-wrap: anywhere; word-break: break-all; user-select: all; }
+.codes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--spacing-2); }
+.codes li { font-family: var(--font-family-monospace); font-size: 0.8125rem; padding: var(--spacing-2); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); text-align: center; overflow-wrap: anywhere; user-select: all; }
+.check { display: flex; gap: var(--spacing-2); align-items: center; min-height: 2.75rem; cursor: pointer; font-size: 0.875rem; color: var(--card-foreground); }
+.check input { margin-top: 0.2rem; width: 1.125rem; height: 1.125rem; flex-shrink: 0; }
+.steps { display: flex; gap: var(--spacing-2); flex-wrap: wrap; font-size: 0.75rem; color: var(--muted-foreground); }
+/* O diálogo usa --popup (um degrau mais claro que o cartão); no tema escuro o acento padrão cai para 4,48:1 sobre ele. Escopo LOCAL
+   (só dentro deste diálogo): acento um pouco mais claro => >= 4,5:1, sem tocar o token global do Design System. */
+:global(.dark) .dialogScope { --primary: hsl(16, 68%, 61%); }
+.stepActive { color: var(--foreground); font-weight: 600; }
+
+@media (max-width: 420px) {
+  .codes { grid-template-columns: 1fr; }
+  .codeInput { font-size: 1.25rem; letter-spacing: 0.25em; }
+  .actions > button { flex: 1 1 100%; }
+}

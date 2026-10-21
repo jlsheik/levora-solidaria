@@ -12,6 +12,7 @@
  */
 import "dotenv/config";
 import postgres from "postgres";
+import { pgConnectionFromEnv } from "./connectionOptions.js";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -27,7 +28,7 @@ async function main() {
     process.exit(1);
   }
 
-  const sql = postgres(connectionString, { max: 1, prepare: false });
+  const sql = postgres(connectionString, { max: 1, prepare: false, ...pgConnectionFromEnv() });
   try {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((f) => f.endsWith(".sql"))

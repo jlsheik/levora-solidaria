@@ -623,13 +623,22 @@ function superjsonParse<T>(text: string): T {
 }
 
 describe("Fase 85 — desempenho: sem N+1 (número de consultas constante)", () => {
-  /** Conta as consultas executadas (Kysely: db e transações) durante `fn`. */
-  async function countQueries(fn: () => Promise<unknown>) {
+  /**
+   * Conta as consultas executadas (Kysely: db e transações) durante `fn`.
+   *
+   * CAUSA do flake (Fase 89.1, reproduzida e capturada): `getServerUserSession` faz, com probabilidade
+   * `CleanupProbability` (10 %) a cada requisição autenticada, uma limpeza oportunista de sessões
+   * (`DELETE FROM sessions WHERE …`). É uma consulta a mais, ALEATÓRIA, que não depende do tamanho dos dados — se cair
+   * numa das medições (small × big) e não na outra, as contagens diferem em 1 e o teste falha sem nenhum N+1.
+   * O produto está correto (a limpeza probabilística é deliberada); o TESTE dependia de sorte. A medição agora fixa a
+   * fonte de aleatoriedade (`Math.random` ⇒ sem limpeza) para contar SÓ as consultas de dados do relatório.
+   * Nada foi relaxado: a igualdade exata small = big e o teto de 24 consultas continuam sendo asseridos.
+   * `withSessionCleanup: true` força a limpeza (usado pelo teste que prova a causa).
+   */
+  async function countQueries(fn: () => Promise<unknown>, options: { withSessionCleanup?: boolean } = {}) {
     const proto = Object.getPrototypeOf(db.getExecutor()) as { executeQuery: (...args: unknown[]) => Promise<unknown> };
     const spy = vi.spyOn(proto, "executeQuery");
-    // A limpeza oportunista de sessões (getServerUserSession) roda com probabilidade fixa e acrescenta 1 DELETE ao acaso — numa
-    // medição e não na outra, isso fazia o teste falhar de vez em quando. Desliga-se o sorteio SÓ durante a contagem.
-    const random = vi.spyOn(Math, "random").mockReturnValue(0.999999);
+    const random = vi.spyOn(Math, "random").mockReturnValue(options.withSessionCleanup ? 0 : 0.999999);
     try {
       await fn();
       return spy.mock.calls.length;
@@ -661,6 +670,26 @@ describe("Fase 85 — desempenho: sem N+1 (número de consultas constante)", () 
     const r = await reportData(big);
     expect(r.needs.rows).toHaveLength(100);
     expect(r.receipts.groups).toHaveLength(100);
+  }, 120000);
+
+  it("a ÚNICA variável aleatória da contagem é a limpeza oportunista de sessões: forçada, soma exatamente 1 consulta (DELETE FROM sessions), independente do tamanho dos dados", async () => {
+    const small = await setupEnv();
+    await insertNetworkReceipt(small, new Date(Date.now() - 3600000), 10);
+    const big = await setupEnv();
+    for (let i = 0; i < 20; i++) {
+      const [n] = await db.insertInto("needs").values({ organizationId: big.orgId, title: `N${i}`, quantityNeeded: "10", unit: "kg", priority: "media", status: "aberta", createdByUserId: big.owner.userId, itemId: big.itemId }).returning(["id"]).execute();
+      await insertNetworkReceipt(big, new Date(Date.now() - 3600000 + i), 5, n.id);
+    }
+    await report(small);
+    await report(big);
+    const baseSmall = await countQueries(() => report(small));
+    const baseBig = await countQueries(() => report(big));
+    expect(baseBig).toBe(baseSmall);
+    // com a limpeza forçada: +1 em ambos
+    expect(await countQueries(() => report(small), { withSessionCleanup: true })).toBe(baseSmall + 1);
+    expect(await countQueries(() => report(big), { withSessionCleanup: true })).toBe(baseBig + 1);
+    // determinismo da medição: 10 repetições, mesma contagem
+    for (let i = 0; i < 10; i++) expect(await countQueries(() => report(big))).toBe(baseBig);
   }, 120000);
 });
 
