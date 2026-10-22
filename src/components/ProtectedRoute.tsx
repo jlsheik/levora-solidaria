@@ -28,8 +28,8 @@ const MakeProtectedRoute: (roles: User["role"][]) => React.FC<{
     if (!roles.includes(authState.user.role)) {
       return (
         <AuthErrorPage
-          title="Access Denied"
-          message={`Access denied. Your role (${authState.user.role}) lacks required permissions.`}
+          title="Acesso negado"
+          message="Você não tem autorização para acessar esta página."
           icon={<ShieldOff className={styles.accessDeniedIcon} size={64} />}
         />
       );
