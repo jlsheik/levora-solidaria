@@ -1,0 +1,45 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {}
+  },
+  "vazio": {
+    "ok": true,
+    "data": {}
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {}
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra-ignorada": {
+    "ok": true,
+    "data": {}
+  }
+}

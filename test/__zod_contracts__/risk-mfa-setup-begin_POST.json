@@ -1,0 +1,176 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "password": "qualquer"
+    }
+  },
+  "vazio": {
+    "ok": true,
+    "data": {}
+  },
+  "chave-extra": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "password:ausente": {
+    "ok": true,
+    "data": {}
+  },
+  "password:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "password",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "password:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "password",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "password:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "password",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "password:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "password",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "password:sonda4": {
+    "ok": true,
+    "data": {
+      "password": "abc"
+    }
+  },
+  "password:sonda5": {
+    "ok": true,
+    "data": {
+      "password": "0"
+    }
+  },
+  "password:sonda6": {
+    "ok": true,
+    "data": {
+      "password": "-1"
+    }
+  },
+  "password:sonda7": {
+    "ok": true,
+    "data": {
+      "password": "1e3"
+    }
+  },
+  "password:sonda8": {
+    "ok": true,
+    "data": {
+      "password": " 7 "
+    }
+  },
+  "password:sonda9": {
+    "ok": true,
+    "data": {
+      "password": "2026-02-30"
+    }
+  },
+  "password:sonda10": {
+    "ok": true,
+    "data": {
+      "password": "27/10/2026"
+    }
+  },
+  "password:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "password",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "password:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "password",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "password:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "password",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "password:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "password",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "password:sonda15": {
+    "ok": true,
+    "data": {
+      "password": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "sem-senha": {
+    "ok": true,
+    "data": {}
+  }
+}

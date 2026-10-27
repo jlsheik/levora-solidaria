@@ -1,0 +1,1264 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      },
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "sourceId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "sourceId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "sourceId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "sourceId:sonda2": {
+    "ok": true,
+    "data": {
+      "sourceId": 123,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "sourceId:sonda3": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "sourceId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "sourceId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "sourceId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "sourceId:sonda7": {
+    "ok": true,
+    "data": {
+      "sourceId": 1000,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "sourceId:sonda8": {
+    "ok": true,
+    "data": {
+      "sourceId": 7,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "sourceId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "sourceId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "sourceId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "sourceId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "sourceId:sonda13": {
+    "ok": true,
+    "data": {
+      "sourceId": 1000000000000,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "sourceId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "sourceId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "sourceId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "Informe um título"
+      }
+    ]
+  },
+  "title:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda4": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "abc",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "title:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "Informe um título"
+      }
+    ]
+  },
+  "title:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "Informe um título"
+      }
+    ]
+  },
+  "title:sonda7": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "1e3",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "title:sonda8": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": " 7 ",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "title:sonda9": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "2026-02-30",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "title:sonda10": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "27/10/2026",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "title:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda15": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "quantity:ausente": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "quantity:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantity:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantity:sonda2": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 123,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "quantity:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantity:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantity:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantity:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantity:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantity:sonda8": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 7,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "quantity:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantity:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantity:sonda11": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 1.5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "quantity:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantity:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Quantidade acima do máximo permitido"
+      }
+    ]
+  },
+  "quantity:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantity:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "unit:ausente": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "unit:sonda0": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "unit:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade da oferta \"abc\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade da oferta \"0\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade da oferta \"-1\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade da oferta \"1e3\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade da oferta \"7\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade da oferta \"2026-02-30\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade da oferta \"27/10/2026\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade da oferta é longa demais"
+      }
+    ]
+  },
+  "urgency:ausente": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "media",
+      "confidence": 50,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "urgency:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "urgency:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "confidence:ausente": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "confidence:sonda0": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 0,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "confidence:sonda1": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 0,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "confidence:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "confidence",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "confidence:sonda3": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 1,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "confidence:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "confidence",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "confidence:sonda5": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 0,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "confidence:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "confidence",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "confidence:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "confidence",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "confidence:sonda8": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 7,
+      "expiresAt": "2026-12-31T00:00:00.000Z"
+    }
+  },
+  "confidence:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "confidence",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "confidence:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "confidence",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "confidence:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "confidence",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "confidence:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "confidence",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "confidence:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "confidence",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "confidence:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "confidence",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "confidence:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "confidence",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "expiresAt:ausente": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50
+    }
+  },
+  "expiresAt:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "expiresAt",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "expiresAt:sonda1": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "1970-01-01T00:00:00.000Z"
+    }
+  },
+  "expiresAt:sonda2": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "1970-01-01T00:00:00.123Z"
+    }
+  },
+  "expiresAt:sonda3": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "1970-01-01T00:00:00.001Z"
+    }
+  },
+  "expiresAt:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "expiresAt",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "expiresAt:sonda5": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2000-01-01T00:00:00.000Z"
+    }
+  },
+  "expiresAt:sonda6": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2001-01-01T00:00:00.000Z"
+    }
+  },
+  "expiresAt:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "expiresAt",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "expiresAt:sonda8": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2001-07-01T00:00:00.000Z"
+    }
+  },
+  "expiresAt:sonda9": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2026-03-02T00:00:00.000Z"
+    }
+  },
+  "expiresAt:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "expiresAt",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "expiresAt:sonda11": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "1970-01-01T00:00:00.001Z"
+    }
+  },
+  "expiresAt:sonda12": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "1969-12-31T23:59:59.995Z"
+    }
+  },
+  "expiresAt:sonda13": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "quantity": 5,
+      "unit": "kg",
+      "urgency": "alta",
+      "confidence": 50,
+      "expiresAt": "2001-09-09T01:46:40.000Z"
+    }
+  },
+  "expiresAt:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "expiresAt",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "expiresAt:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "expiresAt",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "so-obrigatorios": {
+    "ok": true,
+    "data": {
+      "sourceId": 1,
+      "title": "Doação de arroz",
+      "urgency": "media"
+    }
+  },
+  "urgencia-nula": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "urgency",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "data-invalida": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "expiresAt",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

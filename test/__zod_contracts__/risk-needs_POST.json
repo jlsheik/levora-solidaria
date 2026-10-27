@@ -1,0 +1,1255 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      },
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      },
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      },
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 123,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "organizationId:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "organizationId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "organizationId:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 7,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "organizationId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000000000000,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "organizationId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "Informe um título para a necessidade"
+      }
+    ]
+  },
+  "title:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda4": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "abc",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "title:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "Informe um título para a necessidade"
+      }
+    ]
+  },
+  "title:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "Informe um título para a necessidade"
+      }
+    ]
+  },
+  "title:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "1e3",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "title:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": " 7 ",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "title:sonda9": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "2026-02-30",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "title:sonda10": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "27/10/2026",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "title:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "title:sonda15": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "description:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "description:sonda0": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "description:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "description",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "description:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "description",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "description:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "description",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "description:sonda4": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "abc",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "description:sonda5": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "0",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "description:sonda6": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "-1",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "description:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "1e3",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "description:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": " 7 ",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "description:sonda9": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "2026-02-30",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "description:sonda10": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "27/10/2026",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "description:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "description",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "description:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "description",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "description:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "description",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "description:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "description",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "description:sonda15": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "itemId:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "itemId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 123,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "itemId:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 1,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "itemId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 1000,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "itemId:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 7,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "itemId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 1000000000000,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "itemId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "quantityNeeded:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantityNeeded:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantityNeeded:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantityNeeded:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 123,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "quantityNeeded:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantityNeeded:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantityNeeded:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantityNeeded:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantityNeeded:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantityNeeded:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 7,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "quantityNeeded:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantityNeeded:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantityNeeded:sonda11": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 1.5,
+      "unit": "kg",
+      "priority": "alta"
+    }
+  },
+  "quantityNeeded:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantityNeeded:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Quantidade acima do máximo permitido"
+      }
+    ]
+  },
+  "quantityNeeded:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "quantityNeeded:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantityNeeded",
+        "message": "Informe uma quantidade maior que zero"
+      }
+    ]
+  },
+  "unit:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "Informe a unidade de medida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade de medida \"abc\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade de medida \"0\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade de medida \"-1\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade de medida \"1e3\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade de medida \"7\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade de medida \"2026-02-30\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade de medida \"27/10/2026\" não é reconhecida. Escolha uma destas: kg, unidade, litro, ml, caixa."
+      }
+    ]
+  },
+  "unit:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "unit:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "unit",
+        "message": "A unidade de medida é longa demais"
+      }
+    ]
+  },
+  "priority:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "description": "d",
+      "itemId": 2,
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "media"
+    }
+  },
+  "priority:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "priority:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "so-obrigatorios": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "title": "Arroz 5kg",
+      "quantityNeeded": 10,
+      "unit": "kg",
+      "priority": "media"
+    }
+  },
+  "prioridade-nula": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

@@ -1,0 +1,1442 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      },
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      },
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      },
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 123,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "organizationId:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "organizationId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "organizationId:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 7,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "organizationId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000000000000,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "organizationId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "Destinação inválida"
+      }
+    ]
+  },
+  "destinationId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationId:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationId:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "Destinação inválida"
+      }
+    ]
+  },
+  "destinationId:sonda5": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "0",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "destinationId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "Destinação inválida"
+      }
+    ]
+  },
+  "destinationId:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "Destinação inválida"
+      }
+    ]
+  },
+  "destinationId:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "Destinação inválida"
+      }
+    ]
+  },
+  "destinationId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "Destinação inválida"
+      }
+    ]
+  },
+  "destinationId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "Destinação inválida"
+      }
+    ]
+  },
+  "destinationId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationId:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "Destinação inválida"
+      }
+    ]
+  },
+  "deliveredOn:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "deliveredOn:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "Informe a data no formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "deliveredOn:sonda1": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": null,
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "deliveredOn:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "deliveredOn:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "deliveredOn:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "Informe a data no formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "deliveredOn:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "Informe a data no formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "deliveredOn:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "Informe a data no formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "deliveredOn:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "Informe a data no formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "deliveredOn:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "Informe a data no formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "deliveredOn:sonda9": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-02-30",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "deliveredOn:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "Informe a data no formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "deliveredOn:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "deliveredOn:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "deliveredOn:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "deliveredOn:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "deliveredOn:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "Informe a data no formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "peopleServed:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "Informe a quantidade de pessoas ou famílias junto com a unidade"
+      }
+    ]
+  },
+  "peopleServed:sonda0": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 0,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "peopleServed:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "Informe a quantidade de pessoas ou famílias junto com a unidade"
+      }
+    ]
+  },
+  "peopleServed:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 123,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "peopleServed:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 1,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "peopleServed:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleServed",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleServed:sonda5": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 0,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "peopleServed:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleServed",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleServed:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 1000,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "peopleServed:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 7,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "peopleServed:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleServed",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleServed:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleServed",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleServed:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleServed",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleServed:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleServed",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleServed:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleServed",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleServed:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleServed",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleServed:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleServed",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "Informe a quantidade de pessoas ou famílias junto com a unidade"
+      }
+    ]
+  },
+  "peopleUnit:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "Informe a quantidade de pessoas ou famílias junto com a unidade"
+      }
+    ]
+  },
+  "peopleUnit:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "peopleUnit:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "notes:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "notes:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "notes",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "notes:sonda1": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": null,
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "notes:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "notes",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "notes:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "notes",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "notes:sonda4": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "abc",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "notes:sonda5": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "0",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "notes:sonda6": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "-1",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "notes:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "1e3",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "notes:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "7",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "notes:sonda9": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "2026-02-30",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "notes:sonda10": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "27/10/2026",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "notes:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "notes",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "notes:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "notes",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "notes:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "notes",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "notes:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "notes",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "notes:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "notes",
+        "message": "No máximo 1000 caracteres"
+      }
+    ]
+  },
+  "reason:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reason:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "Explique o motivo da correção (mínimo de 5 caracteres)"
+      }
+    ]
+  },
+  "reason:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reason:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reason:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reason:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "Explique o motivo da correção (mínimo de 5 caracteres)"
+      }
+    ]
+  },
+  "reason:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "Explique o motivo da correção (mínimo de 5 caracteres)"
+      }
+    ]
+  },
+  "reason:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "Explique o motivo da correção (mínimo de 5 caracteres)"
+      }
+    ]
+  },
+  "reason:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "Explique o motivo da correção (mínimo de 5 caracteres)"
+      }
+    ]
+  },
+  "reason:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "Explique o motivo da correção (mínimo de 5 caracteres)"
+      }
+    ]
+  },
+  "reason:sonda9": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "2026-02-30",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "reason:sonda10": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "27/10/2026",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "reason:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reason:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reason:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reason:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reason:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "No máximo 500 caracteres"
+      }
+    ]
+  },
+  "idempotencyKey:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "Chave de idempotência inválida"
+      }
+    ]
+  },
+  "idempotencyKey:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "Chave de idempotência inválida"
+      }
+    ]
+  },
+  "idempotencyKey:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "Chave de idempotência inválida"
+      }
+    ]
+  },
+  "idempotencyKey:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "Chave de idempotência inválida"
+      }
+    ]
+  },
+  "idempotencyKey:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "Chave de idempotência inválida"
+      }
+    ]
+  },
+  "idempotencyKey:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "Chave de idempotência inválida"
+      }
+    ]
+  },
+  "idempotencyKey:sonda9": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": "2026-10-27",
+      "peopleServed": 3,
+      "peopleUnit": "pessoas",
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "2026-02-30"
+    }
+  },
+  "idempotencyKey:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "Chave de idempotência inválida"
+      }
+    ]
+  },
+  "idempotencyKey:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "Chave de idempotência inválida"
+      }
+    ]
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "nada-a-corrigir": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "Informe ao menos um campo a corrigir"
+      }
+    ]
+  },
+  "pessoas-sem-unidade": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "Informe a quantidade de pessoas ou famílias junto com a unidade"
+      }
+    ]
+  },
+  "unidade-sem-pessoas": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "peopleUnit",
+        "message": "Informe a quantidade de pessoas ou famílias junto com a unidade"
+      }
+    ]
+  },
+  "nulos-aceitos": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "12",
+      "deliveredOn": null,
+      "peopleServed": null,
+      "peopleUnit": null,
+      "notes": "obs",
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  }
+}
