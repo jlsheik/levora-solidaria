@@ -18,7 +18,7 @@ export const schema = z
   .object({
     organizationId: z.coerce.number().int().positive(),
     name: z
-      .string({ required_error: "Informe o nome da organização", invalid_type_error: "Informe o nome da organização" })
+      .string({ error: "Informe o nome da organização" })
       .transform((v) => v.trim())
       .pipe(
         z

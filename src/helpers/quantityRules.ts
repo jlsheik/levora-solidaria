@@ -29,7 +29,7 @@ const strictNumber = (message: string) =>
       if (typeof value === "string" && DECIMAL_STRING.test(value.trim())) return Number(value.trim());
       return Number.NaN;
     },
-    z.number({ invalid_type_error: message, required_error: message })
+    z.number({ error: message })
   );
 
 /** Quantidade POSITIVA (recebida, necessária, alocada, ofertada…). */
