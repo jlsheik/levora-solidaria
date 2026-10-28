@@ -9,7 +9,7 @@ interface AuthLoadingStateProps {
 }
 
 export const AuthLoadingState: React.FC<AuthLoadingStateProps> = ({
-  title = "Authenticating...",
+  title = "Verificando sua sessão...",
   className,
 }) => {
   return (

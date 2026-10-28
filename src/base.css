@@ -18,6 +18,12 @@
   --spacing-20: 5rem;
 }
 
+/* O navegador aplica margem de 8px ao <body>. As páginas já ocupam o viewport (min-height / inset), então a margem só gerava 16px de rolagem
+   vertical e uma faixa de 8px fora do fundo da página. Sem overflow:hidden: o conteúdo continua a rolar quando precisa. */
+body {
+  margin: 0;
+}
+
 :root {
   --background: hsl(36, 28%, 97%);
   --foreground: hsl(20, 22%, 14%);
