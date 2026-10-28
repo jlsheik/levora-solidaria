@@ -1,0 +1,903 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "vazio": {
+    "ok": true,
+    "data": {
+      "limit": 50,
+      "offset": 0
+    }
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "q:ausente": {
+    "ok": true,
+    "data": {
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "q:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "q",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "q:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "q",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "q:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "q",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "q:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "q",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "q:sonda4": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "q:sonda5": {
+    "ok": true,
+    "data": {
+      "q": "0",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "q:sonda6": {
+    "ok": true,
+    "data": {
+      "q": "-1",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "q:sonda7": {
+    "ok": true,
+    "data": {
+      "q": "1e3",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "q:sonda8": {
+    "ok": true,
+    "data": {
+      "q": "7",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "q:sonda9": {
+    "ok": true,
+    "data": {
+      "q": "2026-02-30",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "q:sonda10": {
+    "ok": true,
+    "data": {
+      "q": "27/10/2026",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "q:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "q",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "q:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "q",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "q:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "q",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "q:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "q",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "q:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "q",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "createdFrom:ausente": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdFrom:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "createdFrom",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "createdFrom:sonda1": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "1970-01-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdFrom:sonda2": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "1970-01-01T00:00:00.123Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdFrom:sonda3": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "1970-01-01T00:00:00.001Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdFrom:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "createdFrom",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "createdFrom:sonda5": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2000-01-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdFrom:sonda6": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2001-01-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdFrom:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "createdFrom",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "createdFrom:sonda8": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2001-07-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdFrom:sonda9": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-03-02T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdFrom:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "createdFrom",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "createdFrom:sonda11": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "1970-01-01T00:00:00.001Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdFrom:sonda12": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "1969-12-31T23:59:59.995Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdFrom:sonda13": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2001-09-09T01:46:40.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdFrom:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "createdFrom",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "createdFrom:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "createdFrom",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "createdTo:ausente": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdTo:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "createdTo",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "createdTo:sonda1": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "1970-01-01T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdTo:sonda2": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "1970-01-01T00:00:00.123Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdTo:sonda3": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "1970-01-01T00:00:00.001Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdTo:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "createdTo",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "createdTo:sonda5": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2000-01-01T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdTo:sonda6": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2001-01-01T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdTo:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "createdTo",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "createdTo:sonda8": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2001-07-01T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdTo:sonda9": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-03-02T00:00:00.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdTo:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "createdTo",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "createdTo:sonda11": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "1970-01-01T00:00:00.001Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdTo:sonda12": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "1969-12-31T23:59:59.995Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdTo:sonda13": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2001-09-09T01:46:40.000Z",
+      "limit": 20,
+      "offset": 5
+    }
+  },
+  "createdTo:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "createdTo",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "createdTo:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "createdTo",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:ausente": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 50,
+      "offset": 5
+    }
+  },
+  "limit:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda3": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 1,
+      "offset": 5
+    }
+  },
+  "limit:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda8": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 7,
+      "offset": 5
+    }
+  },
+  "limit:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "offset:ausente": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 0
+    }
+  },
+  "offset:sonda0": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 0
+    }
+  },
+  "offset:sonda1": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 0
+    }
+  },
+  "offset:sonda2": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 123
+    }
+  },
+  "offset:sonda3": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 1
+    }
+  },
+  "offset:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "offset",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "offset:sonda5": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 0
+    }
+  },
+  "offset:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "offset",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "offset:sonda7": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 1000
+    }
+  },
+  "offset:sonda8": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 7
+    }
+  },
+  "offset:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "offset",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "offset:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "offset",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "offset:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "offset",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "offset:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "offset",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "offset:sonda13": {
+    "ok": true,
+    "data": {
+      "q": "abc",
+      "createdFrom": "2026-10-01T00:00:00.000Z",
+      "createdTo": "2026-10-31T00:00:00.000Z",
+      "limit": 20,
+      "offset": 1000000000000
+    }
+  },
+  "offset:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "offset",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "offset:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "offset",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "vazio-total": {
+    "ok": true,
+    "data": {
+      "limit": 50,
+      "offset": 0
+    }
+  },
+  "limite-zero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limite-101": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "offset-negativo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "offset",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "status-invalido": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "status",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

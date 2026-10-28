@@ -11,7 +11,7 @@ export const REVERSAL_KINDS = ["estorno_documental", "devolucao_fisica", "correc
 export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),
   destinationId: z.string().regex(/^\d{1,18}$/, "Destinação inválida"),
-  kind: z.enum(REVERSAL_KINDS, { errorMap: () => ({ message: "Escolha o tipo da reversão" }) }),
+  kind: z.enum(REVERSAL_KINDS, { error: "Escolha o tipo da reversão" }),
   quantity: positiveQuantity("Informe a quantidade a reverter"),
   reason: z.string().trim().min(5, "Explique o motivo (mínimo de 5 caracteres)").max(500, "No máximo 500 caracteres"),
   idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{8,100}$/, "Chave de idempotência inválida"),

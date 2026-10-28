@@ -17,7 +17,7 @@ export const schema = z
   .object({
     sourceId: z.coerce.number().int().positive(),
     name: z
-      .string({ required_error: "Informe o nome da fonte", invalid_type_error: "Informe o nome da fonte" })
+      .string({ error: "Informe o nome da fonte" })
       .transform((v) => v.trim())
       .pipe(
         z

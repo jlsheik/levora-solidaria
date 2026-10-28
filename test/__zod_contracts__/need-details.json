@@ -1,0 +1,324 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "needId": 2,
+      "title": "Arroz",
+      "description": "Descrição",
+      "priority": "alta"
+    }
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:numero": {
+    "ok": true,
+    "data": {
+      "organizationId": 123,
+      "needId": 2,
+      "title": "Arroz",
+      "description": "Descrição",
+      "priority": "alta"
+    }
+  },
+  "organizationId:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:booleano": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "needId": 2,
+      "title": "Arroz",
+      "description": "Descrição",
+      "priority": "alta"
+    }
+  },
+  "needId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:numero": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "needId": 123,
+      "title": "Arroz",
+      "description": "Descrição",
+      "priority": "alta"
+    }
+  },
+  "needId:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:booleano": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "needId": 1,
+      "title": "Arroz",
+      "description": "Descrição",
+      "priority": "alta"
+    }
+  },
+  "title:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "needId": 2,
+      "description": "Descrição",
+      "priority": "alta"
+    }
+  },
+  "title:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "Informe um título para a necessidade"
+      }
+    ]
+  },
+  "title:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "Informe um título para a necessidade"
+      }
+    ]
+  },
+  "title:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "Informe um título para a necessidade (mínimo de 3 caracteres)"
+      }
+    ]
+  },
+  "title:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "O título pode ter no máximo 200 caracteres"
+      }
+    ]
+  },
+  "title:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "title",
+        "message": "Informe um título para a necessidade"
+      }
+    ]
+  },
+  "description:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "needId": 2,
+      "title": "Arroz",
+      "priority": "alta"
+    }
+  },
+  "description:null": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "needId": 2,
+      "title": "Arroz",
+      "description": null,
+      "priority": "alta"
+    }
+  },
+  "description:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "description",
+        "message": "Descrição inválida"
+      }
+    ]
+  },
+  "description:vazio": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "needId": 2,
+      "title": "Arroz",
+      "description": null,
+      "priority": "alta"
+    }
+  },
+  "description:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "description",
+        "message": "A descrição pode ter no máximo 2000 caracteres"
+      }
+    ]
+  },
+  "description:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "description",
+        "message": "Descrição inválida"
+      }
+    ]
+  },
+  "priority:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "needId": 2,
+      "title": "Arroz",
+      "description": "Descrição"
+    }
+  },
+  "priority:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "Prioridade inválida"
+      }
+    ]
+  },
+  "priority:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "Prioridade inválida"
+      }
+    ]
+  },
+  "priority:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "Prioridade inválida"
+      }
+    ]
+  },
+  "priority:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "Prioridade inválida"
+      }
+    ]
+  },
+  "priority:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "priority",
+        "message": "Prioridade inválida"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

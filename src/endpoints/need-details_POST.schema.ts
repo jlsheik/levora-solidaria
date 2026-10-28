@@ -26,7 +26,7 @@ export const schema = z
     organizationId: z.coerce.number().int().positive(),
     needId: z.coerce.number().int().positive(),
     title: z
-      .string({ invalid_type_error: "Informe um título para a necessidade" })
+      .string({ error: "Informe um título para a necessidade" })
       .transform((v) => v.trim())
       .pipe(
         z
@@ -37,7 +37,7 @@ export const schema = z
       )
       .optional(),
     description: z
-      .string({ invalid_type_error: "Descrição inválida" })
+      .string({ error: "Descrição inválida" })
       .nullable()
       .transform((v) => (v === null ? null : v.trim() === "" ? null : v.trim()))
       .pipe(
@@ -48,7 +48,7 @@ export const schema = z
           .nullable()
       )
       .optional(),
-    priority: z.enum(NeedPriorityArrayValues, { errorMap: () => ({ message: "Prioridade inválida" }) }).optional(),
+    priority: z.enum(NeedPriorityArrayValues, { error: "Prioridade inválida" }).optional(),
   })
   .strict()
   .refine((v) => v.title !== undefined || v.description !== undefined || v.priority !== undefined, { message: "Informe ao menos um campo para alterar (título, descrição ou prioridade)" });

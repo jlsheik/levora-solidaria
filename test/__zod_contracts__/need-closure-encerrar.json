@@ -1,0 +1,325 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "action": "encerrar",
+      "organizationId": 1,
+      "needId": 2,
+      "reasonCode": "duplicidade",
+      "reasonText": "texto"
+    }
+  },
+  "action:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "action",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "action:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "action",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "action:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "action",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "action:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "action",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "action:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "action",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "action:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "action",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:numero": {
+    "ok": true,
+    "data": {
+      "action": "encerrar",
+      "organizationId": 123,
+      "needId": 2,
+      "reasonCode": "duplicidade",
+      "reasonText": "texto"
+    }
+  },
+  "organizationId:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:booleano": {
+    "ok": true,
+    "data": {
+      "action": "encerrar",
+      "organizationId": 1,
+      "needId": 2,
+      "reasonCode": "duplicidade",
+      "reasonText": "texto"
+    }
+  },
+  "needId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:numero": {
+    "ok": true,
+    "data": {
+      "action": "encerrar",
+      "organizationId": 1,
+      "needId": 123,
+      "reasonCode": "duplicidade",
+      "reasonText": "texto"
+    }
+  },
+  "needId:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:booleano": {
+    "ok": true,
+    "data": {
+      "action": "encerrar",
+      "organizationId": 1,
+      "needId": 1,
+      "reasonCode": "duplicidade",
+      "reasonText": "texto"
+    }
+  },
+  "reasonCode:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonCode",
+        "message": "Escolha o motivo do encerramento"
+      }
+    ]
+  },
+  "reasonCode:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonCode",
+        "message": "Escolha o motivo do encerramento"
+      }
+    ]
+  },
+  "reasonCode:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonCode",
+        "message": "Escolha o motivo do encerramento"
+      }
+    ]
+  },
+  "reasonCode:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonCode",
+        "message": "Escolha o motivo do encerramento"
+      }
+    ]
+  },
+  "reasonCode:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonCode",
+        "message": "Escolha o motivo do encerramento"
+      }
+    ]
+  },
+  "reasonCode:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonCode",
+        "message": "Escolha o motivo do encerramento"
+      }
+    ]
+  },
+  "reasonText:ausente": {
+    "ok": true,
+    "data": {
+      "action": "encerrar",
+      "organizationId": 1,
+      "needId": 2,
+      "reasonCode": "duplicidade"
+    }
+  },
+  "reasonText:null": {
+    "ok": true,
+    "data": {
+      "action": "encerrar",
+      "organizationId": 1,
+      "needId": 2,
+      "reasonCode": "duplicidade",
+      "reasonText": null
+    }
+  },
+  "reasonText:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonText",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reasonText:vazio": {
+    "ok": true,
+    "data": {
+      "action": "encerrar",
+      "organizationId": 1,
+      "needId": 2,
+      "reasonCode": "duplicidade",
+      "reasonText": ""
+    }
+  },
+  "reasonText:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonText",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reasonText:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonText",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "action": "encerrar",
+      "organizationId": 1,
+      "needId": 2,
+      "reasonCode": "duplicidade",
+      "reasonText": "texto"
+    }
+  },
+  "corpo-nao-objeto:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

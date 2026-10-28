@@ -1,0 +1,188 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "opportunityId": 7
+    }
+  },
+  "vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "opportunityId": 7
+    }
+  },
+  "opportunityId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "opportunityId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "opportunityId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "opportunityId:sonda2": {
+    "ok": true,
+    "data": {
+      "opportunityId": 123
+    }
+  },
+  "opportunityId:sonda3": {
+    "ok": true,
+    "data": {
+      "opportunityId": 1
+    }
+  },
+  "opportunityId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "opportunityId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "opportunityId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "opportunityId:sonda7": {
+    "ok": true,
+    "data": {
+      "opportunityId": 1000
+    }
+  },
+  "opportunityId:sonda8": {
+    "ok": true,
+    "data": {
+      "opportunityId": 7
+    }
+  },
+  "opportunityId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "opportunityId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "opportunityId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "opportunityId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "opportunityId:sonda13": {
+    "ok": true,
+    "data": {
+      "opportunityId": 1000000000000
+    }
+  },
+  "opportunityId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "opportunityId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "opportunityId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

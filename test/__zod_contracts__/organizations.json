@@ -1,0 +1,263 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "name": "Associação Teste",
+      "type": "igreja",
+      "city": "Contagem",
+      "state": "MG"
+    }
+  },
+  "name:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "name",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "name:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "name",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "name:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "name",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "name:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "name",
+        "message": "Informe o nome da organização"
+      }
+    ]
+  },
+  "name:longo": {
+    "ok": true,
+    "data": {
+      "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "type": "igreja",
+      "city": "Contagem",
+      "state": "MG"
+    }
+  },
+  "name:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "name",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "type:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "type",
+        "message": "Selecione o tipo de organização"
+      }
+    ]
+  },
+  "type:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "type",
+        "message": "Selecione o tipo de organização"
+      }
+    ]
+  },
+  "type:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "type",
+        "message": "Selecione o tipo de organização"
+      }
+    ]
+  },
+  "type:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "type",
+        "message": "Selecione o tipo de organização"
+      }
+    ]
+  },
+  "type:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "type",
+        "message": "Selecione o tipo de organização"
+      }
+    ]
+  },
+  "type:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "type",
+        "message": "Selecione o tipo de organização"
+      }
+    ]
+  },
+  "city:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "city",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "city:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "city",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "city:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "city",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "city:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "city",
+        "message": "Informe a cidade"
+      }
+    ]
+  },
+  "city:longo": {
+    "ok": true,
+    "data": {
+      "name": "Associação Teste",
+      "type": "igreja",
+      "city": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "state": "MG"
+    }
+  },
+  "city:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "city",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "state:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "state",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "state:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "state",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "state:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "state",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "state:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "state",
+        "message": "Use a sigla do estado, ex: MG"
+      }
+    ]
+  },
+  "state:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "state",
+        "message": "Use a sigla do estado, ex: MG"
+      }
+    ]
+  },
+  "state:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "state",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "name": "Associação Teste",
+      "type": "igreja",
+      "city": "Contagem",
+      "state": "MG"
+    }
+  },
+  "corpo-nao-objeto:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

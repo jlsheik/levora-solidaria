@@ -1,0 +1,149 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "name": "Associação Teste"
+    }
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:numero": {
+    "ok": true,
+    "data": {
+      "organizationId": 123,
+      "name": "Associação Teste"
+    }
+  },
+  "organizationId:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:booleano": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "name": "Associação Teste"
+    }
+  },
+  "name:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "name",
+        "message": "Informe o nome da organização"
+      }
+    ]
+  },
+  "name:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "name",
+        "message": "Informe o nome da organização"
+      }
+    ]
+  },
+  "name:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "name",
+        "message": "Informe o nome da organização"
+      }
+    ]
+  },
+  "name:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "name",
+        "message": "Informe o nome da organização (mínimo de 2 caracteres)"
+      }
+    ]
+  },
+  "name:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "name",
+        "message": "O nome pode ter no máximo 120 caracteres"
+      }
+    ]
+  },
+  "name:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "name",
+        "message": "Informe o nome da organização"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}
