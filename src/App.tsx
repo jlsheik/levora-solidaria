@@ -4,6 +4,8 @@ import { GlobalContextProviders } from "./components/_globalContextProviders";
 
 import IndexPage from "./pages/_index";
 import indexPageLayout from "./pages/_index.pageLayout";
+import AccountPage from "./pages/conta";
+import accountPageLayout from "./pages/conta.pageLayout";
 import SecurityPage from "./pages/seguranca";
 import securityPageLayout from "./pages/seguranca.pageLayout";
 import PlatformActivatePage from "./pages/plataforma.ativar";
@@ -122,6 +124,10 @@ const router = createBrowserRouter([
       {
         path: "/organizacoes/:organizationId/regularizacao",
         element: <>{withPageLayout(organizationRegularizationPageLayout, OrganizationRegularizationPage)}</>,
+      },
+      {
+        path: "/conta",
+        element: <>{withPageLayout(accountPageLayout, AccountPage)}</>,
       },
       {
         path: "/seguranca",
