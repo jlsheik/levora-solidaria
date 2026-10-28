@@ -16,7 +16,8 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Padrão: runner hospedado do GitHub. Para usar um runner próprio sem editar este arquivo, defina a variável do repositório CI_RUNNER_LABELS (ex.: ["self-hosted","levora-local"]).
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["ubuntu-latest"]') }}
     # Observado nos runs remotos: ~7,5 a ~10 min. 30 min dá margem de ~3x sem deixar um job travado ocupar o runner por 6 h (padrão do GitHub).
     timeout-minutes: 30
 
@@ -114,7 +115,8 @@ jobs:
   # um navegador só (o Chrome do runner, nunca o Edge), `qa:visual` com o perfil `ci` (43 de 52 cenários × 4 viewports × 2 temas) e `qa:security` com
   # as 5 partes (calibração, CSRF, XSS, uploads e cabeçalhos do nginx REAL em Docker).
   qa-browser:
-    runs-on: ubuntu-latest
+    # Padrão: runner hospedado do GitHub. Para usar um runner próprio sem editar este arquivo, defina a variável do repositório CI_RUNNER_LABELS (ex.: ["self-hosted","levora-local"]).
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["ubuntu-latest"]') }}
     timeout-minutes: 40
 
     services:
