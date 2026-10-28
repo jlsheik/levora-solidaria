@@ -1,0 +1,730 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "caseId": 2,
+      "decision": "devolver",
+      "note": "explicação suficiente"
+    }
+  },
+  "vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      },
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      },
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "caseId": 2,
+      "decision": "devolver",
+      "note": "explicação suficiente"
+    }
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 123,
+      "caseId": 2,
+      "decision": "devolver",
+      "note": "explicação suficiente"
+    }
+  },
+  "organizationId:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "caseId": 2,
+      "decision": "devolver",
+      "note": "explicação suficiente"
+    }
+  },
+  "organizationId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000,
+      "caseId": 2,
+      "decision": "devolver",
+      "note": "explicação suficiente"
+    }
+  },
+  "organizationId:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 7,
+      "caseId": 2,
+      "decision": "devolver",
+      "note": "explicação suficiente"
+    }
+  },
+  "organizationId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000000000000,
+      "caseId": 2,
+      "decision": "devolver",
+      "note": "explicação suficiente"
+    }
+  },
+  "organizationId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "caseId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "caseId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "caseId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "caseId:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "caseId": 123,
+      "decision": "devolver",
+      "note": "explicação suficiente"
+    }
+  },
+  "caseId:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "caseId": 1,
+      "decision": "devolver",
+      "note": "explicação suficiente"
+    }
+  },
+  "caseId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "caseId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "caseId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "caseId:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "caseId": 1000,
+      "decision": "devolver",
+      "note": "explicação suficiente"
+    }
+  },
+  "caseId:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "caseId": 7,
+      "decision": "devolver",
+      "note": "explicação suficiente"
+    }
+  },
+  "caseId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "caseId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "caseId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "caseId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "caseId:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "caseId": 1000000000000,
+      "decision": "devolver",
+      "note": "explicação suficiente"
+    }
+  },
+  "caseId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "caseId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "caseId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "decision:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "decision",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "note:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "Explique por que a conferência foi devolvida"
+      }
+    ]
+  },
+  "note:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "Explique por que a conferência foi devolvida"
+      }
+    ]
+  },
+  "note:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "note:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "note:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "note:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "Explique por que a conferência foi devolvida"
+      }
+    ]
+  },
+  "note:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "Explique por que a conferência foi devolvida"
+      }
+    ]
+  },
+  "note:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "Explique por que a conferência foi devolvida"
+      }
+    ]
+  },
+  "note:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "Explique por que a conferência foi devolvida"
+      }
+    ]
+  },
+  "note:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "Explique por que a conferência foi devolvida"
+      }
+    ]
+  },
+  "note:sonda9": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "caseId": 2,
+      "decision": "devolver",
+      "note": "2026-02-30"
+    }
+  },
+  "note:sonda10": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "caseId": 2,
+      "decision": "devolver",
+      "note": "27/10/2026"
+    }
+  },
+  "note:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "note:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "note:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "note:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "note:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "aprovar-sem-nota": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "caseId": 2,
+      "decision": "aprovar",
+      "note": ""
+    }
+  },
+  "aprovar-nota-vazia": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "caseId": 2,
+      "decision": "aprovar",
+      "note": ""
+    }
+  },
+  "devolver-sem-nota": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "Explique por que a conferência foi devolvida"
+      }
+    ]
+  },
+  "devolver-nota-curta": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "Explique por que a conferência foi devolvida"
+      }
+    ]
+  },
+  "devolver-nota-so-espacos": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "Explique por que a conferência foi devolvida"
+      }
+    ]
+  },
+  "nota-501": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "note",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

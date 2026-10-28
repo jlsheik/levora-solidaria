@@ -1,0 +1,263 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "action": "reabrir",
+      "organizationId": 1,
+      "needId": 2,
+      "reasonText": "motivo da reabertura"
+    }
+  },
+  "action:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "action",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "action:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "action",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "action:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "action",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "action:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "action",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "action:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "action",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "action:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "action",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:numero": {
+    "ok": true,
+    "data": {
+      "action": "reabrir",
+      "organizationId": 123,
+      "needId": 2,
+      "reasonText": "motivo da reabertura"
+    }
+  },
+  "organizationId:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:booleano": {
+    "ok": true,
+    "data": {
+      "action": "reabrir",
+      "organizationId": 1,
+      "needId": 2,
+      "reasonText": "motivo da reabertura"
+    }
+  },
+  "needId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:numero": {
+    "ok": true,
+    "data": {
+      "action": "reabrir",
+      "organizationId": 1,
+      "needId": 123,
+      "reasonText": "motivo da reabertura"
+    }
+  },
+  "needId:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:booleano": {
+    "ok": true,
+    "data": {
+      "action": "reabrir",
+      "organizationId": 1,
+      "needId": 1,
+      "reasonText": "motivo da reabertura"
+    }
+  },
+  "reasonText:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonText",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reasonText:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonText",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reasonText:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonText",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reasonText:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonText",
+        "message": "Explique por que a necessidade está sendo reaberta"
+      }
+    ]
+  },
+  "reasonText:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonText",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reasonText:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reasonText",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "action": "reabrir",
+      "organizationId": 1,
+      "needId": 2,
+      "reasonText": "motivo da reabertura"
+    }
+  },
+  "corpo-nao-objeto:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

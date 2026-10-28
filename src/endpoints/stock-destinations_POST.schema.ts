@@ -9,7 +9,7 @@ export const schema = z
     organizationId: z.coerce.number().int().positive(),
     itemId: z.coerce.number().int().positive(),
     quantity: positiveQuantity("Informe a quantidade física que sairá do estoque"),
-    destinationType: z.enum(DESTINATION_TYPES, { errorMap: () => ({ message: "Escolha uma das finalidades da lista" }) }),
+    destinationType: z.enum(DESTINATION_TYPES, { error: "Escolha uma das finalidades da lista" }),
     needId: z.coerce.number().int().positive().nullish(),
     /** Data efetiva (AAAA-MM-DD, calendário do fuso de negócio). */
     deliveredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a data efetiva no formato AAAA-MM-DD"),

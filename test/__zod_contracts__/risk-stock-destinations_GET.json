@@ -1,0 +1,1130 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 123,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "organizationId:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "organizationId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "organizationId:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 7,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "organizationId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000000000000,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "organizationId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "itemId:sonda0": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "itemId:sonda1": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "itemId:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 123,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "itemId:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 1,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "itemId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 1000,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "itemId:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 7,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "itemId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 1000000000000,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "itemId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "registro",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "basis:sonda0": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "registro",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "basis:sonda1": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "registro",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "basis:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "basis:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "basis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "from:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "from:sonda0": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "from:sonda1": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "to": "2026-10-31",
+      "limit": 20
+    }
+  },
+  "from:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "from:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "from:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data inicial não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "from",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "from:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data inicial não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "from",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "from:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data inicial não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "from",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "from:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data inicial não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "from",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "from:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data inicial não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "from",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "from:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data inicial não é uma data real do calendário (AAAA-MM-DD)"
+      }
+    ]
+  },
+  "from:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data inicial não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "from",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "from:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "from:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "from:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "from:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "from:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data inicial não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "from",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "to:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "limit": 20
+    }
+  },
+  "to:sonda0": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "limit": 20
+    }
+  },
+  "to:sonda1": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "limit": 20
+    }
+  },
+  "to:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "to",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "to:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "to",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "to:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data final não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "to",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "to:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data final não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "to",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "to:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data final não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "to",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "to:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data final não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "to",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "to:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data final não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "to",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "to:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data final não é uma data real do calendário (AAAA-MM-DD)"
+      }
+    ]
+  },
+  "to:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data final não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "to",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "to:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "to",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "to:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "to",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "to:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "to",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "to:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "to",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "to:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data final não é uma data real do calendário (AAAA-MM-DD)"
+      },
+      {
+        "path": "to",
+        "message": "Use o formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "limit:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 30
+    }
+  },
+  "limit:sonda0": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 30
+    }
+  },
+  "limit:sonda1": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 30
+    }
+  },
+  "limit:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 1
+    }
+  },
+  "limit:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 2,
+      "basis": "efetiva",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "limit": 7
+    }
+  },
+  "limit:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "limit:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "so-obrigatorios": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "basis": "registro",
+      "limit": 30
+    }
+  },
+  "tudo-vazio-exceto-org": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "basis": "registro",
+      "limit": 30
+    }
+  },
+  "tudo-nulo-exceto-org": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "basis": "registro",
+      "limit": 30
+    }
+  },
+  "intervalo-invertido": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "from",
+        "message": "A data inicial precisa ser anterior ou igual à final"
+      }
+    ]
+  },
+  "limite-101": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "limit",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "beforeId-invalido": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "beforeId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

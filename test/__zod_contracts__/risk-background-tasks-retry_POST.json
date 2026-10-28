@@ -1,0 +1,188 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "runId": 5
+    }
+  },
+  "vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "runId": 5
+    }
+  },
+  "runId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "runId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "runId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "runId:sonda2": {
+    "ok": true,
+    "data": {
+      "runId": 123
+    }
+  },
+  "runId:sonda3": {
+    "ok": true,
+    "data": {
+      "runId": 1
+    }
+  },
+  "runId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "runId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "runId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "runId:sonda7": {
+    "ok": true,
+    "data": {
+      "runId": 1000
+    }
+  },
+  "runId:sonda8": {
+    "ok": true,
+    "data": {
+      "runId": 7
+    }
+  },
+  "runId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "runId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "runId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "runId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "runId:sonda13": {
+    "ok": true,
+    "data": {
+      "runId": 1000000000000
+    }
+  },
+  "runId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "runId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "runId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

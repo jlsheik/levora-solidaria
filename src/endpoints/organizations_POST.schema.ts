@@ -5,7 +5,7 @@ import { OrganizationTypeArrayValues, type OrganizationType, type OrganizationSt
 export const schema = z.object({
   name: z.string().min(2, "Informe o nome da organização"),
   type: z.enum(OrganizationTypeArrayValues, {
-    errorMap: () => ({ message: "Selecione o tipo de organização" }),
+    error: "Selecione o tipo de organização",
   }),
   city: z.string().min(2, "Informe a cidade"),
   state: z

@@ -1,0 +1,1122 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "endDate",
+        "message": "<padrão do zod>"
+      },
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      },
+      {
+        "path": "startDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 123,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "organizationId:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "organizationId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "organizationId:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 7,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "organizationId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000000000000,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "organizationId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "startDate:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "startDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "startDate:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "startDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "startDate:sonda1": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "1970-01-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "startDate:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "1970-01-01T00:00:00.123Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "startDate:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "1970-01-01T00:00:00.001Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "startDate:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "startDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "startDate:sonda5": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2000-01-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "startDate:sonda6": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2001-01-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "startDate:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "startDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "startDate:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2001-07-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "startDate:sonda9": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-03-02T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "startDate:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "startDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "startDate:sonda11": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "1970-01-01T00:00:00.001Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "startDate:sonda12": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "1969-12-31T23:59:59.995Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "startDate:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2001-09-09T01:46:40.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "startDate:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "startDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "startDate:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "startDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "endDate:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "endDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "endDate:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "endDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "endDate:sonda1": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "1970-01-01T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "endDate:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "1970-01-01T00:00:00.123Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "endDate:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "1970-01-01T00:00:00.001Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "endDate:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "endDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "endDate:sonda5": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2000-01-01T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "endDate:sonda6": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2001-01-01T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "endDate:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "endDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "endDate:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2001-07-01T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "endDate:sonda9": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-03-02T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "endDate:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "endDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "endDate:sonda11": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "1970-01-01T00:00:00.001Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "endDate:sonda12": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "1969-12-31T23:59:59.995Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "endDate:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2001-09-09T01:46:40.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "endDate:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "endDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "endDate:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "endDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "itemId:sonda0": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "itemId:sonda1": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "itemId:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 123,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "itemId:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 1,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "itemId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 1000,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "itemId:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 7,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "itemId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 1000000000000,
+      "needId": 4,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "itemId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "needId:sonda0": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "needId:sonda1": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "needId:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 123,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "needId:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 1,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "needId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 1000,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "needId:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 7,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "needId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 1000000000000,
+      "destinationDateBasis": "efetiva"
+    }
+  },
+  "needId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "needId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "needId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "registro"
+    }
+  },
+  "destinationDateBasis:sonda0": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "registro"
+    }
+  },
+  "destinationDateBasis:sonda1": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "itemId": 3,
+      "needId": 4,
+      "destinationDateBasis": "registro"
+    }
+  },
+  "destinationDateBasis:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationDateBasis:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationDateBasis",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "so-obrigatorios": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "destinationDateBasis": "registro"
+    }
+  },
+  "basis-vazio": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "destinationDateBasis": "registro"
+    }
+  },
+  "basis-nulo": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "startDate": "2026-10-01T00:00:00.000Z",
+      "endDate": "2026-10-31T00:00:00.000Z",
+      "destinationDateBasis": "registro"
+    }
+  },
+  "eventType-invalido": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "eventType",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationType-invalido": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationType",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "datas-invalidas": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "startDate",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

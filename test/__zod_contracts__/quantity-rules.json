@@ -1,0 +1,477 @@
+{
+  "positive:undefined": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:\"\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:\"abc\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:true": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:[]": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:{}": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:NaN": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:-1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:\"0\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:\"-1\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:\"1e3\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:\"0x10\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "positive:\"12.3456\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "No máximo 3 casas decimais"
+      }
+    ]
+  },
+  "positive:1000000000000": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Quantidade acima do máximo permitido"
+      }
+    ]
+  },
+  "positive:1.2345": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "No máximo 3 casas decimais"
+      }
+    ]
+  },
+  "positive:12.345": {
+    "ok": true,
+    "data": 12.345
+  },
+  "positive:\"12.345\"": {
+    "ok": true,
+    "data": 12.345
+  },
+  "positive:\" 7 \"": {
+    "ok": true,
+    "data": 7
+  },
+  "nonZero:undefined": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonZero:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonZero:\"\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonZero:\"abc\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonZero:true": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonZero:[]": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonZero:{}": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonZero:NaN": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonZero:0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonZero:-1": {
+    "ok": true,
+    "data": -1
+  },
+  "nonZero:\"0\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonZero:\"-1\"": {
+    "ok": true,
+    "data": -1
+  },
+  "nonZero:\"1e3\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonZero:\"0x10\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonZero:\"12.3456\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "No máximo 3 casas decimais"
+      }
+    ]
+  },
+  "nonZero:1000000000000": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Quantidade acima do máximo permitido"
+      }
+    ]
+  },
+  "nonZero:1.2345": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "No máximo 3 casas decimais"
+      }
+    ]
+  },
+  "nonZero:12.345": {
+    "ok": true,
+    "data": 12.345
+  },
+  "nonZero:\"12.345\"": {
+    "ok": true,
+    "data": 12.345
+  },
+  "nonZero:\" 7 \"": {
+    "ok": true,
+    "data": 7
+  },
+  "nonNegative:undefined": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonNegative:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonNegative:\"\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonNegative:\"abc\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonNegative:true": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonNegative:[]": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonNegative:{}": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonNegative:NaN": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonNegative:0": {
+    "ok": true,
+    "data": 0
+  },
+  "nonNegative:-1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonNegative:\"0\"": {
+    "ok": true,
+    "data": 0
+  },
+  "nonNegative:\"-1\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonNegative:\"1e3\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonNegative:\"0x10\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Informe a quantidade X"
+      }
+    ]
+  },
+  "nonNegative:\"12.3456\"": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "No máximo 3 casas decimais"
+      }
+    ]
+  },
+  "nonNegative:1000000000000": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "Quantidade acima do máximo permitido"
+      }
+    ]
+  },
+  "nonNegative:1.2345": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "No máximo 3 casas decimais"
+      }
+    ]
+  },
+  "nonNegative:12.345": {
+    "ok": true,
+    "data": 12.345
+  },
+  "nonNegative:\"12.345\"": {
+    "ok": true,
+    "data": 12.345
+  },
+  "nonNegative:\" 7 \"": {
+    "ok": true,
+    "data": 7
+  }
+}
