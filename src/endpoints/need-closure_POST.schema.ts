@@ -16,7 +16,7 @@ export const schema = z.discriminatedUnion("action", [
     action: z.literal("encerrar"),
     organizationId: z.coerce.number().int().positive(),
     needId: z.coerce.number().int().positive(),
-    reasonCode: z.enum(CLOSURE_REASON_CODES, { errorMap: () => ({ message: "Escolha o motivo do encerramento" }) }),
+    reasonCode: z.enum(CLOSURE_REASON_CODES, { error: "Escolha o motivo do encerramento" }),
     reasonText: z.string().trim().max(500).nullish(),
   }),
   z.object({

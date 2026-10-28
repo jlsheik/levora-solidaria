@@ -1,0 +1,389 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "status": "ativos",
+      "order": "recentes"
+    }
+  },
+  "vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "status": "ativos",
+      "order": "recentes"
+    }
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 123,
+      "status": "ativos",
+      "order": "recentes"
+    }
+  },
+  "organizationId:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "status": "ativos",
+      "order": "recentes"
+    }
+  },
+  "organizationId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000,
+      "status": "ativos",
+      "order": "recentes"
+    }
+  },
+  "organizationId:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 7,
+      "status": "ativos",
+      "order": "recentes"
+    }
+  },
+  "organizationId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000000000000,
+      "status": "ativos",
+      "order": "recentes"
+    }
+  },
+  "organizationId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "status": "ativos",
+      "order": "antigos"
+    }
+  },
+  "order:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "so-org": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "status": "ativos",
+      "order": "antigos"
+    }
+  },
+  "status-invalido": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "status",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "order-invalido": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "order",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "status-nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "status",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

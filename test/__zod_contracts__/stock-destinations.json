@@ -1,0 +1,454 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 1,
+      "quantity": 2,
+      "destinationType": "atendimento_coletivo",
+      "deliveredOn": "2026-10-27",
+      "notes": "motivo suficiente para a regra",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:numero": {
+    "ok": true,
+    "data": {
+      "organizationId": 123,
+      "itemId": 1,
+      "quantity": 2,
+      "destinationType": "atendimento_coletivo",
+      "deliveredOn": "2026-10-27",
+      "notes": "motivo suficiente para a regra",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "organizationId:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:booleano": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 1,
+      "quantity": 2,
+      "destinationType": "atendimento_coletivo",
+      "deliveredOn": "2026-10-27",
+      "notes": "motivo suficiente para a regra",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "itemId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:numero": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 123,
+      "quantity": 2,
+      "destinationType": "atendimento_coletivo",
+      "deliveredOn": "2026-10-27",
+      "notes": "motivo suficiente para a regra",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "itemId:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "itemId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "itemId:booleano": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 1,
+      "quantity": 2,
+      "destinationType": "atendimento_coletivo",
+      "deliveredOn": "2026-10-27",
+      "notes": "motivo suficiente para a regra",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "quantity:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe a quantidade física que sairá do estoque"
+      }
+    ]
+  },
+  "quantity:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe a quantidade física que sairá do estoque"
+      }
+    ]
+  },
+  "quantity:numero": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 1,
+      "quantity": 123,
+      "destinationType": "atendimento_coletivo",
+      "deliveredOn": "2026-10-27",
+      "notes": "motivo suficiente para a regra",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "quantity:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe a quantidade física que sairá do estoque"
+      }
+    ]
+  },
+  "quantity:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe a quantidade física que sairá do estoque"
+      }
+    ]
+  },
+  "quantity:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe a quantidade física que sairá do estoque"
+      }
+    ]
+  },
+  "destinationType:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationType",
+        "message": "Escolha uma das finalidades da lista"
+      }
+    ]
+  },
+  "destinationType:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationType",
+        "message": "Escolha uma das finalidades da lista"
+      }
+    ]
+  },
+  "destinationType:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationType",
+        "message": "Escolha uma das finalidades da lista"
+      }
+    ]
+  },
+  "destinationType:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationType",
+        "message": "Escolha uma das finalidades da lista"
+      }
+    ]
+  },
+  "destinationType:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationType",
+        "message": "Escolha uma das finalidades da lista"
+      }
+    ]
+  },
+  "destinationType:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationType",
+        "message": "Escolha uma das finalidades da lista"
+      }
+    ]
+  },
+  "deliveredOn:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "deliveredOn:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "deliveredOn:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "deliveredOn:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "Informe a data efetiva no formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "deliveredOn:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "Informe a data efetiva no formato AAAA-MM-DD"
+      }
+    ]
+  },
+  "deliveredOn:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "deliveredOn",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "notes:ausente": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 1,
+      "quantity": 2,
+      "destinationType": "atendimento_coletivo",
+      "deliveredOn": "2026-10-27",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "notes:null": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 1,
+      "quantity": 2,
+      "destinationType": "atendimento_coletivo",
+      "deliveredOn": "2026-10-27",
+      "notes": null,
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "notes:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "notes",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "notes:vazio": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 1,
+      "quantity": 2,
+      "destinationType": "atendimento_coletivo",
+      "deliveredOn": "2026-10-27",
+      "notes": "",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "notes:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "notes",
+        "message": "No máximo 1000 caracteres"
+      }
+    ]
+  },
+  "notes:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "notes",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "Chave de idempotência inválida"
+      }
+    ]
+  },
+  "idempotencyKey:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "Chave de idempotência inválida"
+      }
+    ]
+  },
+  "idempotencyKey:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "itemId": 1,
+      "quantity": 2,
+      "destinationType": "atendimento_coletivo",
+      "deliveredOn": "2026-10-27",
+      "notes": "motivo suficiente para a regra",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "corpo-nao-objeto:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

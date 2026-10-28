@@ -9,7 +9,7 @@ export const schema = z
   .object({
     organizationId: z.coerce.number().int().positive(),
     destinationId: z.string().regex(/^\d{1,18}$/, "Destinação inválida"),
-    action: z.enum(["anexar", "remover"], { errorMap: () => ({ message: "Escolha anexar ou remover" }) }),
+    action: z.enum(["anexar", "remover"], { error: "Escolha anexar ou remover" }),
     fileId: z.coerce.number().int().positive(),
     reason: z.string().trim().min(5, "Explique o motivo (mínimo de 5 caracteres)").max(500, "No máximo 500 caracteres"),
     idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{8,100}$/, "Chave de idempotência inválida"),

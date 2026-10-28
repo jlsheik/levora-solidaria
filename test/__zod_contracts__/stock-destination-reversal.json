@@ -1,0 +1,381 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "1",
+      "kind": "estorno_documental",
+      "quantity": 1.5,
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:numero": {
+    "ok": true,
+    "data": {
+      "organizationId": 123,
+      "destinationId": "1",
+      "kind": "estorno_documental",
+      "quantity": 1.5,
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "organizationId:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:booleano": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "1",
+      "kind": "estorno_documental",
+      "quantity": 1.5,
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "destinationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationId:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationId:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "destinationId:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "Destinação inválida"
+      }
+    ]
+  },
+  "destinationId:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "Destinação inválida"
+      }
+    ]
+  },
+  "destinationId:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "destinationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "kind:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "kind",
+        "message": "Escolha o tipo da reversão"
+      }
+    ]
+  },
+  "kind:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "kind",
+        "message": "Escolha o tipo da reversão"
+      }
+    ]
+  },
+  "kind:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "kind",
+        "message": "Escolha o tipo da reversão"
+      }
+    ]
+  },
+  "kind:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "kind",
+        "message": "Escolha o tipo da reversão"
+      }
+    ]
+  },
+  "kind:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "kind",
+        "message": "Escolha o tipo da reversão"
+      }
+    ]
+  },
+  "kind:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "kind",
+        "message": "Escolha o tipo da reversão"
+      }
+    ]
+  },
+  "quantity:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe a quantidade a reverter"
+      }
+    ]
+  },
+  "quantity:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe a quantidade a reverter"
+      }
+    ]
+  },
+  "quantity:numero": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "1",
+      "kind": "estorno_documental",
+      "quantity": 123,
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "quantity:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe a quantidade a reverter"
+      }
+    ]
+  },
+  "quantity:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe a quantidade a reverter"
+      }
+    ]
+  },
+  "quantity:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "quantity",
+        "message": "Informe a quantidade a reverter"
+      }
+    ]
+  },
+  "reason:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reason:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reason:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "reason:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "Explique o motivo (mínimo de 5 caracteres)"
+      }
+    ]
+  },
+  "reason:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "No máximo 500 caracteres"
+      }
+    ]
+  },
+  "reason:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "reason",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:null": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:numero": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "idempotencyKey:vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "Chave de idempotência inválida"
+      }
+    ]
+  },
+  "idempotencyKey:longo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "Chave de idempotência inválida"
+      }
+    ]
+  },
+  "idempotencyKey:booleano": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "idempotencyKey",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "destinationId": "1",
+      "kind": "estorno_documental",
+      "quantity": 1.5,
+      "reason": "motivo ok",
+      "idempotencyKey": "abcdefgh12"
+    }
+  },
+  "corpo-nao-objeto:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo-nao-objeto:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}

@@ -1,0 +1,525 @@
+{
+  "valido": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "email": "Pessoa@Exemplo.com",
+      "role": "operador"
+    }
+  },
+  "vazio": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "<padrão do zod>"
+      },
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      },
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "chave-extra": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "email": "Pessoa@Exemplo.com",
+      "role": "operador"
+    }
+  },
+  "organizationId:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda2": {
+    "ok": true,
+    "data": {
+      "organizationId": 123,
+      "email": "Pessoa@Exemplo.com",
+      "role": "operador"
+    }
+  },
+  "organizationId:sonda3": {
+    "ok": true,
+    "data": {
+      "organizationId": 1,
+      "email": "Pessoa@Exemplo.com",
+      "role": "operador"
+    }
+  },
+  "organizationId:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda7": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000,
+      "email": "Pessoa@Exemplo.com",
+      "role": "operador"
+    }
+  },
+  "organizationId:sonda8": {
+    "ok": true,
+    "data": {
+      "organizationId": 7,
+      "email": "Pessoa@Exemplo.com",
+      "role": "operador"
+    }
+  },
+  "organizationId:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda13": {
+    "ok": true,
+    "data": {
+      "organizationId": 1000000000000,
+      "email": "Pessoa@Exemplo.com",
+      "role": "operador"
+    }
+  },
+  "organizationId:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "organizationId:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "organizationId",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "email:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "email:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "Informe um e-mail válido"
+      }
+    ]
+  },
+  "email:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "email:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "email:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "email:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "Informe um e-mail válido"
+      }
+    ]
+  },
+  "email:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "Informe um e-mail válido"
+      }
+    ]
+  },
+  "email:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "Informe um e-mail válido"
+      }
+    ]
+  },
+  "email:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "Informe um e-mail válido"
+      }
+    ]
+  },
+  "email:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "Informe um e-mail válido"
+      }
+    ]
+  },
+  "email:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "Informe um e-mail válido"
+      }
+    ]
+  },
+  "email:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "Informe um e-mail válido"
+      }
+    ]
+  },
+  "email:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "email:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "email:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "email:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "email:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "email",
+        "message": "Informe um e-mail válido"
+      }
+    ]
+  },
+  "role:ausente": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda0": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda1": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda2": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda3": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda4": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda5": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda6": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda7": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda8": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda9": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda10": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda11": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda12": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda13": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda14": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "role:sonda15": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:string": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:nulo": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "corpo:lista": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "",
+        "message": "<padrão do zod>"
+      }
+    ]
+  },
+  "papel-proprietario": {
+    "ok": false,
+    "issues": [
+      {
+        "path": "role",
+        "message": "<padrão do zod>"
+      }
+    ]
+  }
+}
