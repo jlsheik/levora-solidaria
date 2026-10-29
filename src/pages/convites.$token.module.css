@@ -1,5 +1,6 @@
 .page {
   min-height: 100vh;
+  box-sizing: border-box; /* min-height:100vh + padding em content-box passava do viewport e gerava rolagem vertical sem conteúdo */
   display: flex;
   align-items: center;
   justify-content: center;

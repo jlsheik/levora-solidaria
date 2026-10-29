@@ -17,7 +17,7 @@ const MakeProtectedRoute: (roles: User["role"][]) => React.FC<{
 
     // Show loading state while checking authentication
     if (authState.type === "loading") {
-      return <AuthLoadingState title="Authenticating" />;
+      return <AuthLoadingState />;
     }
 
     // Redirect to login if not authenticated

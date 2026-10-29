@@ -61,7 +61,7 @@ const organizationStatusLabels: Record<string, string> = {
 
 const createOrgSchema = z.object({
   name: z.string().min(2, "Informe o nome da organização"),
-  type: z.enum(OrganizationTypeArrayValues),
+  type: z.enum(OrganizationTypeArrayValues, { error: "Selecione o tipo de organização" }),
   city: z.string().min(2, "Informe a cidade"),
   state: z.string().length(2, "Use a sigla do estado, ex: MG"),
 });
