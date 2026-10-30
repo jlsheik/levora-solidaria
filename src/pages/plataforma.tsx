@@ -59,12 +59,12 @@ const registryStatusLabels: Record<string, string> = {
 
 const curatableStatuses = ["em_verificacao", "validada", "aguardando_destinacao", "recusada", "expirada", "cancelada", "bloqueada", "duplicada"] as const;
 
-const newSourceSchema = z.object({
+export const newSourceSchema = z.object({
   name: z.string().min(2), type: z.enum(SourceTypeArrayValues, { error: "Selecione o tipo da fonte" }), connectorKey: z.string().min(1),
   endpointOrAddress: z.string().optional(), accessMethod: z.string().optional(), policyNotes: z.string().optional(),
 });
 
-const newDiscoverySchema = z.object({
+export const newDiscoverySchema = z.object({
   sourceId: z.coerce.number().int().positive(), title: z.string().min(3), description: z.string().optional(),
   category: z.string().optional(), quantity: z.coerce.number().positive().optional(), unit: z.string().optional(),
   condition: z.string().optional(), locationCity: z.string().optional(), locationState: z.string().optional(),
