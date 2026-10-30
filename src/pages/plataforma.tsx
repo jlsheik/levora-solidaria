@@ -20,7 +20,8 @@ import { postPlatformOrganizationsStatus } from "../endpoints/platform-organizat
 import { StepUpDialog } from "../components/StepUpDialog";
 import { AccessCodesPanel } from "../components/AccessCodesPanel";
 import { ApiRequestError } from "../helpers/apiRequestError";
-import { SourceTypeArrayValues, OpportunityUrgencyArrayValues } from "../helpers/schema";
+import { SourceTypeArrayValues } from "../helpers/schema";
+import { newSourceSchema, newDiscoverySchema } from "../helpers/platformFormSchemas";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "../components/Dialog";
@@ -59,17 +60,7 @@ const registryStatusLabels: Record<string, string> = {
 
 const curatableStatuses = ["em_verificacao", "validada", "aguardando_destinacao", "recusada", "expirada", "cancelada", "bloqueada", "duplicada"] as const;
 
-export const newSourceSchema = z.object({
-  name: z.string().min(2), type: z.enum(SourceTypeArrayValues, { error: "Selecione o tipo da fonte" }), connectorKey: z.string().min(1),
-  endpointOrAddress: z.string().optional(), accessMethod: z.string().optional(), policyNotes: z.string().optional(),
-});
 
-export const newDiscoverySchema = z.object({
-  sourceId: z.coerce.number().int().positive(), title: z.string().min(3), description: z.string().optional(),
-  category: z.string().optional(), quantity: z.coerce.number().positive().optional(), unit: z.string().optional(),
-  condition: z.string().optional(), locationCity: z.string().optional(), locationState: z.string().optional(),
-  originContact: z.string().optional(), urgency: z.enum(OpportunityUrgencyArrayValues, { error: "Selecione a urgência" }).default("media"),
-});
 
 const allocationSchema = z.object({
   organizationId: z.coerce.number().int().positive(), quantityAllocated: z.coerce.number().positive(), notes: z.string().optional(),

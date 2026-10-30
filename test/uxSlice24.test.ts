@@ -15,11 +15,17 @@ describe("favicon", () => {
 });
 
 describe("z.enum com mensagem pt-BR", () => {
-  it("plataforma.tsx e inventário não usam z.enum sem { error }", () => {
-    for (const f of ["src/pages/plataforma.tsx", "src/pages/organizacoes.$organizationId.inventario.tsx"]) {
-      const src = read(f);
-      const enums = src.match(/z\.enum\([^)]*\)/g) ?? [];
-      expect(enums.length).toBeGreaterThan(0);
+  it("os schemas extraídos e as páginas não usam z.enum sem { error }", () => {
+    // os schemas moram em src/helpers/*FormSchemas.ts (devem ter enums); as páginas não podem ter z.enum sem mensagem
+    const files: [string, boolean][] = [
+      ["src/helpers/platformFormSchemas.ts", true],
+      ["src/helpers/inventoryFormSchemas.ts", true],
+      ["src/pages/plataforma.tsx", false],
+      ["src/pages/organizacoes.$organizationId.inventario.tsx", false],
+    ];
+    for (const [f, mustHaveEnums] of files) {
+      const enums = read(f).match(/z\.enum\([^)]*\)/g) ?? [];
+      if (mustHaveEnums) expect(enums.length, f).toBeGreaterThan(0);
       for (const e of enums) expect(e, `${f}: ${e}`).toContain("error:");
     }
   });

@@ -1,12 +1,11 @@
-// @vitest-environment jsdom
 /**
- * Slice de UX (Ciclo 24) — os três z.enum com mensagem pt-BR, exercitados DIRETAMENTE nos schemas reais das páginas
+ * Slice de UX (Ciclo 24) — os três z.enum com mensagem pt-BR, exercitados DIRETAMENTE nos schemas reais (src/helpers/*FormSchemas)
  * (os selects da interface sempre têm valor válido, então estas mensagens não são alcançáveis por cliques):
  * valor inválido ou ausente → mensagem em português, sem texto padrão do zod; valores válidos continuam aceitos.
  */
 import { describe, it, expect } from "vitest";
-import { newSourceSchema, newDiscoverySchema } from "../src/pages/plataforma";
-import { movementSchema } from "../src/pages/organizacoes.$organizationId.inventario";
+import { newSourceSchema, newDiscoverySchema } from "../src/helpers/platformFormSchemas";
+import { movementSchema } from "../src/helpers/inventoryFormSchemas";
 import { SourceTypeArrayValues, OpportunityUrgencyArrayValues } from "../src/helpers/schema";
 
 const messagesAt = (r: { success: boolean; error?: { issues: { path: PropertyKey[]; message: string }[] } }, field: string) =>
