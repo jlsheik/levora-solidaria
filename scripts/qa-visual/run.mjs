@@ -7,6 +7,7 @@
 //   npm run qa:visual -- --self-test        → prova que o detector pega regressões (CSS ruim injetado só no navegador) e ausências
 //   npm run qa:visual -- --list             → lista os cenários
 //   npm run qa:visual -- --cleanup          → recupera órfãos de uma execução morta à força (processos, perfis, banco) e sai
+//   npm run qa:visual -- --diagnostics DIR  → grava em DIR o tempo de cada célula (timings.jsonl), o log do servidor e, em todo MISSING, estado da página/console/rede/servidor + captura de tela
 //
 // Banco: SÓ um banco local descartável cujo nome termina em `_qa` (QA_DATABASE_URL, --db-url ou derivado de .env.test `_test` → `_qa`).
 // Códigos de saída: 0 tudo passou · 1 violação (FAIL) · 2 não consegui medir (MISSING/UNMEASURABLE) · 3 ambiente indisponível · 4 autoteste falhou.
@@ -21,6 +22,7 @@ import { startStack, prepareDatabase, dropDatabase, resolveDatabaseUrl } from ".
 import { Report, EXIT, expectedCombos, coverageGaps, selectionSummary } from "./lib/report.mjs";
 import { STATUS } from "./lib/contrast.mjs";
 import { installProbe, runScenarios } from "./lib/runner.mjs";
+import { Diagnostics } from "./lib/diagnostics.mjs";
 import { Cleanups } from "./lib/cleanup.mjs";
 import { RunState, recoverOrphans } from "./lib/orphans.mjs";
 import { VIEWPORTS, parseViewportsOption, viewportKey } from "./lib/viewport.mjs";
@@ -32,7 +34,7 @@ const { values: opt } = parseArgs({
   options: {
     browser: { type: "string", default: "auto" }, "db-url": { type: "string" }, only: { type: "string" }, out: { type: "string" }, viewports: { type: "string" }, profile: { type: "string", default: "full" },
     verbose: { type: "boolean", default: false }, "keep-db": { type: "boolean", default: false }, "self-test": { type: "boolean", default: false },
-    list: { type: "boolean", default: false }, cleanup: { type: "boolean", default: false }, "inject-css": { type: "string" }, screenshots: { type: "string" },
+    list: { type: "boolean", default: false }, cleanup: { type: "boolean", default: false }, "inject-css": { type: "string" }, screenshots: { type: "string" }, diagnostics: { type: "string" },
   },
 });
 
@@ -85,13 +87,15 @@ async function main() {
   let target;
   try { target = assertDisposableDatabase(dbUrl); } catch (e) { report.addEnv(`banco: ${e.message}`); return; }
   console.log(`banco de QA: ${target.database} em ${target.host}:${target.port} (schema recriado a partir de db/schema.sql)`);
-  let stack;
+  let stack; let diag;
   try {
     if (!opt["keep-db"]) cleanups.add("banco de QA", async () => { await dropDatabase(dbUrl); state.clearDatabase(); }); // roda por ÚLTIMO (depois de parar API/Vite/navegador)
     state.setDatabase(target.database);
     await prepareDatabase(dbUrl, root);
     process.env.QA_PASSWORD = QA_PASSWORD;
-    stack = await startStack({ root, databaseUrl: dbUrl, onSpawn: (pid, kind) => state.addChild(pid, kind) });
+    if (opt.diagnostics) diag = new Diagnostics({ dir: opt.diagnostics });
+    stack = await startStack({ root, databaseUrl: dbUrl, onSpawn: (pid, kind) => state.addChild(pid, kind), onLog: diag ? (label, text) => diag.serverLog(label, text) : undefined });
+    if (diag) diag.stack = stack;
   } catch (e) { report.addEnv(`pilha de verificação não subiu: ${e.message}`); return; }
   cleanups.add("API e Vite", () => stack.stop());
   console.log(`aplicação em ${stack.baseUrl}`);
@@ -113,10 +117,11 @@ async function main() {
     cleanups.add(`navegador ${b.name}`, async () => session.close());
     try {
       await installProbe(session.cdp, { injectCss });
+      if (diag) await session.cdp.send("Log.enable"); // erros do navegador (recursos que falharam, CSP) entram no diagnóstico
       console.log(`${b.name}: ${session.version}`);
       if (process.env.QA_VISUAL_FAULT === "after-browser") throw new Error("falha simulada (QA_VISUAL_FAULT=after-browser) para verificar a limpeza");
       if (opt["self-test"]) await selfTest(session, b.name, stack.baseUrl, filesDir, auth);
-      else { await runScenarios({ cdp: session.cdp, browserName: b.name, version: session.version, baseUrl: stack.baseUrl, scenarios: chosen, viewports, report, filesDir, auth, screenshotsDir: opt.screenshots ? path.resolve(opt.screenshots) : undefined }); ran.push({ name: b.name, version: session.version }); }
+      else { await runScenarios({ cdp: session.cdp, browserName: b.name, version: session.version, baseUrl: stack.baseUrl, scenarios: chosen, viewports, report, filesDir, auth, diag, screenshotsDir: opt.screenshots ? path.resolve(opt.screenshots) : undefined }); ran.push({ name: b.name, version: session.version }); }
     } finally { await session.close(); }
   }
 
@@ -127,7 +132,7 @@ async function main() {
       report.add({ browser, version: ran.find((r) => r.name === browser)?.version, scenario, target: "-", variant: "-", viewport, theme, state: "cobertura", kind: "cobertura", status: STATUS.UNMEASURABLE, detail: "combinação esperada sem nenhuma linha no relatório (não foi executada)" });
     }
   }
-  return { ran };
+  return { ran, diag };
 }
 
 /** Autoteste: injeta CSS ruim SÓ no navegador (produção intacta) e exige que o detector acuse; e exige MISSING/UNMEASURABLE nas sentinelas. */
@@ -165,7 +170,7 @@ try {
 if (opt.cleanup) process.exit(code);
 const file = opt.out ? path.resolve(opt.out) : path.join(tmpdir(), "levora-qa-visual", `relatorio-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
 mkdirSync(path.dirname(file), { recursive: true });
-writeFileSync(file, JSON.stringify({ geradoEm: new Date().toISOString(), node: process.version, so: process.platform, viewports: viewports.map(viewportKey), temas: THEMES, selecao: selection, navegadores: outcome?.ran ?? [], contagem: report.counts(), env: report.env, linhas: report.rows }, null, 1));
+writeFileSync(file, JSON.stringify({ geradoEm: new Date().toISOString(), node: process.version, so: process.platform, viewports: viewports.map(viewportKey), temas: THEMES, selecao: selection, navegadores: outcome?.ran ?? [], contagem: report.counts(), diagnostico: outcome?.diag ? outcome.diag.finish(report.rows) : { solicitado: !!opt.diagnostics, ligado: false }, env: report.env, linhas: report.rows }, null, 1));
 for (const line of report.format({ verbose: opt.verbose })) console.log(line);
 console.log(selection.completo ? `Cobertura: matriz completa (${selection.total} cenários).` : `Cobertura: SUBCONJUNTO — ${selection.executados} de ${selection.total} cenários (perfil ${selection.perfil}); NÃO executados (não contam como aprovados): ${selection.omitidos.join(", ")}`);
 console.log(`Relatório JSON: ${file}`);

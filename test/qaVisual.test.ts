@@ -188,7 +188,7 @@ describe("consistência dos cenários e do autoteste", () => {
   it("cada mutação do autoteste aponta para cenários reais; há sentinelas de ausência e de estado impossível", () => {
     for (const m of MUTATIONS) { expect(((m.css ?? m.js) as string).length).toBeGreaterThan(5); for (const w of m.viewports ?? [1280]) expect(VIEWPORTS.some((v: { w: number }) => v.w === w), `${m.id} viewport ${w}`).toBe(true); for (const id of m.scenarios) expect(scenarioIds.has(id), `${m.id} → ${id}`).toBe(true); }
     expect(new Set(MUTATIONS.map((m: { id: string }) => m.id)).size).toBe(MUTATIONS.length);
-    expect(SENTINELS.map((s: { expect: string }) => s.expect).sort()).toEqual(["MISSING", "UNMEASURABLE"]);
+    expect(SENTINELS.map((s: { expect: string }) => s.expect).sort()).toEqual(["MISSING", "UNMEASURABLE", "UNMEASURABLE"]);
     // cobertura das correções: ghost, primary, destructive, outline, switch, borda, tamanho e erro têm uma regressão injetável
     const covered = new Set(MUTATIONS.flatMap((m: { scenarios: string[] }) => m.scenarios));
     for (const id of ["needs-ghost-edit-icon", "needs-primary-new", "matching-destructive-confirm", "needs-edit-dialog-cancel", "matching-switch", "login-field-border-sizing", "login-error-text"]) expect(covered.has(id), id).toBe(true);
@@ -309,5 +309,158 @@ describe("novos cenários: variação negativa do inventário e FileDropzone", (
     expect(new RegExp(neg.sign).test("-1 kg")).toBe(true); expect(new RegExp(neg.sign).test("1 kg")).toBe(false); // o sinal precisa estar no texto, não só na cor
     const err = byId.get("dropzone-error-text") as { steps: Array<Record<string, { fileName?: string }>> };
     expect(err.steps.some((st) => st.setFile && /invalido/.test(st.setFile.fileName ?? ""))).toBe(true);
+  });
+});
+
+import { waitUntil as waitUntilFrozenAware, FreezeClock, MAX_COMPENSATION_MS } from "../scripts/qa-visual/lib/wait.mjs";
+import { summarizeEvents } from "../scripts/qa-visual/lib/diagnostics.mjs";
+
+describe("espera por elemento: congelamento do executor não vira 'elemento não encontrado'", () => {
+  /** Relógio virtual: `sleep` avança o tempo; `freeze` simula o executor parado (coleta de lixo longa, suspensão) sem nenhuma verificação no intervalo. */
+  const virtual = () => { let t = 1_000_000; return { now: () => t, sleep: async (ms: number) => { t += ms; }, freeze: (ms: number) => { t += ms; } }; };
+  /** Cópia fiel da espera ANTERIOR (prazo de relógio puro), só para provar o mecanismo da falha. */
+  const legacyWaitUntil = async (fn: () => Promise<unknown>, ms: number, v: ReturnType<typeof virtual>, every = 120) => {
+    const end = v.now() + ms;
+    while (v.now() < end) { try { const r = await fn(); if (r) return r; } catch { /* navegando */ } await v.sleep(every); }
+    return null;
+  };
+
+  it("sem congelamento: devolve assim que o elemento aparece e desiste no prazo se ele nunca aparece", async () => {
+    const v = virtual(); const clock = new FreezeClock({ now: v.now, setTimer: () => ({ unref() {} }) as never });
+    const appearsAt = v.now() + 500;
+    expect(await waitUntilFrozenAware(async () => v.now() >= appearsAt, 8000, { now: v.now, sleep: v.sleep, clock })).toBe(true);
+    const start = v.now();
+    expect(await waitUntilFrozenAware(async () => false, 8000, { now: v.now, sleep: v.sleep, clock })).toBeNull();
+    expect(v.now() - start).toBeGreaterThanOrEqual(8000);
+    expect(v.now() - start).toBeLessThan(8000 + 500); // o prazo não é inflado quando nada congelou
+  });
+
+  it("pausa de 9 s entre duas verificações: o prazo antigo desiste (MISSING falso), a espera compensada encontra o elemento", async () => {
+    // a página renderiza o elemento 600 ms depois; a primeira verificação (t=0) ainda não o vê; o executor então congela 9 s
+    const run = async (kind: "legacy" | "novo") => {
+      const v = virtual(); const appearsAt = v.now() + 600; let calls = 0;
+      const fn = async () => { calls++; const ok = v.now() >= appearsAt; if (calls === 1) v.freeze(9000); return ok; }; // o congelamento acontece logo depois da 1ª verificação (falsa)
+      if (kind === "legacy") return { found: await legacyWaitUntil(fn, 8000, v), calls };
+      const clock = new FreezeClock({ now: v.now, setTimer: () => ({ unref() {} }) as never });
+      return { found: await waitUntilFrozenAware(fn, 8000, { now: v.now, sleep: v.sleep, clock }), calls };
+    };
+    const legacy = await run("legacy"); const novo = await run("novo");
+    expect(legacy.found).toBeNull();      // reproduz o MISSING: 1 verificação, prazo vencido durante a pausa
+    expect(legacy.calls).toBe(1);
+    expect(novo.found).toBe(true);        // a pausa é devolvida ao prazo e a condição é conferida de novo
+    expect(novo.calls).toBeGreaterThan(1);
+  });
+
+  it("elemento realmente ausente continua sendo ausente depois de um congelamento (nada é aprovado por compensação)", async () => {
+    const v = virtual(); const clock = new FreezeClock({ now: v.now, setTimer: () => ({ unref() {} }) as never }); let calls = 0;
+    const found = await waitUntilFrozenAware(async () => { if (++calls === 1) v.freeze(9000); return false; }, 8000, { now: v.now, sleep: v.sleep, clock });
+    expect(found).toBeNull();
+  });
+
+  it("a compensação é limitada: um congelamento enorme não adia o prazo indefinidamente", async () => {
+    const v = virtual(); const clock = new FreezeClock({ now: v.now, setTimer: () => ({ unref() {} }) as never }); let calls = 0; const t0 = v.now();
+    const found = await waitUntilFrozenAware(async () => { if (++calls === 1) v.freeze(10 * 60_000); return false; }, 8000, { now: v.now, sleep: v.sleep, clock });
+    expect(found).toBeNull();
+    expect(v.now() - t0).toBeLessThanOrEqual(10 * 60_000 + 8000 + MAX_COMPENSATION_MS + 1000);
+  });
+
+  it("exceção da verificação (página navegando) conta como 'ainda não' e o diagnóstico resume rede/console/navegações", async () => {
+    const v = virtual(); let n = 0;
+    expect(await waitUntilFrozenAware(async () => { if (++n < 3) throw new Error("navegando"); return "ok"; }, 8000, { now: v.now, sleep: v.sleep })).toBe("ok");
+    const s = summarizeEvents([
+      { method: "Network.requestWillBeSent", params: { requestId: "1", request: { url: "http://x/a" }, timestamp: 1 } },
+      { method: "Network.loadingFinished", params: { requestId: "1", timestamp: 1.4 } },
+      { method: "Network.requestWillBeSent", params: { requestId: "2", request: { url: "http://x/b" }, timestamp: 2 } },
+      { method: "Network.responseReceived", params: { requestId: "2", response: { status: 503 } } },
+      { method: "Network.requestWillBeSent", params: { requestId: "3", request: { url: "http://x/c" }, timestamp: 3 } },
+      { method: "Network.loadingFailed", params: { requestId: "3", errorText: "net::ERR_ABORTED", timestamp: 3.1 } },
+      { method: "Page.frameNavigated", params: { frame: { url: "http://x/u" } } },
+      { method: "Page.frameNavigated", params: { frame: { url: "http://x/u" } } },
+      { method: "Runtime.exceptionThrown", params: { exceptionDetails: { text: "Uncaught" } } },
+    ]);
+    expect(s.requests).toBe(3);
+    expect(s.http4xx5xx).toEqual([{ url: "http://x/b", status: 503 }]);
+    expect(s.failed[0].error).toBe("net::ERR_ABORTED");
+    expect(s.pending).toEqual(["http://x/b"]);
+    expect(s.mainFrameNavigations).toHaveLength(2); // página recarregada dentro da célula
+    expect(s.exceptions).toHaveLength(1);
+    expect(s.slowest[0]).toEqual({ url: "http://x/a", ms: 400 });
+  });
+});
+
+import { classifyLoginRedirect, sessionRequests, SESSION_PATH } from "../scripts/qa-visual/lib/authcheck.mjs";
+import { cleanUrl, redact } from "../scripts/qa-visual/lib/redact.mjs";
+import { Diagnostics } from "../scripts/qa-visual/lib/diagnostics.mjs";
+import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+describe("usuário autenticado que termina em /login: produto, ambiente ou sem evidência (nunca MISSING, nunca PASS)", () => {
+  const URL_SESSION = `http://127.0.0.1:5173${SESSION_PATH}`;
+  const req = (id: string, url = URL_SESSION) => ({ method: "Network.requestWillBeSent", params: { requestId: id, request: { url }, timestamp: 1 } });
+  const res = (id: string, status: number) => ({ method: "Network.responseReceived", params: { requestId: id, response: { status } } });
+  const done = (id: string) => ({ method: "Network.loadingFinished", params: { requestId: id, timestamp: 2 } });
+  const fail = (id: string, errorText: string) => ({ method: "Network.loadingFailed", params: { requestId: id, errorText, timestamp: 2 } });
+
+  it("só considera a rota exata da sessão (não /auth/sessions nem outra rota)", () => {
+    const ev = [req("a", "http://x/_api/v1/auth/sessions"), req("b", "http://x/_api/v1/units"), req("c", `${URL_SESSION}?x=1`)];
+    expect(sessionRequests(ev).map((r) => r.id)).toEqual(["c"]);
+  });
+  it("401/403 com o cookie presente = regressão de autenticação do PRODUTO (FAIL)", () => {
+    for (const status of [401, 403]) {
+      const v = classifyLoginRedirect({ events: [req("a"), res("a", status), done("a")], cookiePresent: true });
+      expect(v.verdict).toBe("produto"); expect(v.cause).toBe("sessao-recusada-com-cookie"); expect(v.why).toContain(String(status));
+    }
+  });
+  it("401 sem cookie no navegador = perda de cookie no ambiente de QA (não culpa o produto)", () => {
+    expect(classifyLoginRedirect({ events: [req("a"), res("a", 401), done("a")], cookiePresent: false })).toMatchObject({ verdict: "ambiente", cause: "cookie-de-sessao-ausente" });
+  });
+  it("401 sem como verificar o cookie = sem evidência (não afirma produto nem ambiente)", () => {
+    expect(classifyLoginRedirect({ events: [req("a"), res("a", 401), done("a")], cookiePresent: null })).toMatchObject({ verdict: "sem-evidencia", cause: "cookie-desconhecido" });
+  });
+  it("200 na sessão e mesmo assim /login = comportamento fora do contrato: PRODUTO", () => {
+    expect(classifyLoginRedirect({ events: [req("a"), res("a", 200), done("a")], cookiePresent: true })).toMatchObject({ verdict: "produto", cause: "login-apesar-de-sessao-valida" });
+  });
+  it("falha de rede, bloqueio ou requisição pendente = AMBIENTE", () => {
+    expect(classifyLoginRedirect({ events: [req("a"), fail("a", "net::ERR_BLOCKED_BY_CLIENT")], cookiePresent: true })).toMatchObject({ verdict: "ambiente", cause: "consulta-de-sessao-sem-resposta" });
+    expect(classifyLoginRedirect({ events: [req("a")], cookiePresent: true })).toMatchObject({ verdict: "ambiente", cause: "consulta-de-sessao-pendente" });
+  });
+  it("5xx na sessão = AMBIENTE (erro do servidor, não decisão de autenticação)", () => {
+    expect(classifyLoginRedirect({ events: [req("a"), res("a", 500), done("a")], cookiePresent: true })).toMatchObject({ verdict: "ambiente", cause: "servidor-5xx-na-sessao" });
+  });
+  it("sem nenhuma consulta de sessão registrada = sem evidência", () => {
+    expect(classifyLoginRedirect({ events: [req("a", "http://x/_api/v1/units")], cookiePresent: true })).toMatchObject({ verdict: "sem-evidencia", cause: "sem-requisicao-de-sessao" });
+  });
+  it("com a tentativa repetida (retry) vale o desfecho da ÚLTIMA consulta", () => {
+    expect(classifyLoginRedirect({ events: [req("a"), fail("a", "net::ERR_FAILED"), req("b"), res("b", 401), done("b")], cookiePresent: true }).verdict).toBe("produto");
+    expect(classifyLoginRedirect({ events: [req("a"), res("a", 401), done("a"), req("b"), fail("b", "net::ERR_FAILED")], cookiePresent: true }).verdict).toBe("ambiente");
+  });
+});
+
+describe("diagnóstico: sem dados sensíveis e com contagem verificável", () => {
+  it("remove query/fragmento de URL e valores de campos sensíveis", () => {
+    expect(cleanUrl("http://x/a/b?token=abc#frag")).toBe("http://x/a/b");
+    const t = redact('POST falhou password=hunter2 e "token": "abc123" Authorization: Bearer eyJhbGci.x.y cookie=floot_built_app_session=zzz');
+    for (const segredo of ["hunter2", "abc123", "eyJhbGci", "zzz"]) expect(t).not.toContain(segredo);
+    expect(t).toContain("[redigido]");
+  });
+  it("summarizeEvents não guarda query string da requisição", () => {
+    const s = summarizeEvents([{ method: "Network.requestWillBeSent", params: { requestId: "1", request: { url: "http://x/api?token=SEGREDO" }, timestamp: 1 } }]);
+    expect(JSON.stringify(s)).not.toContain("SEGREDO");
+  });
+  it("finish(): conta células registradas contra as do relatório; ausência de registro = incompleto, nunca 'sem problemas'", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "qa-diag-test-"));
+    try {
+      const d = new Diagnostics({ dir });
+      const rows = [{ browser: "chrome", scenario: "a", viewport: "375", theme: "light" }, { browser: "chrome", scenario: "a", viewport: "375", theme: "light" }, { browser: "chrome", scenario: "a", viewport: "375", theme: "dark" }, { browser: "chrome", scenario: "autoteste:x", viewport: "1280", theme: "qualquer" }];
+      d.cell({ scenario: "a" });
+      const parcial = d.finish(rows);
+      expect(parcial).toMatchObject({ ligado: true, celulasRegistradas: 1, celulasNoRelatorio: 2, completo: false, falhasDiagnosticadas: 0, comCapturaDeTela: 0, semDadosSuficientes: 0 });
+      const d2 = new Diagnostics({ dir }); d2.cell({}); d2.cell({});
+      expect(d2.finish(rows).completo).toBe(true);
+      expect(JSON.parse(readFileSync(path.join(dir, "summary.json"), "utf8")).completo).toBe(true);
+      const d3 = new Diagnostics({ dir }); expect(d3.finish([]).completo).toBe(false); // nada registrado nunca é "completo"
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+    expect(existsSync(dir)).toBe(false);
   });
 });

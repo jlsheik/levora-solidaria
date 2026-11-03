@@ -56,11 +56,11 @@ export async function dropDatabase(url) {
   try { await admin.unsafe(`DROP DATABASE IF EXISTS "${target.database.replace(/"/g, '""')}" WITH (FORCE)`); } finally { await admin.end(); }
 }
 
-function runNode(root, args, env, label, onSpawn) {
+function runNode(root, args, env, label, onSpawn, onLog) {
   const child = spawn(process.execPath, args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, detached: process.platform !== "win32" });
   onSpawn?.(child.pid, label);
   child.logs = [];
-  const keep = (b) => { child.logs.push(String(b)); if (child.logs.length > 60) child.logs.shift(); };
+  const keep = (b) => { child.logs.push(String(b)); if (child.logs.length > 60) child.logs.shift(); onLog?.(label, b); };
   child.stdout.on("data", keep); child.stderr.on("data", keep);
   child.label = label;
   return child;
@@ -77,7 +77,7 @@ async function waitFor(check, what, ms = 60000, child) {
 }
 
 /** Semeia, sobe API e Vite. Retorna { baseUrl, stop }. Lança em caso de falha (o chamador classifica como ENV). */
-export async function startStack({ root, databaseUrl, onSpawn, seedScript = path.join("scripts", "qa-visual", "seed.ts"), extraEnv = {} }) {
+export async function startStack({ root, databaseUrl, onSpawn, onLog, seedScript = path.join("scripts", "qa-visual", "seed.ts"), extraEnv = {} }) {
   const tsx = path.join(root, "node_modules", "tsx", "dist", "cli.mjs");
   const vite = path.join(root, "node_modules", "vite", "bin", "vite.js");
   for (const p of [tsx, vite]) if (!existsSync(p)) throw new Error(`dependência de desenvolvimento ausente: ${path.relative(root, p)} (rode npm install)`);
@@ -89,14 +89,15 @@ export async function startStack({ root, databaseUrl, onSpawn, seedScript = path
   const children = [];
   const stop = async () => { for (const c of children.reverse()) killTree(c); await sleep(300); };
   try {
-    const seed = runNode(root, [tsx, seedScript], env, "seed", onSpawn);
+    const seed = runNode(root, [tsx, seedScript], env, "seed", onSpawn, onLog);
     children.push(seed);
     await new Promise((res, rej) => { seed.on("exit", (code) => (code === 0 ? res() : rej(new Error(`a semente falhou (código ${code}): ${seed.logs.slice(-6).join(" | ").slice(0, 400)}`)))); });
-    const api = runNode(root, [tsx, path.join("scripts", "qa-visual", "api.ts")], env, "api", onSpawn); children.push(api);
+    const api = runNode(root, [tsx, path.join("scripts", "qa-visual", "api.ts")], env, "api", onSpawn, onLog); children.push(api);
     await waitFor(async () => (await fetch(`http://127.0.0.1:${apiPort}/_api/__health`)).ok, "API", 60000, api);
-    const web = runNode(root, [vite, "--config", path.join("scripts", "qa-visual", "vite.config.ts"), "--port", String(webPort), "--strictPort", "--host", "127.0.0.1"], env, "vite", onSpawn); children.push(web);
+    const web = runNode(root, [vite, "--config", path.join("scripts", "qa-visual", "vite.config.ts"), "--port", String(webPort), "--strictPort", "--host", "127.0.0.1"], env, "vite", onSpawn, onLog); children.push(web);
     await waitFor(async () => (await fetch(`http://127.0.0.1:${webPort}/login`)).ok, "Vite", 60000, web);
-    return { baseUrl: `http://127.0.0.1:${webPort}`, apiPort, webPort, stop };
+    const logs = () => ({ api: api.logs.slice(-15), vite: web.logs.slice(-15) });
+    return { baseUrl: `http://127.0.0.1:${webPort}`, apiPort, webPort, stop, logs };
   } catch (e) {
     await stop();
     throw e;

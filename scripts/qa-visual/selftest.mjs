@@ -25,4 +25,5 @@ const base = SCENARIOS.find((s) => s.id === "needs-primary-new");
 export const SENTINELS = [
   { id: "elemento-ausente", describe: "seletor que não existe deve ser MISSING (não PASS nem erro)", expect: "MISSING", scenario: { ...base, id: "__sentinela-ausente", target: { css: "#nao-existe-qa-visual" }, states: ["normal"] } },
   { id: "estado-impossivel", describe: "hover num botão desabilitado (pointer-events: none) deve ser UNMEASURABLE", expect: "UNMEASURABLE", scenario: { id: "__sentinela-estado", user: "owner", path: "/organizacoes/1", steps: [], target: { css: 'button[class*="_outline_"]', text: "^Sair da organização" }, measure: "button", variant: "sentinela", states: ["hover"] } },
+  { id: "sessao-indisponivel", describe: "consulta de sessão falhando: a rota protegida termina em /login e o resultado é UNMEASURABLE (não 'elemento ausente' na página sob teste)", expect: "UNMEASURABLE", scenario: { id: "__sentinela-sessao", user: "owner", path: "/organizacoes/1/unidades", steps: [], blockUrls: ["*/_api/v1/auth/session*"], target: { css: "select#filtro-classe" }, measure: "field", variant: "sentinela", expect: { height: 40 } } },
 ];
