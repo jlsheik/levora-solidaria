@@ -103,8 +103,10 @@ export async function cspInBrowser(kit, b, { nx, collector, user, pngFile, asser
     }
     // ---- envio de comprovante de verdade pela interface sob a CSP, e exibição da imagem enviada
     await navigate(cdp, `${base}/organizacoes/1/atribuicoes`); await sleep(1800);
-    let uploaded = null;
+    let uploaded = null; let stage = "botão 'Registrar recebimento direto' ausente na página";
+    const pageBrief = () => cdp.eval(`JSON.stringify({ rota: location.pathname, botoes: [...document.querySelectorAll('button')].map((b) => b.textContent.trim().slice(0, 30)).slice(0, 8), dialogos: document.querySelectorAll('[role="dialog"]').length, campos: document.querySelectorAll('input[type="file"]').length })`).catch(() => "(página indisponível)"); // só observa: explica o UNMEASURABLE, não muda o resultado
     if (await clickSelector(cdp, "button", "^Registrar recebimento direto")) {
+      stage = "campo de arquivo ausente no diálogo";
       await sleep(900);
       const doc = await cdp.send("DOM.getDocument", { depth: 0 });
       const node = await cdp.send("DOM.querySelector", { nodeId: doc.root.nodeId, selector: '[role="dialog"] input[type="file"]' });
@@ -114,7 +116,7 @@ export async function cspInBrowser(kit, b, { nx, collector, user, pngFile, asser
       }
     }
     rowB("csp:envio de comprovante", "FileDropzone → files-upload sob a CSP", uploaded === null ? null : !!uploaded.name && uploaded.violations.length === 0,
-      uploaded === null ? "não consegui abrir o diálogo de recebimento / o campo de arquivo" : uploaded.name ? `o arquivo ${uploaded.name} foi enviado pela interface, sem violações` : `o envio não apareceu na interface (violações: ${uploaded.violations.join(" ; ") || "nenhuma"})`, "CSP×funcionamento");
+      uploaded === null ? `não consegui abrir o diálogo de recebimento / o campo de arquivo (etapa: ${stage}; página: ${await pageBrief()})` : uploaded.name ? `o arquivo ${uploaded.name} foi enviado pela interface, sem violações` : `o envio não apareceu na interface (violações: ${uploaded.violations.join(" ; ") || "nenhuma"})`, "CSP×funcionamento");
     await kit.sendKey(cdp, "Escape");
 
     // ---- bloqueio real: as mesmas seis ações, agora na página do app

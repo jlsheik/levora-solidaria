@@ -7,6 +7,11 @@ import { PROBE_SOURCE } from "./probe.mjs";
 import { STATUS, evaluateContrast, round2 } from "./contrast.mjs";
 import { emulationParams, viewportKey, viewportMatches } from "./viewport.mjs";
 import { THEMES, USERS, QA_PASSWORD } from "../scenarios.mjs";
+import { waitUntil as waitFor, FreezeClock } from "./wait.mjs";
+import { netBrief } from "./diagnostics.mjs";
+import { classifyLoginRedirect } from "./authcheck.mjs";
+
+const SESSION_COOKIE = "floot_built_app_session"; // nome do cookie de sessão do produto (src/helpers/getSetServerSession.tsx)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const q = (v) => JSON.stringify(v);
@@ -23,15 +28,21 @@ export async function installProbe(cdp, { injectCss, injectJs } = {}) {
   return async () => { for (const identifier of ids) await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier }); };
 }
 
-async function waitUntil(fn, ms, every = 120) {
-  const end = Date.now() + ms;
-  while (Date.now() < end) { try { const v = await fn(); if (v) return v; } catch { /* a página pode estar navegando */ } await sleep(every); }
-  return null;
-}
+/** Relógio de congelamento compartilhado: pausas do próprio executor/sistema não consomem o prazo de espera da página (ver lib/wait.mjs). */
+const freezeClock = new FreezeClock();
+const waitUntil = (fn, ms, every = 120) => waitFor(fn, ms, { every, clock: freezeClock });
 
 async function navigate(cdp, url) {
-  await cdp.send("Page.navigate", { url });
-  await waitUntil(() => cdp.eval("document.readyState === 'complete' && !!window.__qa"), 15000);
+  const t0 = Date.now();
+  const r = await cdp.send("Page.navigate", { url });
+  const ready = !!(await waitUntil(() => cdp.eval("document.readyState === 'complete' && !!window.__qa"), 15000));
+  return { errorText: r?.errorText ?? null, ready, ms: Date.now() - t0 };
+}
+
+/** Cronometra uma espera e soma na linha de diagnóstico da célula (só tem efeito com --diagnostics). */
+async function timed(ctx, key, fn) {
+  const s = Date.now();
+  try { return await fn(); } finally { if (ctx.cell) ctx.cell[key] = (ctx.cell[key] ?? 0) + (Date.now() - s); }
 }
 
 async function login(cdp, baseUrl, user) {
@@ -115,6 +126,24 @@ function addInfo(ctx, sc, d, state, label, fg, bg) {
   ctx.report.add(rowBase(ctx, sc, state, "info", { target: label ?? d.label, status: STATUS.PASS, ratio: ev.ratio, required: 0, detail: "informativo (componente desabilitado: isento de limite)" }));
 }
 function addMissing(ctx, sc, state, why) { ctx.report.add(rowBase(ctx, sc, state, "presença", { status: STATUS.MISSING, detail: why })); }
+/** MISSING de passo/presença: registra a linha e, com --diagnostics, o estado da página/console/rede/servidor naquele instante. */
+async function missing(ctx, sc, state, why) {
+  // MISSING = o elemento não existe na página SOB TESTE. Um usuário autenticado que terminou em /login NÃO chegou a avaliar a rota: o que a consulta de sessão
+  // respondeu (lib/authcheck.mjs) decide se é regressão de autenticação do produto (FAIL), falha do ambiente de QA ou falta de evidência (UNMEASURABLE com a causa).
+  // Nenhum dos três é "elemento ausente" e nenhum conta como aprovação.
+  let onLogin = false;
+  if (sc.user !== "guest") { try { onLogin = (await ctx.cdp.eval("location.pathname")) === "/login"; } catch { /* a página pode estar navegando */ } }
+  if (onLogin) {
+    let cookiePresent = null;
+    try { const { cookies } = await ctx.cdp.send("Network.getCookies", { urls: [ctx.baseUrl] }, 5000); cookiePresent = (cookies ?? []).some((c) => c.name === SESSION_COOKIE); } catch { /* cookiePresent fica desconhecido */ }
+    const v = classifyLoginRedirect({ events: ctx.cdp.events, cookiePresent });
+    if (ctx.cell) { ctx.cell.authVerdict = v.verdict; ctx.cell.authCause = v.cause; }
+    const detail = `${v.why} [rota ${sc.path}; elemento esperado ${sc.target.css}; sessão: ${v.requests} consulta(s)]`;
+    if (v.verdict === "produto") ctx.report.add(rowBase(ctx, sc, "autenticação", "autenticação", { status: STATUS.FAIL, detail }));
+    else addUnmeasurable(ctx, sc, "sessão", detail);
+  } else addMissing(ctx, sc, state, why);
+  await ctx.diag?.capture(ctx, sc, state, why, ctx.cell);
+}
 function addUnmeasurable(ctx, sc, state, why) { ctx.report.add(rowBase(ctx, sc, state, "estado", { status: STATUS.UNMEASURABLE, detail: why })); }
 function addLayout(ctx, sc, state, target, ok, detail) { ctx.report.add(rowBase(ctx, sc, state, "layout", { target, status: ok ? STATUS.PASS : STATUS.FAIL, detail })); }
 
@@ -234,7 +263,7 @@ async function measureContainment(ctx, sc) {
 async function runStep(ctx, sc, step) {
   if (step.click) {
     const spec = step.click;
-    if (!(await waitUntil(() => found(ctx.cdp, spec), 8000))) { addMissing(ctx, sc, "passo", `passo não achou o elemento: ${spec.css}${spec.text ? ` /${spec.text}/` : ""}`); return false; }
+    if (!(await timed(ctx, "stepWaitMs", () => waitUntil(() => found(ctx.cdp, spec), 8000)))) { await missing(ctx, sc, "passo", `passo não achou o elemento: ${spec.css}${spec.text ? ` /${spec.text}/` : ""}`); return false; }
     const c = await ctx.cdp.eval("window.__qa.center()");
     await ctx.cdp.click(c[0], c[1]);
     await sleep(250);
@@ -244,7 +273,7 @@ async function runStep(ctx, sc, step) {
     const { css, within, fileName, content } = step.setFile;
     if (!ctx.filesDir) { addUnmeasurable(ctx, sc, "passo", "sem diretório temporário para o arquivo sintético"); return false; }
     const selector = `${within ? `${within} ` : ""}${css}`;
-    if (!(await waitUntil(() => ctx.cdp.eval(`!!document.querySelector(${q(selector)})`), 8000))) { addMissing(ctx, sc, "passo", `campo de arquivo não encontrado: ${selector}`); return false; }
+    if (!(await timed(ctx, "stepWaitMs", () => waitUntil(() => ctx.cdp.eval(`!!document.querySelector(${q(selector)})`), 8000)))) { await missing(ctx, sc, "passo", `campo de arquivo não encontrado: ${selector}`); return false; }
     const file = path.join(ctx.filesDir, fileName);
     writeFileSync(file, content);
     const doc = await ctx.cdp.send("DOM.getDocument", { depth: 0 });
@@ -255,7 +284,7 @@ async function runStep(ctx, sc, step) {
   }
   if (step.select || step.type) { // preenche um <select> ou <input> existente pelos eventos que o React escuta (o valor é digitado como um usuário faria)
     const spec = step.select ?? step.type;
-    if (!(await waitUntil(() => ctx.cdp.eval(`!!document.querySelector(${q(spec.css)})`), 8000))) { addMissing(ctx, sc, "passo", `campo não encontrado: ${spec.css}`); return false; }
+    if (!(await timed(ctx, "stepWaitMs", () => waitUntil(() => ctx.cdp.eval(`!!document.querySelector(${q(spec.css)})`), 8000)))) { await missing(ctx, sc, "passo", `campo não encontrado: ${spec.css}`); return false; }
     const done = await ctx.cdp.eval(`(() => { const el = document.querySelector(${q(spec.css)}); if (!el) return false;
       const proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
       Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, ${q(step.select ? spec.value : spec.text)});
@@ -276,15 +305,35 @@ function viewportProblem(ctx, sc, m, when) {
 }
 
 async function runOne(ctx, sc) {
+  ctx.cdp.events.length = 0; // os eventos do CDP (rede, console, navegação) são só da célula corrente: sem isso a lista crescia sem limite (≈1,1 GB e 1,1 milhão de eventos ao fim de uma matriz de Edge)
+  ctx.cell = { startedAt: Date.now(), eventsFrom: 0, frozen0: freezeClock.total };
+  try { await runOneCell(ctx, sc); }
+  finally {
+    freezeClock.tick();
+    const frozenMs = freezeClock.total - ctx.cell.frozen0;
+    if (ctx.diag) {
+      if (frozenMs > 0) ctx.diag.event("executor-congelado", { browser: ctx.name, scenario: sc.id, viewport: ctx.vpKey, theme: ctx.theme, frozenMs });
+      ctx.diag.cell({ browser: ctx.name, scenario: sc.id, viewport: ctx.vpKey, theme: ctx.theme, ...ctx.cell, frozenMs, net: netBrief(ctx.cdp.events), eventsHeld: ctx.cdp.events.length, totalMs: Date.now() - ctx.cell.startedAt });
+    }
+  }
+}
+
+async function runOneCell(ctx, sc) {
   await ctx.cdp.send("Network.setBlockedURLs", { urls: sc.blockUrls ?? [] }); // cenário de erro de carregamento: bloqueia só a URL pedida (sempre reposto a cada cenário)
   await ctx.cdp.send("Emulation.setDeviceMetricsOverride", emulationParams(ctx.vp)); // aplica ANTES de navegar; a conferência é feita com a página da aplicação carregada
-  await navigate(ctx.cdp, `${ctx.baseUrl}${sc.path}`);
+  const nav = await navigate(ctx.cdp, `${ctx.baseUrl}${sc.path}`);
+  ctx.cell.navMs = nav.ms; ctx.cell.navReady = nav.ready; if (nav.errorText) ctx.cell.navError = nav.errorText;
+  if (nav.errorText || !nav.ready) { // a página não carregou: não há o que medir (esperar mais 8 s e relatar "elemento não encontrado" seria enganoso)
+    addUnmeasurable(ctx, sc, "navegação", nav.errorText ? `a navegação falhou: ${nav.errorText}` : `a página não ficou pronta (readyState=complete e sonda de medição) em ${Math.round(nav.ms / 1000)} s`);
+    await ctx.diag?.capture(ctx, sc, "navegação", nav.errorText ?? "página não ficou pronta", ctx.cell);
+    return;
+  }
   const vp = await applyViewport(ctx.cdp, ctx.vp);
   ctx.vpInner = `${vp.metrics.innerWidth}x${vp.metrics.innerHeight}`;
   if (!vp.ok) { viewportProblem(ctx, sc, vp.metrics, "a emulação não se confirmou"); return; }
   await setTheme(ctx.cdp, ctx.theme);
   for (const step of sc.steps) if (!(await runStep(ctx, sc, step))) return;
-  if (!(await waitUntil(() => found(ctx.cdp, sc.target), 8000))) { addMissing(ctx, sc, "presença", `elemento não encontrado: ${sc.target.css}${sc.target.text ? ` /${sc.target.text}/` : ""}`); return; }
+  if (!(await timed(ctx, "targetWaitMs", () => waitUntil(() => found(ctx.cdp, sc.target), 8000)))) { await missing(ctx, sc, "presença", `elemento não encontrado: ${sc.target.css}${sc.target.text ? ` /${sc.target.text}/` : ""}`); return; }
   await setTheme(ctx.cdp, ctx.theme); // a página pode ter recriado o <body> ao carregar dados
   const dark = await ctx.cdp.eval("document.body.classList.contains('dark')");
   if (dark !== (ctx.theme === "dark")) { addUnmeasurable(ctx, sc, "tema", `não consegui aplicar o tema ${ctx.theme}`); return; }
@@ -298,7 +347,7 @@ async function runOne(ctx, sc) {
 }
 
 /** Roda os cenários (agrupados por usuário) em cada viewport e tema e acumula as linhas em `report`. */
-export async function runScenarios({ cdp, browserName, version, baseUrl, scenarios, viewports, report, filesDir, screenshotsDir, auth = { current: null } }) {
+export async function runScenarios({ cdp, browserName, version, baseUrl, scenarios, viewports, report, filesDir, screenshotsDir, auth = { current: null }, diag }) {
   for (const user of ["guest", "owner", "volunteer"]) {
     const list = scenarios.filter((s) => s.user === user);
     if (!list.length) continue;
@@ -309,7 +358,7 @@ export async function runScenarios({ cdp, browserName, version, baseUrl, scenari
       auth.current = ok ? user : null;
     }
     for (const sc of list) for (const vp of (sc.viewports ?? viewports)) for (const theme of THEMES) {
-      const ctx = { cdp, name: browserName, version, baseUrl, report, theme, vp, vpKey: viewportKey(vp), vpInner: "-", filesDir, screenshotsDir };
+      const ctx = { cdp, name: browserName, version, baseUrl, report, theme, vp, vpKey: viewportKey(vp), vpInner: "-", filesDir, screenshotsDir, diag };
       if (!ok) { addUnmeasurable(ctx, sc, "login", `login como ${user} não concluiu`); continue; }
       try { await runOne(ctx, sc); } catch (e) { addUnmeasurable(ctx, sc, "execução", `erro inesperado: ${String(e.message).slice(0, 200)}`); }
     }

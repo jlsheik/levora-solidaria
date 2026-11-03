@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "../components/Select";
 import { z } from "zod";
+import { movementSchema } from "../helpers/inventoryFormSchemas";
 import { ArrowLeft, Plus, Package, ArrowDownCircle, ArrowUpCircle, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import styles from "./organizacoes.$organizationId.inventario.module.css";
@@ -60,11 +61,6 @@ const newItemSchema = z.object({
   initialQuantity: z.coerce.number().nonnegative().optional(),
 });
 
-const movementSchema = z.object({
-  type: z.enum(["entrada", "ajuste"]), // saída física: registro de destinação (Fase 99E)
-  quantity: z.coerce.number().refine((v) => v !== 0, "Informe uma quantidade diferente de zero"),
-  reason: z.string().min(2, "Descreva o motivo"),
-});
 
 export default function InventoryPage() {
   const params = useParams<{ organizationId: string }>();
