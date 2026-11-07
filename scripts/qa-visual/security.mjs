@@ -16,12 +16,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { assertDisposableDatabase } from "./lib/guard.mjs";
-import { findBrowser, killTree, launchBrowser } from "./lib/browser.mjs";
+import { findBrowser, launchBrowser } from "./lib/browser.mjs";
 import { startStack, prepareDatabase, dropDatabase, resolveDatabaseUrl } from "./lib/stack.mjs";
 import { Report, EXIT } from "./lib/report.mjs";
 import { STATUS } from "./lib/contrast.mjs";
 import { Cleanups } from "./lib/cleanup.mjs";
-import { RunState, recoverOrphans } from "./lib/orphans.mjs";
+import { RunState, installSignalHandlers, recoverOrphans } from "./lib/orphans.mjs";
 import { QA_PASSWORD, USERS } from "./scenarios.mjs";
 import { ATTACKER_ORIGINS, ATTACK_KINDS, attackPage, classifyAttempt, summarizeNetwork, describeNetwork } from "./security/attacks.mjs";
 import { allIds, payloadSet, FIELDS } from "./security/payloads.mjs";
@@ -39,11 +39,10 @@ const parts = new Set((opt.only ?? ALL_PARTS.join(",")).split(",").map((s) => s.
 if (![...parts].every((p) => ALL_PARTS.includes(p))) { console.error(`--only aceita ${ALL_PARTS.join(", ")}`); process.exit(EXIT.ENV); }
 
 const report = new Report(); const cleanups = new Cleanups(); const state = new RunState();
-for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, async () => { await cleanups.runAll(); state.end(); process.exit(EXIT.ENV); });
+installSignalHandlers({ cleanups, state, exitCode: EXIT.ENV });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const actionsFor = (dbUrl) => ({
-  killTree: (pid) => killTree(pid),
   removeDir: (dir) => rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 }),
   removeContainer: (name) => removeContainer(name),
   dropDb: async (name) => { if (!dbUrl) throw new Error("URL do banco indisponível para derrubar o banco órfão"); if (assertDisposableDatabase(dbUrl).database !== name) throw new Error(`o banco órfão (${name}) não é o banco de QA atual; não derrubado`); await dropDatabase(dbUrl); },
@@ -283,9 +282,9 @@ async function sendKey(cdp, name) { try { await cdp.key(name); } catch { /* ok *
 // ---------------------------------------------------------------------------------------------------------------- principal
 async function main() {
   const dbUrl = resolveDatabaseUrl({ cli: opt["db-url"], root });
-  const rec = await recoverOrphans({ actions: actionsFor(dbUrl) });
+  const rec = await recoverOrphans({ ownRunId: state.runId, actions: actionsFor(dbUrl) });
   if (rec.busy) { report.addEnv(`já existe uma execução da verificação visual/segurança em andamento (pid ${rec.pid})`); return; }
-  if (rec.killed?.length || rec.profiles?.length || rec.database) console.log(`órfãos recuperados: processos=${rec.killed.length} perfis=${rec.profiles.length} banco=${rec.database ?? "-"}${rec.errors.length ? ` · erros: ${rec.errors.join("; ")}` : ""}`);
+  if (rec.killed?.length || rec.profiles?.length || rec.database || rec.preserved?.length) console.log(`órfãos recuperados: processos=${rec.killed.length} perfis=${rec.profiles.length} banco=${rec.database ?? "-"} preservados=${(rec.preserved?.length ?? 0) + (rec.profilesPreserved?.length ?? 0)}${rec.errors.length ? ` · erros: ${rec.errors.join("; ")}` : ""}`);
   if (opt.cleanup) { console.log("limpeza concluída"); return; }
   state.begin(); cleanups.add("registro de execução", async () => state.end());
 
@@ -313,7 +312,7 @@ async function main() {
       // armazenamento de arquivos DESCARTÁVEL (a API e a semente gravam aqui; nunca em storage/uploads do projeto)
       storageDir = mkdtempSync(path.join(tmpdir(), "levora-qa-profile-storage-")); state.addProfile(storageDir);
       cleanups.add("armazenamento de arquivos", async () => { rmSync(storageDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 }); state.dropProfile(storageDir); });
-      stack = await startStack({ root, databaseUrl: dbUrl, onSpawn: (pid, kind) => state.addChild(pid, kind), seedScript: path.join("scripts", "qa-visual", "security", "seed.ts"), extraEnv: { QA_SEC_COLLECTOR: collector.url(), QA_PASSWORD, STORAGE_LOCAL_DIR: storageDir, ...(process.platform === "linux" && parts.has("headers") ? { QA_API_HOST: "0.0.0.0" } : {}) } });
+      stack = await startStack({ root, databaseUrl: dbUrl, onSpawn: (pid, kind, extra) => state.addChild(pid, kind, extra), seedScript: path.join("scripts", "qa-visual", "security", "seed.ts"), extraEnv: { QA_SEC_COLLECTOR: collector.url(), QA_PASSWORD, STORAGE_LOCAL_DIR: storageDir, ...(process.platform === "linux" && parts.has("headers") ? { QA_API_HOST: "0.0.0.0" } : {}) } });
     } catch (e) { report.addEnv(`pilha de verificação não subiu: ${e.message}`); return; }
     cleanups.add("API e Vite", () => stack.stop());
     const { default: postgres } = await import("postgres");
@@ -347,7 +346,7 @@ async function main() {
   const ran = [];
   for (const br of browsers) {
     let session;
-    try { session = await launchBrowser(br.exe, { extraArgs: nx ? ["--ignore-certificate-errors"] : [], onSpawn: (pid, kind) => state.addChild(pid, kind), onProfile: (d) => state.addProfile(d), onProfileGone: (d) => state.dropProfile(d) }); } catch (e) { report.addEnv(`${br.name}: não abriu (${e.message})`); continue; }
+    try { session = await launchBrowser(br.exe, { extraArgs: nx ? ["--ignore-certificate-errors"] : [], onSpawn: (pid, kind, extra) => state.addChild(pid, kind, extra), onProfile: (d) => state.addProfile(d), onProfileGone: (d) => state.dropProfile(d) }); } catch (e) { report.addEnv(`${br.name}: não abriu (${e.message})`); continue; }
     cleanups.add(`navegador ${br.name}`, async () => session.close());
     try {
       const b = { name: br.name, version: session.version };
