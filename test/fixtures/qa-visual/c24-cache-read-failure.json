@@ -1,0 +1,47 @@
+{
+  "origem": "evidência REAL do C24: tentativa 1 do SHA 98cf036 (2026-11-03), Edge 156, célula report-destination-basis 768x1024 escuro (diagnóstico do próprio qa:visual)",
+  "browser": "edge",
+  "version": "Edg/156.0.4314.58",
+  "scenario": "report-destination-basis",
+  "viewport": "768x1024",
+  "theme": "dark",
+  "route": "/organizacoes/1/prestacao-contas",
+  "expected": "button[role=\"combobox\"][aria-label=\"Data usada no bloco de destinação\"]",
+  "page": {
+    "url": "http://127.0.0.1:55711/organizacoes/1/prestacao-contas",
+    "readyState": "complete",
+    "hasQaProbe": true,
+    "rootChildren": 0,
+    "visibleText": "",
+    "resources": 13
+  },
+  "net": {
+    "requests": 14,
+    "failed": [
+      {
+        "url": "http://127.0.0.1:55711/@vite/client",
+        "error": "net::ERR_CACHE_READ_FAILURE",
+        "canceled": false
+      },
+      {
+        "url": "http://127.0.0.1:55711/@react-refresh",
+        "error": "net::ERR_CACHE_READ_FAILURE",
+        "canceled": false
+      },
+      {
+        "url": "http://127.0.0.1:55711/src/App.tsx",
+        "error": "net::ERR_CACHE_READ_FAILURE",
+        "canceled": false
+      }
+    ],
+    "http4xx5xx": [],
+    "pending": []
+  },
+  "consoleErrors": [],
+  "exceptions": [],
+  "logErrors": [
+    "Failed to load resource: net::ERR_CACHE_READ_FAILURE",
+    "Failed to load resource: net::ERR_CACHE_READ_FAILURE",
+    "Failed to load resource: net::ERR_CACHE_READ_FAILURE"
+  ]
+}
