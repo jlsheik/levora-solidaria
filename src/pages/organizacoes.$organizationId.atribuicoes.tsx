@@ -26,6 +26,7 @@ import { ArrowLeft, Network, PackageCheck, FileCheck, X, Clock } from "lucide-re
 import { toast } from "sonner";
 import { isAllowedProofUrl } from "../helpers/proofUrl";
 import { CLOSED_REASON_LABELS, formatRemaining, remainingMs, urgencyOf } from "../helpers/assignmentDeadline";
+import { ActiveTab } from "../components/ActiveTab";
 import styles from "./organizacoes.$organizationId.atribuicoes.module.css";
 
 const statusLabels: Record<string, string> = {
@@ -164,7 +165,7 @@ export default function OrganizationAllocationsPage() {
         <Link to={`/organizacoes/${organizationId}/destinacoes`} className={styles.tabNavItem}>Destinação</Link>
         <Link to={`/organizacoes/${organizationId}/necessidades`} className={styles.tabNavItem}>Necessidades</Link>
         <Link to={`/organizacoes/${organizationId}/oportunidades`} className={styles.tabNavItem}>Oportunidades</Link>
-        <span className={styles.tabNavItemActive}>Rede Levora</span>
+        <ActiveTab className={styles.tabNavItemActive}>Rede Levora</ActiveTab>
         <Link to={`/organizacoes/${organizationId}/prestacao-contas`} className={styles.tabNavItem}>Prestação de contas</Link>
         <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>Configurações de Matching</Link>
         {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
@@ -395,6 +396,7 @@ export default function OrganizationAllocationsPage() {
                     accept={ALLOWED_CONTENT_TYPES.join(",")}
                     maxSize={FILE_MAX_SIZE_BYTES}
                     disabled={uploadProofMutation.isPending}
+                    busy={uploadProofMutation.isPending}
                     title={uploadProofMutation.isPending ? "Enviando..." : "Clique ou arraste uma foto/PDF"}
                     subtitle={`Até ${Math.round(FILE_MAX_SIZE_BYTES / 1024 / 1024)}MB`}
                     onFilesSelected={(files) => files[0] && uploadProofMutation.mutate(files[0])}

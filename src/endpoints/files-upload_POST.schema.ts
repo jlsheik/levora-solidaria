@@ -32,25 +32,41 @@ export type OutputType = {
   };
 };
 
+export const UPLOAD_NETWORK_ERROR_MESSAGE = "Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.";
+export const UPLOAD_SERVER_ERROR_MESSAGE = "Não foi possível concluir o envio. Tente novamente mais tarde.";
+
 export const postFilesUpload = async (
   body: z.infer<typeof schema>,
   init?: RequestInit
 ): Promise<OutputType> => {
   const validatedInput = schema.parse(body);
-  const result = await fetch(`/_api/v1/files-upload`, {
-    method: "POST",
-    body: superjson.stringify(validatedInput),
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-    credentials: "include",
-  });
+  let result: Response;
+  try {
+    result = await fetch(`/_api/v1/files-upload`, {
+      method: "POST",
+      body: superjson.stringify(validatedInput),
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+      credentials: "include",
+    });
+  } catch (err) {
+    // Cancelamento deliberado (AbortController) segue como está; o resto é falha de conexão: o texto bruto do navegador ("Failed to fetch") não vai ao usuário.
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new Error(UPLOAD_NETWORK_ERROR_MESSAGE);
+  }
 
   if (!result.ok) {
-    const errorData = superjson.parse<{ message: string }>(await result.text());
-    throw new Error(errorData.message || "Não foi possível enviar o arquivo");
+    // 5xx e corpos que não são JSON do servidor não têm mensagem segura para o usuário; 4xx traz a mensagem pública (pt-BR) escolhida pelo endpoint.
+    let message: string | undefined;
+    try {
+      message = superjson.parse<{ message?: string }>(await result.text())?.message;
+    } catch {
+      message = undefined;
+    }
+    throw new Error(result.status >= 500 || !message ? UPLOAD_SERVER_ERROR_MESSAGE : message);
   }
 
   return superjson.parse<OutputType>(await result.text());

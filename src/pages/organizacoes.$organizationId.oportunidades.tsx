@@ -33,6 +33,7 @@ import { Badge } from "../components/Badge";
 import { UnitText } from "../components/UnitText";
 import { UnitSelect } from "../components/UnitSelect";
 import { Skeleton } from "../components/Skeleton";
+import { ActiveTab } from "../components/ActiveTab";
 import {
   Select,
   SelectContent,
@@ -190,7 +191,7 @@ export default function OpportunitiesPage() {
         <Link to={`/organizacoes/${organizationId}/necessidades`} className={styles.tabNavItem}>
           Necessidades
         </Link>
-        <span className={styles.tabNavItemActive}>Oportunidades</span>
+        <ActiveTab className={styles.tabNavItemActive}>Oportunidades</ActiveTab>
         <Link to={`/organizacoes/${organizationId}/atribuicoes`} className={styles.tabNavItem}>
           Rede Levora
         </Link>

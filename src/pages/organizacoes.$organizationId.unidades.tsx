@@ -8,6 +8,7 @@ import { UNIT_CLASSIFICATION_LABELS, type UnitClassificationKind } from "../help
 import { Button } from "../components/Button";
 import { Skeleton } from "../components/Skeleton";
 import inputStyles from "../components/Input.module.css";
+import { ActiveTab } from "../components/ActiveTab";
 import styles from "./organizacoes.$organizationId.unidades.module.css";
 
 type Row = OutputType["rows"][number];
@@ -73,7 +74,7 @@ export default function OrganizationUnitsPage() {
         <Link to={`/organizacoes/${organizationId}/atribuicoes`} className={styles.tabNavItem}>Rede Levora</Link>
         <Link to={`/organizacoes/${organizationId}/prestacao-contas`} className={styles.tabNavItem}>Prestação de contas</Link>
         <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>Configurações de Matching</Link>
-        <span className={styles.tabNavItemActive} aria-current="page">Unidades</span>
+        <ActiveTab className={styles.tabNavItemActive} aria-current="page">Unidades</ActiveTab>
         <Link to={`/organizacoes/${organizationId}/regularizacao`} className={styles.tabNavItem}>Pendências de unidade</Link>
       </nav>
 
@@ -152,7 +153,7 @@ export default function OrganizationUnitsPage() {
                 <input id="filtro-valor" type="search" maxLength={100} className={inputStyles.input} value={valueText} onChange={(e) => setValueText(e.target.value)} placeholder="ex.: kg" autoComplete="off" />
               </div>
               <div className={styles.filterActions}>
-                <Button variant="outline" size="sm" onClick={clearFilters} disabled={!hasFilters}>
+                <Button variant="outline" onClick={clearFilters} disabled={!hasFilters}>
                   <RotateCcw size={14} /> Limpar filtros
                 </Button>
               </div>

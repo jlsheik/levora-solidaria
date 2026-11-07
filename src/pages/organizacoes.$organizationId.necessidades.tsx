@@ -42,6 +42,7 @@ import { z } from "zod";
 import { ArrowLeft, Plus, ClipboardList, Pencil } from "lucide-react";
 import { EditNeedDialog, type EditableNeed } from "../components/EditNeedDialog";
 import { NeedClosureDialog, type ClosableNeed } from "../components/NeedClosureDialog";
+import { ActiveTab } from "../components/ActiveTab";
 import { CLOSURE_REASON_LABELS } from "../endpoints/need-closure_POST.schema";
 import { toast } from "sonner";
 import styles from "./organizacoes.$organizationId.necessidades.module.css";
@@ -151,7 +152,7 @@ export default function NeedsPage() {
           Inventário
         </Link>
         <Link to={`/organizacoes/${organizationId}/destinacoes`} className={styles.tabNavItem}>Destinação</Link>
-        <span className={styles.tabNavItemActive}>Necessidades</span>
+        <ActiveTab className={styles.tabNavItemActive}>Necessidades</ActiveTab>
         <Link to={`/organizacoes/${organizationId}/oportunidades`} className={styles.tabNavItem}>
           Oportunidades
         </Link>

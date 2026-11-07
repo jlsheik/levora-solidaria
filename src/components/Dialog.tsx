@@ -33,6 +33,12 @@ interface DialogContentProps
   >["container"];
 }
 
+/** M12: o aviso (toast) fica fora do diálogo no DOM; interagir com ele (ex.: o botão "Fechar aviso") não pode fechar o diálogo por "interação externa". */
+const isToastTarget = (event: { target: EventTarget | null; detail?: { originalEvent?: Event } }) => {
+  const t = (event.detail?.originalEvent?.target ?? event.target) as Element | null;
+  return !!t && typeof t.closest === "function" && !!t.closest("[data-sonner-toaster]");
+};
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
@@ -42,12 +48,17 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={`${styles.content} ${className || ''}`}
+      data-toast-aware="" // M11: o toaster cede a faixa inferior da janela a este diálogo (ver toastReserve.ts)
       {...props}
+      onInteractOutside={(event) => {
+        if (isToastTarget(event as unknown as { target: EventTarget | null; detail?: { originalEvent?: Event } })) event.preventDefault();
+        props.onInteractOutside?.(event);
+      }}
     >
       {children}
       <DialogPrimitive.Close className={styles.close}>
         <X className={styles.closeIcon} />
-        <span className={styles.screenReaderText}>Close</span>
+        <span className={styles.screenReaderText}>Fechar</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>
@@ -71,6 +82,7 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={`${styles.footer} ${className || ''}`}
+    data-dialog-footer="" // marcador do rodapé de ações (usado pelas sondas do QA visual)
     {...props}
   />
 )
