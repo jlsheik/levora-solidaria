@@ -156,7 +156,7 @@ describe("CSS dos componentes compartilhados (contrato estático)", () => {
     const active = btn.match(/\.outline:active \{([^}]*)\}/)![1];
     expect(hover).not.toMatch(/(^|\s)color:/);
     expect(active).not.toMatch(/(^|\s)color:/);
-    expect(btn).toMatch(/\.disabled \{[^}]*opacity: 0\.5;[^}]*cursor: not-allowed;[^}]*pointer-events: none;/);
+    expect(btn).toMatch(/\.disabled \{[^}]*opacity: 0\.65;[^}]*cursor: not-allowed;[^}]*pointer-events: none;/);
     expect(btn).toMatch(/\.button:focus-visible \{[^}]*0 0 0 4px var\(--primary\)/);
   });
 
@@ -198,11 +198,11 @@ describe("CSS dos componentes compartilhados (contrato estático)", () => {
     expect(css).toMatch(/@supports not selector\(:has\(\*\)\) \{\s*\.dropzone:focus-within \{/);
     // trechos sem espaço ("image/jpeg,image/png,image/webp") estouravam o diálogo em 375/390 px
     expect(css).toMatch(/\.error span \{\s*min-width: 0;\s*overflow-wrap: anywhere;\s*\}/);
-    // o componente em si (textos, tipos aceitos, validações) NÃO foi alterado: só estilo
+    // R9 (M09): textos em pt-BR; tipos aceitos e validações inalterados
     const tsx = read("src/components/FileDropzone.tsx");
-    expect(tsx).toContain("Invalid file type. Accepted:");
-    expect(tsx).toContain("aria-label=\"File upload\"");
-    expect(tsx).toContain("aria-label=\"Clear error\"");
+    expect(tsx).toContain("Tipo de arquivo não permitido. Selecione um formato aceito.");
+    expect(tsx).toContain("aria-label=\"Enviar arquivo\"");
+    expect(tsx).toContain("aria-label=\"Fechar aviso de erro\"");
   });
 
   it("os 16 usos de <Button variant=\"outline\"> continuam usando a variante (sem trocar por classes locais)", () => {
