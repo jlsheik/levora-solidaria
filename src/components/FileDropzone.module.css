@@ -73,6 +73,19 @@
     pointer-events: none;
   }
 
+  /* M10/R11: "Enviando…" é INFORMAÇÃO de estado, não um controle inativo qualquer. Com a área inteira a 50% o texto ficava a 2,97:1 (claro) / 4,49:1 (escuro).
+     No estado de progresso o texto mantém suas cores plenas (contraste dos tokens normais); só o ícone e a borda ficam esmaecidos, e o cursor indica progresso.
+     As demais dropzones desabilitadas (sem `busy`) continuam exatamente como antes. */
+  .dropzone.disabled.busy {
+    opacity: 1;
+    cursor: progress;
+    border-color: color-mix(in srgb, var(--input-border), transparent 50%);
+  }
+
+  .dropzone.disabled.busy .icon {
+    opacity: 0.5;
+  }
+
   /* Foco por teclado: o <input type="file"> é visualmente oculto (1px, recortado) e o foco ia para ele SEM nenhum indicador visível. O contêiner
      passa a mostrar o mesmo anel sólido dos botões (>= 4,6:1). */
   .dropzone:has(input:focus-visible) {

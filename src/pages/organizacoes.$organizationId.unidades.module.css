@@ -9,6 +9,7 @@
 }
 
 .backLink {
+  min-height: 2rem; /* M05/F09: o link tinha 18 px de altura; 32 px no desktop (>= 24) e 44 px no mobile */
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-1);
@@ -20,33 +21,6 @@
 
 .backLink:hover { color: var(--foreground); }
 
-.tabNav {
-  display: flex;
-  gap: var(--spacing-1);
-  border-bottom: 1px solid var(--border);
-  margin-bottom: var(--spacing-6);
-  flex-wrap: wrap;
-}
-
-.tabNavItem,
-.tabNavItemActive {
-  padding: var(--spacing-2) var(--spacing-1);
-  font-size: 0.875rem;
-  text-decoration: none;
-  color: var(--muted-foreground);
-  border-bottom: 2px solid transparent;
-  margin-right: var(--spacing-4);
-  white-space: nowrap;
-}
-
-.tabNavItem:hover { color: var(--foreground); }
-
-.tabNavItemActive {
-  color: var(--foreground);
-  font-weight: 500;
-  border-bottom-color: var(--primary);
-}
-
 .titleRow { margin-bottom: var(--spacing-4); }
 
 .title {
@@ -55,6 +29,8 @@
   font-weight: 600;
   margin: 0 0 var(--spacing-1) 0;
 }
+@media (max-width: 40rem), (pointer: coarse) { .backLink { min-height: 2.75rem; } }
+
 
 .subtitle {
   color: var(--muted-foreground);
@@ -83,9 +59,14 @@
 
 .summary {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  /* M04 (F14): os 7 indicadores cabem numa linha no desktop (antes 6 + 1 órfão) e viram 2 colunas no celular (antes 7 cartões de largura total empilhados) */
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: var(--spacing-3);
   margin-bottom: var(--spacing-6);
+}
+@media (max-width: 40rem) {
+  .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summary > .stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
 
 .summarySkeleton { height: 5rem; grid-column: 1 / -1; border-radius: var(--radius); }
@@ -136,7 +117,7 @@
 
 .resultCount { font-size: 0.75rem; color: var(--muted-foreground); margin: 0 0 var(--spacing-2) 0; }
 .helperText { color: var(--muted-foreground); font-size: 0.8125rem; margin: 0 0 var(--spacing-4) 0; line-height: 1.5; }
-.emptyText { color: var(--muted-foreground); font-size: 0.875rem; padding: var(--spacing-4) 0; margin: 0; }
+.emptyText { color: var(--muted-foreground); font-size: 0.875rem; padding: var(--spacing-2) 0 0; margin: 0; } /* M05/N04: o 4º espaço inferior somava ao padding do cartão e deixava o vazio mais alto embaixo que em cima */
 .listSkeleton { height: 8rem; border-radius: var(--radius); }
 
 .emptyState, .errorState {
@@ -182,5 +163,15 @@
   .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
   .table tr { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: var(--spacing-3); padding: var(--spacing-2); background: var(--surface); }
   .table td { border-bottom: none; padding: var(--spacing-1) var(--spacing-2); }
-  .table td::before { content: attr(data-label); display: block; font-size: 0.6875rem; color: var(--muted-foreground); font-weight: 500; }
+  .table td::before { content: attr(data-label); display: block; font-family: var(--font-family-base); /* M05/N08: o rótulo herdava a fonte monoespaçada das células .num/.raw ('Ocorrências' e 'Valor armazenado' em mono, 'Origem' em sans) */ font-size: 0.75rem; /* M06: 11 px -> 12 px */ color: var(--muted-foreground); font-weight: 500; }
+}
+
+/* M04 (F05/F06): barra de abas compartilhada */
+.tabNav { composes: tabNav from "../components/OrgTabs.module.css"; }
+.tabNavItem { composes: tabNavItem from "../components/OrgTabs.module.css"; }
+.tabNavItemActive { composes: tabNavItemActive from "../components/OrgTabs.module.css"; }
+
+/* M04 (F16): mesma margem lateral em todas as páginas da organização no celular */
+@media (max-width: 40rem) {
+  .page { padding: var(--spacing-4); }
 }

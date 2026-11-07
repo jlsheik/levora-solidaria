@@ -26,7 +26,8 @@
 
   .input::placeholder {
     color: var(--muted-foreground);
-    opacity: 0.7;
+    /* M04/F18: opacidade 1 (0,7 deixava o placeholder abaixo de 3:1 no tema claro) */
+    opacity: 1;
   }
 
   .input:hover {
@@ -37,11 +38,12 @@
       0 2px 4px rgba(0, 0, 0, 0.05);
   }
 
-  .input:focus {
+  /* M05/F09: em <input type=date> o 4º Tab (botão do calendário, dentro do shadow DOM) deixa :focus FALSO no campo e só :focus-within verdadeiro — sem isto o foco ficava invisível ali */
+  .input:focus,
+  .input:focus-within {
     border-color: var(--primary);
-    box-shadow:
-      0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent),
-      0 2px 4px rgba(0, 0, 0, 0.05);
+    /* M05/F09: o halo de 3 px a 15% de alfa dava ~1,1:1 (só a borda sinalizava o foco); anel sólido de 2 px (>= 3:1), igual ao dos botões e chaves */
+    box-shadow: var(--shadow-focus);
     background-color: var(--card);
   }
 
@@ -53,6 +55,19 @@
     opacity: 0.75;
     box-shadow: none;
     transform: none;
+  }
+
+  /* M04/F17: estado de erro de campo (aria-invalid) visível em qualquer tela que use o Input, não só no login */
+  .input[aria-invalid="true"],
+  .input[aria-invalid="true"]:hover {
+    border-color: var(--error);
+    box-shadow: 0 0 0 1px var(--error);
+  }
+
+  .input[aria-invalid="true"]:focus,
+  .input[aria-invalid="true"]:focus-within {
+    border-color: var(--error);
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--error); /* M05/F09: anel sólido (antes 3 px a 28% de alfa) */
   }
 
   /* Dark mode adjustments */
@@ -71,11 +86,39 @@
       0 2px 4px rgba(0, 0, 0, 0.15);
   }
 
-  :global(.dark) .input:focus {
+  :global(.dark) .input:focus,
+  :global(.dark) .input:focus-within {
     background-color: color-mix(in srgb, var(--background) 80%, black);
-    box-shadow:
-      0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent),
-      0 2px 4px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-focus); /* M05/F09: anel sólido no escuro também */
+  }
+
+  /* M05/N06: no escuro o campo inválido perdia o anel de 1 px (a regra .dark .input, de mesma especificidade e posterior, vencia a de aria-invalid): borda vermelha de 1 px × 2 px no claro */
+  :global(.dark) .input[aria-invalid="true"],
+  :global(.dark) .input[aria-invalid="true"]:hover {
+    border-color: var(--error);
+    box-shadow: 0 0 0 1px var(--error);
+  }
+
+  :global(.dark) .input[aria-invalid="true"]:focus,
+  :global(.dark) .input[aria-invalid="true"]:focus-within {
+    border-color: var(--error);
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--error);
+  }
+
+  /* M05/N05: <select> nativos (filtros de Destinação, Unidades, Regularização, Prestação) mostravam a seta grossa do sistema, enquanto o Select do design system (diálogos, filtros do Matching) usa uma seta fina de traço.
+     Mesma seta (chevron-down, traço 2) em todos; cor = --muted-foreground (>= 3:1 em ambos os temas). A lista aberta continua nativa. */
+  select.input {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 2.5rem;
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem 1rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236e5f59' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+
+  :global(.dark) select.input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23b0a89f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
 }
 

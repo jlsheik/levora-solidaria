@@ -1,10 +1,6 @@
 .page { box-sizing: border-box; min-height: 100vh; background: var(--background); color: var(--foreground); padding: var(--spacing-8); max-width: calc(72rem + 2 * var(--spacing-8)); margin: 0 auto; }
-.backLink { display: inline-flex; align-items: center; gap: var(--spacing-1); color: var(--muted-foreground); font-size: 0.875rem; text-decoration: none; margin-bottom: var(--spacing-4); }
+.backLink { min-height: 2rem; /* M05/F09: 18 px medidos */ display: inline-flex; align-items: center; gap: var(--spacing-1); color: var(--muted-foreground); font-size: 0.875rem; text-decoration: none; margin-bottom: var(--spacing-4); }
 .backLink:hover { color: var(--foreground); }
-.tabNav { display: flex; gap: var(--spacing-1); border-bottom: 1px solid var(--border); margin-bottom: var(--spacing-6); flex-wrap: wrap; }
-.tabNavItem, .tabNavItemActive { padding: var(--spacing-2) var(--spacing-1); font-size: 0.875rem; text-decoration: none; color: var(--muted-foreground); border-bottom: 2px solid transparent; margin-right: var(--spacing-4); white-space: nowrap; }
-.tabNavItem:hover { color: var(--foreground); }
-.tabNavItemActive { color: var(--foreground); font-weight: 500; border-bottom-color: var(--primary); }
 .title { font-family: var(--font-family-display); font-size: 1.5rem; font-weight: 600; margin: 0 0 var(--spacing-1) 0; }
 .subtitle { color: var(--muted-foreground); font-size: 0.875rem; margin: 0 0 var(--spacing-4) 0; max-width: 48rem; line-height: 1.5; }
 .infoBanner { display: flex; align-items: flex-start; gap: var(--spacing-2); padding: var(--spacing-3) var(--spacing-4); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--foreground); font-size: 0.8125rem; line-height: 1.5; margin-bottom: var(--spacing-6); }
@@ -37,7 +33,7 @@
 .status[data-status="encerrado"]::before { background: var(--muted-foreground); }
 .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--spacing-2) var(--spacing-4); margin: 0 0 var(--spacing-3) 0; font-size: 0.8125rem; }
 .facts div { min-width: 0; }
-.facts dt { font-size: 0.6875rem; color: var(--muted-foreground); font-weight: 500; }
+.facts dt { font-size: 0.75rem; color: var(--muted-foreground); font-weight: 500; }
 .facts dd { margin: 0; color: var(--card-foreground); }
 .next { margin: 0 0 var(--spacing-3) 0; font-size: 0.8125rem; color: var(--card-foreground); line-height: 1.5; }
 .actions { display: flex; gap: var(--spacing-2); flex-wrap: wrap; align-items: center; }
@@ -54,4 +50,16 @@
 @media (max-width: 640px) {
   .page { padding: var(--spacing-4); }
   .section { padding: var(--spacing-4); }
+}
+@media (max-width: 40rem), (pointer: coarse) { .backLink { min-height: 2.75rem; } }
+
+
+/* M04 (F05/F06): barra de abas compartilhada */
+.tabNav { composes: tabNav from "../components/OrgTabs.module.css"; }
+.tabNavItem { composes: tabNavItem from "../components/OrgTabs.module.css"; }
+.tabNavItemActive { composes: tabNavItemActive from "../components/OrgTabs.module.css"; }
+
+/* M04 (F16): mesma margem lateral em todas as páginas da organização no celular */
+@media (max-width: 40rem) {
+  .page { padding: var(--spacing-4); }
 }

@@ -23,6 +23,7 @@
     color: var(--muted-foreground);
     background-color: transparent;
     padding: var(--spacing-3) var(--spacing-4);
+    min-height: 44px; /* M05/F09: 43 px medidos (Entrar / Criar conta) */
     border: none;
     border-radius: 0;
     cursor: pointer;
@@ -92,6 +93,12 @@
   .tabsContent {
     color: var(--foreground);
     outline: none;
+  }
+
+  /* M05/F09: o painel é focável (tabIndex 0 do Radix) e ficava sem NENHUM indicador de foco por teclado */
+  .tabsContent:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
   }
 
   .tabsContent[hidden] {

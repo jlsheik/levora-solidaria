@@ -22,6 +22,63 @@
    vertical e uma faixa de 8px fora do fundo da página. Sem overflow:hidden: o conteúdo continua a rolar quando precisa. */
 body {
   margin: 0;
+  /* M04/F01: o fundo e a cor do tema pertencem ao corpo (que recebe `.dark`), não só ao contêiner `.page`.
+     Como `html` não tem fundo próprio, o do `body` é propagado para a tela inteira: sem faixas laterais brancas fora do contêiner centralizado. */
+  background: var(--background);
+  color: var(--foreground);
+  /* M04/F02: fonte de interface global (antes caía na serifada padrão do navegador em todas as páginas sem `font-family` própria). */
+  font-family: var(--font-family-base);
+  -webkit-text-size-adjust: 100%;
+}
+
+/* M04/F02: controles de formulário não herdam a fonte do pai por padrão; herdam só a FAMÍLIA (tamanhos continuam das classes de cada componente). */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* M04/F02: títulos usam a família de exibição da marca; classes de página/componente (especificidade maior) continuam podendo sobrescrever. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-family-display);
+}
+
+/* M04/F04: links sem classe própria usavam o azul padrão do navegador (ilegível no tema escuro); passam a usar o token de destaque da marca.
+   Classes de componente (especificidade maior) continuam mandando. O foco por teclado fica sempre visível. */
+a {
+  color: var(--primary);
+}
+a:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* M05/F09: elementos focáveis sem estilo de foco próprio (menu de ações do membro, <summary>, campo de arquivo, painel de abas) caíam no anel padrão do navegador (auto 1px) ou em nenhum.
+   :where() zera a especificidade: qualquer regra de componente continua mandando. */
+:where(button, summary, select, textarea, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* M05/F09: <summary> tinha 15 px de altura (alvo de clique). 35 px no desktop e 44 px no mobile/ponteiro grosso; marcador e texto não mudam. */
+summary {
+  cursor: pointer;
+  padding-block: 0.5rem;
+}
+@media (max-width: 40rem), (pointer: coarse) {
+  summary { padding-block: 0.95rem; }
+}
+
+/* M04/F13: com o tema escuro, a página inteira (rolagem, calendário/seletor nativo, autofill) usa o esquema escuro do navegador. */
+:root {
+  color-scheme: light;
+}
+:root:has(body.dark) {
+  color-scheme: dark;
 }
 
 :root {
@@ -50,9 +107,9 @@ body {
   --accent-foreground: hsl(36, 30%, 98%);
 
   --muted: hsl(30, 16%, 90%);
-  --muted-foreground: hsl(20, 10%, 42%);
+  --muted-foreground: hsl(20, 10%, 39%); /* M05/F18: 42%→39% — texto secundário sobre --muted media 4,31:1 (mín. 4,5) */
 
-  --success: hsl(142, 42%, 32%);
+  --success: hsl(142, 42%, 28%); /* M05/F18: 32%→28% — texto do selo "Ativo" sobre o tom claro media 4,11:1 */
   --success-foreground: hsl(0, 0%, 100%);
   --error: hsl(4, 62%, 42%);
   --error-foreground: hsl(0, 0%, 100%);
@@ -71,13 +128,15 @@ body {
 
   --font-family-base: 'IBM Plex Sans', system-ui, sans-serif;
   --font-family-display: 'Fraunces', Georgia, serif;
+  /* M04/F02: `--font-family-heading` era usada em 5 componentes (Dialog, Accordion, Sheet, AuthErrorPage, AuthLoadingState) mas nunca definida */
+  --font-family-heading: var(--font-family-display);
   --font-family-monospace: 'IBM Plex Mono', ui-monospace, monospace;
   --font-family-cursive: 'Fraunces', Georgia, serif;
 
   --shadow: 0 1px 2px hsla(20, 30%, 10%, 0.06);
   --shadow-md: 0 2px 8px hsla(20, 30%, 10%, 0.08);
   --shadow-lg: 0 8px 24px hsla(20, 30%, 10%, 0.10);
-  --shadow-focus: 0 0 0 3px hsla(14, 62%, 45%, 0.30);
+  --shadow-focus: 0 0 0 2px var(--background), 0 0 0 4px var(--primary); /* M05/F09: era 3px a 30% de alfa (~1,5:1); anel sólido (>= 3:1) como Button/Switch */
 
   --radius-sm: 0.25rem;
   --radius: 0.5rem;
@@ -124,7 +183,7 @@ body {
   --muted: hsl(20, 14%, 18%);
   --muted-foreground: hsl(30, 10%, 62%);
 
-  --success: hsl(142, 38%, 48%);
+  --success: hsl(142, 38%, 54%); /* M05/F18: 48%→54% — texto do selo no escuro media 4,41:1 */
   --success-foreground: hsl(20, 22%, 8%);
   --error: hsl(4, 68%, 58%);
   --error-foreground: hsl(20, 22%, 8%);
@@ -142,5 +201,5 @@ body {
   --shadow: 0 1px 2px hsla(0, 0%, 0%, 0.30);
   --shadow-md: 0 2px 10px hsla(0, 0%, 0%, 0.36);
   --shadow-lg: 0 10px 28px hsla(0, 0%, 0%, 0.44);
-  --shadow-focus: 0 0 0 3px hsla(16, 68%, 56%, 0.35);
+  --shadow-focus: 0 0 0 2px var(--background), 0 0 0 4px var(--primary); /* M05/F09: idem no tema escuro */
 }

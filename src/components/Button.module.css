@@ -30,7 +30,7 @@
 
   /* Size variants - ensuring proper touch targets */
   .sm {
-    height: 1.5rem;
+    height: 2rem;
     padding: 0 var(--spacing-2);
     font-size: 0.875rem;
   }
@@ -57,8 +57,8 @@
   }
 
   .icon-sm {
-    width: 1.5rem;
-    height: 1.5rem;
+    width: 2rem;
+    height: 2rem;
     padding: 0;
   }
 
@@ -268,7 +268,7 @@
 
   /* Disabled state */
   .disabled {
-    opacity: 0.5;
+    opacity: 0.65; /* M05/F18: 0,5→0,65 — texto desabilitado ia a 2,1:1 (WCAG isenta; sobe para ~2,7–3,3:1 sem confundir com habilitado) */
     cursor: not-allowed;
     pointer-events: none;
   }
@@ -293,3 +293,22 @@
   }
 }
 
+/* M04 (F09): em tela estreita ou com toque, controles relevantes ganham área de toque de 44 px (antes: botões "sm" e ícones de 24 px).
+   O ícone desenhado não cresce; só a área clicável. */
+@layer base {
+  @media (max-width: 40rem), (pointer: coarse) {
+    .sm,
+    .md {
+      min-height: 2.75rem;
+    }
+    .sm {
+      padding: 0 var(--spacing-3);
+    }
+    .icon,
+    .icon-md,
+    .icon-sm {
+      width: 2.75rem;
+      height: 2.75rem;
+    }
+  }
+}

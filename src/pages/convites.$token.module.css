@@ -87,6 +87,7 @@
 }
 
 .backLink {
+  min-height: 2rem; /* M05/F09: o link tinha 18 px de altura; 32 px no desktop (>= 24) e 44 px no mobile */
   align-self: center;
   color: var(--primary);
   font-size: 0.875rem;
@@ -96,6 +97,8 @@
 .backLink:hover {
   text-decoration: underline;
 }
+@media (max-width: 40rem), (pointer: coarse) { .backLink { min-height: 2.75rem; } }
+
 
 .tabs {
   width: 100%;
