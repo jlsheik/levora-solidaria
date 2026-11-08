@@ -31,8 +31,9 @@ const clone = (a: Img): Img => ({ width: a.width, height: a.height, data: new Ui
 function page(): Img { const p = mk(200, 120); rect(p, 0, 0, 200, 20, [30, 30, 30]); rect(p, 10, 40, 60, 24, [29, 78, 216]); rect(p, 10, 80, 180, 1, [120, 120, 120]); rect(p, 10, 100, 180, 1, [120, 120, 120]); rect(p, 10, 80, 1, 21, [120, 120, 120]); rect(p, 189, 80, 1, 21, [120, 120, 120]); return p; }
 
 let tmp: string;
-beforeEach(() => { tmp = mkdtempSync(path.join(tmpdir(), "levora-qa-visual-test-")); });
-afterEach(() => { rmSync(tmp, { recursive: true, force: true }); });
+let ledgerDir = ""; const OLD_LEDGER = process.env.QA_APPROVAL_LEDGER; // M19: âncora de aprovação temporária, FORA da pasta de baselines
+beforeEach(() => { tmp = mkdtempSync(path.join(tmpdir(), "levora-qa-visual-test-")); ledgerDir = mkdtempSync(path.join(tmpdir(), "levora-qa-ledger-test-")); process.env.QA_APPROVAL_LEDGER = path.join(ledgerDir, "approvals.jsonl"); });
+afterEach(() => { rmSync(tmp, { recursive: true, force: true }); rmSync(ledgerDir, { recursive: true, force: true }); if (OLD_LEDGER === undefined) delete process.env.QA_APPROVAL_LEDGER; else process.env.QA_APPROVAL_LEDGER = OLD_LEDGER; });
 
 // ================================================================================================ PNG
 describe("codec PNG", () => {

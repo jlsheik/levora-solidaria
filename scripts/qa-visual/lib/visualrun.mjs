@@ -22,7 +22,7 @@ import { compareImages, triptych } from "./imagediff.mjs";
 import { compareFingerprints } from "./fingerprint.mjs";
 
 export const VS = Object.freeze({ PASS: "VISUAL_PASS", REGRESSION: "VISUAL_REGRESSION", FUNCTIONAL_FAIL: "FUNCTIONAL_FAIL", INCONCLUSIVE: "INCONCLUSIVE", CORRUPT: "BASELINE_CORRUPT",
-  MISSING: "MISSING_BASELINE", CANDIDATE_ONLY: "CANDIDATE_ONLY", STALE: "STALE_BASELINE", CANDIDATE_CREATED: "CANDIDATE_CREATED" });
+  MISSING: "MISSING_BASELINE", CANDIDATE_ONLY: "CANDIDATE_ONLY", STALE: "STALE_BASELINE", CANDIDATE_CREATED: "CANDIDATE_CREATED", UNVERIFIED: "APPROVAL_UNVERIFIED" });
 export const VISUAL_EXIT = Object.freeze({ OK: 0, FAIL: 1, INCONCLUSIVE: 2, ENV: 3, NOT_HOMOLOGATED: 6 });
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
@@ -58,7 +58,7 @@ export function visualExitCode(cells) {
   const c = summarizeVisual(cells);
   if (c[VS.REGRESSION] || c[VS.FUNCTIONAL_FAIL]) return VISUAL_EXIT.FAIL;
   if (c[VS.INCONCLUSIVE] || c[VS.CORRUPT]) return VISUAL_EXIT.INCONCLUSIVE;
-  if (c[VS.MISSING] || c[VS.CANDIDATE_ONLY] || c[VS.STALE] || c[VS.CANDIDATE_CREATED]) return VISUAL_EXIT.NOT_HOMOLOGATED;
+  if (c[VS.MISSING] || c[VS.CANDIDATE_ONLY] || c[VS.STALE] || c[VS.CANDIDATE_CREATED] || c[VS.UNVERIFIED]) return VISUAL_EXIT.NOT_HOMOLOGATED; // M19: aprovação sem âncora verificável = não homologado
   return VISUAL_EXIT.OK;
 }
 
@@ -94,6 +94,7 @@ export async function runVisualForBrowser(opts) {
       }
       if (res.status === RESOLUTION.MISSING_BASELINE) { cells.push({ ...rec, status: VS.MISSING, cause: "missing-baseline", detail: res.reason }); continue; }
       if (res.status === RESOLUTION.CANDIDATE_ONLY) { cells.push({ ...rec, status: VS.CANDIDATE_ONLY, cause: "candidate-only", detail: res.reason }); continue; }
+      if (res.status === RESOLUTION.UNVERIFIED) { cells.push({ ...rec, status: VS.UNVERIFIED, cause: "approval-unverified", detail: res.reason }); continue; }
       if (res.status === RESOLUTION.STALE) { cells.push({ ...rec, status: VS.STALE, cause: "stale", detail: res.reason }); continue; }
       if (res.status === RESOLUTION.CORRUPT) { cells.push({ ...rec, status: VS.CORRUPT, cause: "baseline-corrupt", detail: res.reason }); continue; }
       const c = compareCaptured({ png: cap.png, fingerprint: cap.fingerprint, resolution: res, page, cellId: id });

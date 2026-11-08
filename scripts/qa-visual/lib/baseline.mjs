@@ -10,12 +10,24 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { appendApproval, assertLedgerIndependent, ledgerPathFromEnv, verifyApproval } from "./approvals.mjs";
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 export const BASELINE_STATE = Object.freeze({ CANDIDATE: "CANDIDATE", APPROVED: "APPROVED", SUPERSEDED: "SUPERSEDED" });
-export const RESOLUTION = Object.freeze({ APPROVED: "APPROVED", CANDIDATE_ONLY: "CANDIDATE_ONLY", STALE: "STALE", MISSING_BASELINE: "MISSING_BASELINE", CORRUPT: "CORRUPT" });
+export const RESOLUTION = Object.freeze({ APPROVED: "APPROVED", CANDIDATE_ONLY: "CANDIDATE_ONLY", STALE: "STALE", MISSING_BASELINE: "MISSING_BASELINE", CORRUPT: "CORRUPT", UNVERIFIED: "APPROVAL_UNVERIFIED" }); // M19: APPROVED no manifesto sem registro de aprovação independente = UNVERIFIED (nunca PASS)
 export const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
 export const cellId = ({ pageId, browser, viewport, theme }) => `${pageId}__${browser}__${viewport}__${theme}`;
 export const browserMajor = (version) => { const m = /(\d+)\./.exec(String(version ?? "")); return m ? Number(m[1]) : null; };
+
+/** M19 (A3): caminhos vindos do manifesto precisam ficar DENTRO da pasta de baselines (sem "..", absoluto ou junction que escape). */
+export function safeJoin(dir, rel) {
+  if (typeof rel !== "string" || rel === "" || rel.includes("\0") || path.isAbsolute(rel)) throw new BaselineError("PATH_ESCAPE", `caminho inválido no manifesto: ${String(rel).slice(0, 60)}`);
+  const base = path.resolve(dir); const full = path.resolve(base, rel); const r = path.relative(base, full);
+  if (r === "" || r.startsWith("..") || path.isAbsolute(r)) throw new BaselineError("PATH_ESCAPE", `o caminho do manifesto escapa da pasta de baselines: ${rel.slice(0, 60)}`);
+  return full;
+}
 
 export class BaselineError extends Error { constructor(code, message) { super(message); this.name = "BaselineError"; this.code = code; } }
 
@@ -66,18 +78,21 @@ export function addCandidate(dir, meta, png, fingerprint) {
 }
 
 /** Aprovação EXPLÍCITA por uma pessoa. Verifica o arquivo da candidata; não aprova nada sozinha e não substitui uma aprovada sem `replace`. */
-export function approveBaseline(dir, { id, imageSha256, reviewer, note, replace = false, now = new Date().toISOString() }) {
+export function approveBaseline(dir, { id, imageSha256, reviewer, note, replace = false, now = new Date().toISOString(), ledger = ledgerPathFromEnv(), repoRoot = REPO_ROOT }) {
   if (!reviewer || String(reviewer).trim().length < 2) throw new BaselineError("NO_REVIEWER", "a aprovação exige o nome do revisor (--reviewer)");
+  if (!ledger) throw new BaselineError("NO_ANCHOR", "aprovar exige uma âncora de aprovação fora do repositório (QA_APPROVAL_LEDGER); sem ela a aprovação não seria verificável");
+  try { assertLedgerIndependent(ledger, { baselineDir: dir, repoRoot }); } catch (e) { throw new BaselineError("LEDGER_NOT_INDEPENDENT", e.message); }
   const m = loadManifest(dir);
   const cand = m.entries.find((e) => e.id === id && e.imageSha256 === imageSha256 && e.state === BASELINE_STATE.CANDIDATE);
   if (!cand) throw new BaselineError("NOT_A_CANDIDATE", `não há candidata ${id} com SHA-256 ${String(imageSha256).slice(0, 12)}…`);
-  const file = path.join(dir, cand.file);
+  const file = safeJoin(dir, cand.file);
   if (!existsSync(file) || sha256(readFileSync(file)) !== cand.imageSha256) throw new BaselineError("HASH_MISMATCH", "o arquivo da candidata não existe ou não confere com o SHA-256 do manifesto; recusado");
   const prev = m.entries.find((e) => e.id === id && e.state === BASELINE_STATE.APPROVED);
   if (prev && !replace) throw new BaselineError("WOULD_REPLACE", `já existe uma referência APROVADA para ${id}; substituí-la exige --replace explícito`);
   if (prev) { prev.state = BASELINE_STATE.SUPERSEDED; prev.supersededAt = now; prev.supersededBy = cand.imageSha256; }
   cand.state = BASELINE_STATE.APPROVED; cand.approvedBy = String(reviewer).trim(); cand.approvedAt = now; if (note) cand.approvalNote = String(note).slice(0, 300);
   assertNoSecrets({ reviewer: cand.approvedBy, note: cand.approvalNote ?? "" });
+  try { appendApproval(ledger, { id: cand.id, imageSha256: cand.imageSha256, captureConfigVersion: cand.captureConfigVersion, browserVersion: cand.browserVersion ?? null, sourceSha: cand.sourceSha ?? null, reviewer: cand.approvedBy, approvedAt: cand.approvedAt, note: cand.approvalNote ?? null }); } catch (e) { throw new BaselineError(e.code ?? "LEDGER_WRITE", e.message); }
   saveManifest(dir, m); return cand;
 }
 
@@ -90,15 +105,18 @@ export function resolveBaseline(dir, cell, { captureConfigVersion, version }) {
     return cand.length ? { status: RESOLUTION.CANDIDATE_ONLY, reason: `só há candidata(s) não aprovada(s) para ${id}: nenhuma serve de referência oficial`, entry: cand[cand.length - 1] }
       : { status: RESOLUTION.MISSING_BASELINE, reason: `nenhuma baseline para ${id}`, entry: null };
   }
-  const file = path.join(dir, approved.file);
+  let file; try { file = safeJoin(dir, approved.file); } catch (e) { return { status: RESOLUTION.CORRUPT, reason: e.message, entry: approved }; }
   if (!existsSync(file)) return { status: RESOLUTION.CORRUPT, reason: `arquivo da baseline aprovada ausente: ${approved.file}`, entry: approved };
   const buf = readFileSync(file);
   if (sha256(buf) !== approved.imageSha256) return { status: RESOLUTION.CORRUPT, reason: `SHA-256 de ${approved.file} não confere com o manifesto (arquivo alterado ou corrompido)`, entry: approved };
   if (approved.captureConfigVersion !== captureConfigVersion) return { status: RESOLUTION.STALE, reason: `configuração de captura mudou (${approved.captureConfigVersion} → ${captureConfigVersion}); reaprovar`, entry: approved, png: buf };
   const cur = browserMajor(version);
-  if (approved.browserMajor !== null && cur !== null && approved.browserMajor !== cur) return { status: RESOLUTION.STALE, reason: `versão principal do navegador mudou (${approved.browserMajor} → ${cur}); reaprovar`, entry: approved, png: buf };
+  if (approved.browserMajor == null || cur === null) return { status: RESOLUTION.STALE, reason: `versão do navegador UNKNOWN (registrada: ${approved.browserVersion ?? "?"}; atual: ${version ?? "?"}): não é possível provar que a referência vale para este navegador`, entry: approved, png: buf };
+  if (approved.browserMajor !== cur) return { status: RESOLUTION.STALE, reason: `versão principal do navegador mudou (${approved.browserMajor} → ${cur}); reaprovar`, entry: approved, png: buf };
+  const anchor = verifyApproval(ledgerPathFromEnv(), approved);
+  if (!anchor.ok) return { status: RESOLUTION.UNVERIFIED, reason: `aprovação NÃO verificável: ${anchor.reason}`, entry: approved };
   let fingerprint = null;
-  if (approved.fingerprintFile) { try { const t = readFileSync(path.join(dir, approved.fingerprintFile)); if (approved.fingerprintSha256 && sha256(t) !== approved.fingerprintSha256) return { status: RESOLUTION.CORRUPT, reason: "impressão digital de layout da baseline não confere com o manifesto", entry: approved }; fingerprint = JSON.parse(t.toString("utf8")); } catch { return { status: RESOLUTION.CORRUPT, reason: "impressão digital de layout da baseline ilegível", entry: approved }; } }
+  if (approved.fingerprintFile) { try { const t = readFileSync(safeJoin(dir, approved.fingerprintFile)); if (approved.fingerprintSha256 && sha256(t) !== approved.fingerprintSha256) return { status: RESOLUTION.CORRUPT, reason: "impressão digital de layout da baseline não confere com o manifesto", entry: approved }; fingerprint = JSON.parse(t.toString("utf8")); } catch { return { status: RESOLUTION.CORRUPT, reason: "impressão digital de layout da baseline ilegível", entry: approved }; } }
   return { status: RESOLUTION.APPROVED, reason: "", entry: approved, png: buf, fingerprint };
 }
 
@@ -107,7 +125,7 @@ export function auditBaselines(dir) {
   const m = loadManifest(dir); const issues = []; const approvedByCell = new Map();
   for (const e of m.entries) {
     if (e.state === BASELINE_STATE.APPROVED) { approvedByCell.set(e.id, (approvedByCell.get(e.id) ?? 0) + 1); if (!e.approvedBy || !e.approvedAt) issues.push(`${e.id}: APPROVED sem revisor/data`); }
-    const f = path.join(dir, e.file);
+    let f; try { f = safeJoin(dir, e.file); } catch (err) { issues.push(`${e.id}: ${err.message}`); continue; }
     if (!existsSync(f)) issues.push(`${e.id}: arquivo ausente ${e.file}`); else if (sha256(readFileSync(f)) !== e.imageSha256) issues.push(`${e.id}: SHA-256 diverge em ${e.file}`);
   }
   for (const [id, n] of approvedByCell) if (n > 1) issues.push(`${id}: ${n} referências APROVADAS simultâneas`);
