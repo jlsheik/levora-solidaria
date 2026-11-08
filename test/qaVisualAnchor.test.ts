@@ -82,7 +82,7 @@ describe("A2 — diretório de candidatas isolado do repositório", () => {
     const link = path.join(home, "atalho"); try { symlinkSync(path.join(repo, "scripts"), link, "junction"); } catch { return; }
     expect(() => R(path.join(link, "qa-visual", "novo"))).toThrow(/reposit/);
   });
-  it(".gitignore cobre a área local e o diretório antigo de baselines", () => { const g = readFileSync(path.resolve(ROOT, "..", "..", ".gitignore"), "utf8"); expect(g).toContain("/.qa-visual-local/"); expect(g).toContain("/scripts/qa-visual/visual-baselines/"); });
+  it(".gitignore cobre a área local e o diretório antigo de baselines", () => { const g = readFileSync(path.resolve(process.cwd(), ".gitignore"), "utf8"); expect(g).toContain("/.qa-visual-local/"); expect(g).toContain("/scripts/qa-visual/visual-baselines/"); });
   it("o diretório de referências existe só como reserva (nenhuma referência versionada hoje)", () => { expect(existsSync(path.resolve(ROOT, "visual-references", "manifest.json"))).toBe(false); });
 });
 
