@@ -142,11 +142,11 @@ describe("M13 — teclado e semântica dos avisos sob diálogo modal", () => {
     setViewport(1280, 900); restore = await mount({ withDialog: true, toastHeight: 82 });
     await act(async () => { press({ altKey: true, shiftKey: true, code: "KeyT" }); press({ altKey: true, ctrlKey: true, code: "KeyT" }); press({ code: "KeyT" }); await tick(200); }); expect(visible()).toBe(1);
   });
-  it("erro recebe role=alert, informativo role=status, e todo aviso traz o texto do atalho só para tecnologia assistiva", async () => {
+  it("erro recebe role=alert e informativo role=status ASSIM QUE inserido (sem depender de resize/medição); nenhum texto de atalho é injetado por aviso", async () => {
     setViewport(1280, 900); restore = await mount({ withDialog: false, toastHeight: 82 });
-    await act(async () => { toast.error("Falhou"); toast.success("Ok"); await tick(300); window.dispatchEvent(new Event("resize")); await tick(100); });
+    await act(async () => { toast.error("Falhou"); toast.success("Ok"); await tick(300); });
     const roles = [...document.querySelectorAll("[data-sonner-toast]")].map((t) => `${t.getAttribute("data-type")}:${t.getAttribute("role")}`);
     expect(roles).toContain("error:alert"); expect(roles).toContain("success:status");
-    const hint = document.querySelector("[data-toast-hint]") as HTMLElement; expect(hint.textContent).toMatch(/Alt\+T/); expect(hint.getAttribute("style")).toContain("clip");
+    expect(document.querySelector("[data-toast-hint]")).toBeNull(); // M19: o atalho não é repetido em cada aviso; a região (aria-live) já o traz no rótulo
   });
 });

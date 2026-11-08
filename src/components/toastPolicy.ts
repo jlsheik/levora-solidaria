@@ -39,19 +39,32 @@ type ToastFn = (message: unknown, data?: DataLike) => unknown;
 type ToastLike = Record<string, unknown>;
 
 const MARK = "__levoraDurationPolicy";
+const ORIGINALS = new WeakMap<object, Partial<Record<ToastKind, ToastFn>>>(); // M19: funções originais, para desinstalar
 const KINDS: ToastKind[] = ["success", "info", "message", "warning", "error"];
 
 /** Envolve `toast.success/info/message/warning/error` para aplicar a política quando a chamada não traz `duration`. Idempotente. */
 export function installToastDurations(toast: ToastLike): void {
   if ((toast as Record<string, unknown>)[MARK]) return;
+  const saved: Partial<Record<ToastKind, ToastFn>> = {};
   for (const kind of KINDS) {
     const original = toast[kind] as ToastFn | undefined;
     if (typeof original !== "function") continue;
+    saved[kind] = original;
     toast[kind] = (message: unknown, data?: DataLike) => {
       if (data && typeof data.duration === "number") return original(message, data);
       const chars = textLength(message) + textLength(data?.description);
       return original(message, { ...(data ?? {}), duration: toastDurationFor(chars, kind) });
     };
   }
+  ORIGINALS.set(toast, saved);
   (toast as Record<string, unknown>)[MARK] = true;
+}
+
+/** M19: desfaz `installToastDurations` (restaura as funções originais). Sem efeito se não estiver instalada. Quem instala é o controlador, com contagem de referências — nunca na importação. */
+export function uninstallToastDurations(toast: ToastLike): void {
+  const saved = ORIGINALS.get(toast);
+  if (!saved || !(toast as Record<string, unknown>)[MARK]) return;
+  for (const kind of KINDS) if (saved[kind]) toast[kind] = saved[kind];
+  ORIGINALS.delete(toast);
+  delete (toast as Record<string, unknown>)[MARK];
 }
