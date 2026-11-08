@@ -29,6 +29,7 @@ import { installProbe, runScenarios } from "./lib/runner.mjs";
 import { Diagnostics } from "./lib/diagnostics.mjs";
 import { Cleanups } from "./lib/cleanup.mjs";
 import { RunState, installSignalHandlers, recoverOrphans } from "./lib/orphans.mjs";
+import { defaultCandidateDir, resolveCandidateDir } from "./lib/visualdirs.mjs";
 import { VIEWPORTS, parseViewportsOption, viewportKey } from "./lib/viewport.mjs";
 import { SCENARIOS, THEMES, QA_PASSWORD, CI_PROFILE_IDS } from "./scenarios.mjs";
 import { MUTATIONS, SENTINELS } from "./selftest.mjs";
@@ -64,7 +65,8 @@ if (only && chosen.length === 0) { console.error("nenhum cenário corresponde a 
 
 const report = new Report();
 const visualCells = [];
-const visualBaselineDir = path.resolve(opt["visual-dir"] ?? path.join(root, "scripts", "qa-visual", "visual-baselines"));
+// M19: candidatas por padrão FORA do repositório; escrita (capture) recusa destino dentro do repositório fora de .qa-visual-local/ e a área de referências (lib/visualdirs.mjs).
+let visualBaselineDir; try { visualBaselineDir = opt.visual === "capture" ? resolveCandidateDir(opt["visual-dir"], { root }) : path.resolve(opt["visual-dir"] ?? defaultCandidateDir()); } catch (e) { console.error(`--visual-dir recusado (${e.code ?? "erro"}): ${e.message}`); process.exit(EXIT.ENV); }
 const visualOut = path.resolve(opt["visual-out"] ?? path.join(tmpdir(), "levora-qa-visual-regression", `${opt.visual ?? "off"}-${new Date().toISOString().replace(/[:.]/g, "-")}`));
 let visualPages = []; if (opt.visual) { try { visualPages = selectPages(opt["visual-matrix"] ? (await import(pathToFileURL(path.resolve(opt["visual-matrix"])).href)).VISUAL_PAGES : VISUAL_PAGES, opt["visual-pages"]); /* M08: matriz complementar opcional */ } catch (e) { console.error(e.message); process.exit(EXIT.ENV); } }
 const cleanups = new Cleanups();

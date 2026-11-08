@@ -24,12 +24,13 @@ import { BaselineError, BASELINE_STATE, approveBaseline, auditBaselines, loadMan
 import { VISUAL_EXIT, runVisualForBrowser, verifyEvidence, writeVisualReport } from "./lib/visualrun.mjs";
 import { buildGallery } from "./lib/gallery.mjs";
 import { assertApprovable } from "./visual-calibration.mjs";
+import { defaultCandidateDir, resolveCandidateDir } from "./lib/visualdirs.mjs";
 import { compareRuns } from "./lib/review.mjs";
 import { encodePng } from "./lib/png.mjs";
 import { VISUAL_PAGES, VISUAL_THEMES, VISUAL_VIEWPORTS, selectPages } from "./visual-matrix.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const defaultBaselineDir = path.join(here, "visual-baselines");
+const defaultBaselineDir = defaultCandidateDir(); // M19: fora do repositório (antes: scripts/qa-visual/visual-baselines, dentro da árvore e não ignorado)
 const [cmd, ...rest] = process.argv.slice(2);
 const { values: o } = parseArgs({ args: rest, options: {
   "base-url": { type: "string" }, browser: { type: "string", default: "both" }, pages: { type: "string" }, viewports: { type: "string" }, "baseline-dir": { type: "string", default: defaultBaselineDir }, out: { type: "string" },
@@ -87,7 +88,8 @@ if (!sourceSha) { try { sourceSha = execFileSync("git", ["rev-parse", "HEAD"], {
 const wanted = o.browser === "both" || o.browser === "auto" ? ["chrome", "edge"] : [o.browser];
 if (!wanted.every((b) => ["chrome", "edge"].includes(b))) fail("--browser: chrome, edge ou both");
 const outDir = path.resolve(o.out ?? path.join(tmpdir(), "levora-qa-visual-regression", `${cmd}-${new Date().toISOString().replace(/[:.]/g, "-")}`)); mkdirSync(outDir, { recursive: true });
-const baselineDir = path.resolve(o["baseline-dir"]); const filesDir = mkdtempSync(path.join(tmpdir(), "levora-qa-visual-files-"));
+let baselineDir; try { baselineDir = cmd === "capture" ? resolveCandidateDir(o["baseline-dir"], { root: path.resolve(here, "..", "..") }) : path.resolve(o["baseline-dir"]); } catch (e) { fail(`--baseline-dir recusado (${e.code ?? "erro"}): ${e.message}`); }
+const filesDir = mkdtempSync(path.join(tmpdir(), "levora-qa-visual-files-"));
 const cells = []; const browsers = [];
 try {
   for (const name of wanted) {

@@ -25,7 +25,9 @@ function scene(o: { border?: boolean; text?: boolean; button?: boolean; textColo
 const META = { pageId: "painel", browser: "chrome", browserVersion: "Chrome/157.0.8103.39", viewport: "1280x900", theme: "light", sourceSha: "a".repeat(40), captureConfigVersion: "cc-1", route: "/painel" };
 const KEY = { pageId: "painel", browser: "chrome", viewport: "1280x900", theme: "light" }; const CTX = { captureConfigVersion: "cc-1", version: "Chrome/157.0.8103.39" };
 const FP = { count: 0, elements: [], doc: { w: 1, h: 1 } };
-let tmp = ""; beforeEach(() => { tmp = mkdtempSync(path.join(tmpdir(), "levora-qa-test-gate-")); }); afterEach(() => { rmSync(tmp, { recursive: true, force: true }); });
+let tmp = ""; let ledgerDir = ""; const OLD_LEDGER = process.env.QA_APPROVAL_LEDGER; // M19: âncora temporária fora da pasta de baselines
+beforeEach(() => { tmp = mkdtempSync(path.join(tmpdir(), "levora-qa-test-gate-")); ledgerDir = mkdtempSync(path.join(tmpdir(), "levora-qa-ledger-test-")); process.env.QA_APPROVAL_LEDGER = path.join(ledgerDir, "approvals.jsonl"); });
+afterEach(() => { rmSync(tmp, { recursive: true, force: true }); rmSync(ledgerDir, { recursive: true, force: true }); if (OLD_LEDGER === undefined) delete process.env.QA_APPROVAL_LEDGER; else process.env.QA_APPROVAL_LEDGER = OLD_LEDGER; });
 const addCand = (im = scene(), meta = META) => bl.addCandidate(tmp, meta, png.encodePng(im), FP);
 const approve = (im = scene()) => { const { entry } = addCand(im); return bl.approveBaseline(tmp, { id: entry.id, imageSha256: entry.imageSha256, reviewer: "Revisor sintético do teste" }); };
 const exit = (...status: string[]) => vr.visualExitCode(status.map((s) => ({ status: s })));

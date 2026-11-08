@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
-import { assertDisposableDatabase, deriveQaUrlFromTestUrl, readEnvValue } from "./guard.mjs";
+import { QA_DB_OWNER_MARK, assertDisposableDatabase, decideDatabaseOwnership, deriveQaUrlFromTestUrl, readEnvValue } from "./guard.mjs";
 import { killTree } from "./browser.mjs";
 import { clockEnv, clockSql } from "./clock.mjs";
 
@@ -37,8 +37,13 @@ export async function prepareDatabase(url, root, { clock } = {}) {
   const adminUrl = new URL(url); adminUrl.pathname = "/postgres";
   const admin = postgres(adminUrl.toString(), { max: 1, prepare: false, onnotice: () => {} });
   try {
-    const found = await admin`SELECT 1 FROM pg_database WHERE datname = ${target.database}`;
-    if (found.length === 0) await admin.unsafe(`CREATE DATABASE "${target.database.replace(/"/g, '""')}" TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C'`); // M09: ordenação FIXADA em C — sem isso a ordem dos itens (ORDER BY name) depende do locale do cluster (pt-BR: Água, Arroz, Lenço; C: Arroz, Lenço, Água) e as imagens mudam entre ambientes
+    const found = await admin`SELECT oid, pg_catalog.shobj_description(oid, 'pg_database') AS comment FROM pg_database WHERE datname = ${target.database}`;
+    let tableCount = 0;
+    if (found.length > 0) { const probe = postgres(url, { max: 1, prepare: false, onnotice: () => {} }); try { tableCount = Number((await probe`SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'public'`)[0].n); } finally { await probe.end(); } }
+    const decision = decideDatabaseOwnership({ exists: found.length > 0, comment: found[0]?.comment, publicTableCount: tableCount });
+    if (decision === "refuse") throw new Error(`o banco "${target.database}" existe, não tem a marca de propriedade do QA (${QA_DB_OWNER_MARK}) e contém tabelas: recusado (nada é apagado). Use um banco novo.`);
+    if (decision === "create") await admin.unsafe(`CREATE DATABASE "${target.database.replace(/"/g, '""')}" TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C'`); // M09: ordenação FIXADA em C — sem isso a ordem dos itens (ORDER BY name) depende do locale do cluster (pt-BR: Água, Arroz, Lenço; C: Arroz, Lenço, Água) e as imagens mudam entre ambientes
+    if (decision === "create" || decision === "adopt") await admin.unsafe(`COMMENT ON DATABASE "${target.database.replace(/"/g, '""')}" IS '${QA_DB_OWNER_MARK}'`);
   } finally { await admin.end(); }
   const sql = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
   try {
@@ -61,7 +66,7 @@ export async function dropDatabase(url) {
   const { default: postgres } = await import("postgres");
   const adminUrl = new URL(url); adminUrl.pathname = "/postgres";
   const admin = postgres(adminUrl.toString(), { max: 1, prepare: false, onnotice: () => {} });
-  try { await admin.unsafe(`DROP DATABASE IF EXISTS "${target.database.replace(/"/g, '""')}" WITH (FORCE)`); } finally { await admin.end(); }
+  try { const c = await admin`SELECT pg_catalog.shobj_description(oid, 'pg_database') AS comment FROM pg_database WHERE datname = ${target.database}`; if (c.length === 0) return; if (!String(c[0].comment ?? "").startsWith(QA_DB_OWNER_MARK)) throw new Error(`o banco "${target.database}" não tem a marca de propriedade do QA: não será apagado`); await admin.unsafe(`DROP DATABASE IF EXISTS "${target.database.replace(/"/g, '""')}" WITH (FORCE)`); } finally { await admin.end(); }
 }
 
 function runNode(root, args, env, label, onSpawn, onLog) {

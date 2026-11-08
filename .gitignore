@@ -12,3 +12,7 @@ graphify-out/
 *.log
 npm-debug.log*
 .DS_Store
+
+# M19: candidatas de QA visual nunca entram no Git por acidente (referencias aprovadas ficam em scripts/qa-visual/visual-references/, versionada)
+/.qa-visual-local/
+/scripts/qa-visual/visual-baselines/

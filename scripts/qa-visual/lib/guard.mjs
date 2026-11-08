@@ -40,3 +40,19 @@ export function readEnvValue(content, key) {
   }
   return undefined;
 }
+
+/** M19 (A8): marca de propriedade gravada no COMENTÁRIO do banco quando o QA o cria. Um nome `*_qa` sozinho não prova que o banco é descartável. */
+export const QA_DB_OWNER_MARK = "levora-qa-owned";
+
+/**
+ * Decide, de forma pura, o que fazer com o banco alvo antes de recriar o schema:
+ *  - "create": não existe (o QA cria e marca);  - "reuse": existe e tem a marca do QA;
+ *  - "adopt": existe, SEM marca, mas está vazio (nenhuma tabela em public) — pode ser marcado e usado;
+ *  - "refuse": existe, sem marca e com tabelas (pode ser um banco de outro uso): nunca apagar.
+ */
+export function decideDatabaseOwnership({ exists, comment, publicTableCount }) {
+  if (!exists) return "create";
+  if (typeof comment === "string" && comment.startsWith(QA_DB_OWNER_MARK)) return "reuse";
+  return Number(publicTableCount) === 0 ? "adopt" : "refuse";
+}
+

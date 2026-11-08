@@ -437,3 +437,11 @@ Nenhum cenário novo: o estado da análise aparece só nos diálogos já coberto
 <!-- PR-B:inicio -->
 Decisões de interface (R8–R13, aviso sobre o conteúdo do diálogo, piso de 12 px, título longo) e as matrizes da dropzone: ver [`QA_VISUAL_INTERFACE.md`](QA_VISUAL_INTERFACE.md).
 <!-- PR-B:fim -->
+
+
+### M19 — âncora de aprovação, diretórios de candidatas e propriedade do banco (correções da revisão M18)
+
+- **Âncora de aprovação (limite declarado).** `APPROVED` no `manifest.json` não basta: a aprovação só vale se houver um registro correspondente (id + SHA-256 da imagem + versão da configuração de captura) num arquivo **fora** da pasta de baselines e **fora** do repositório, apontado por `QA_APPROVAL_LEDGER` (encadeado por hash; edição, remoção e reordenação são detectadas). Sem registro: `APPROVAL_UNVERIFIED` (exit 6), nunca PASS. **É uma âncora local, não criptográfica e não prova a identidade do revisor** (`AUTHENTICITY = LOCAL_LEDGER_NOT_CRYPTOGRAPHIC`). Uma âncora realmente independente exige infraestrutura externa (revisão obrigatória com CODEOWNERS/branch protection e atestado assinado) que **não** está configurada aqui.
+- **Diretórios separados.** Candidatas: por padrão `~/.levora-qa/visual-candidates` (fora do repositório); dentro do repositório só em `.qa-visual-local/` (ignorado). Referências aprovadas versionáveis: `scripts/qa-visual/visual-references/` (reservado, nunca destino de captura; nenhuma existe). Evidências históricas ficam fora do repositório. Temporários: `os.tmpdir()`. O `capture` recusa destino dentro do repositório fora de `.qa-visual-local/`, a área de referências, caminho que não é diretório e junctions/symlinks que escapem.
+- **Manifesto.** Caminhos de `file`/`fingerprintFile` precisam ficar dentro da pasta de baselines (`safeJoin`); fora disso o baseline é `CORRUPT`. Versão do navegador desconhecida ou sem major legível ⇒ `STALE`.
+- **Banco de QA.** Além do sufixo `_qa`, o banco criado pelo QA recebe a marca `levora-qa-owned` (`COMMENT ON DATABASE`). Banco existente sem marca e com tabelas é **recusado** (nada é apagado); sem marca e vazio é adotado; `dropDatabase` só apaga banco marcado.

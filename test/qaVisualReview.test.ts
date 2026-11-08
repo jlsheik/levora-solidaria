@@ -24,8 +24,9 @@ const dark = (): Img => { const p = mk(200, 120, [17, 17, 17]); rect(p, 10, 40, 
 const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 
 let tmp: string;
-beforeEach(() => { tmp = mkdtempSync(path.join(tmpdir(), "levora-qa-review-test-")); });
-afterEach(() => { rmSync(tmp, { recursive: true, force: true }); });
+let ledgerDir = ""; const OLD_LEDGER = process.env.QA_APPROVAL_LEDGER; // M19
+beforeEach(() => { tmp = mkdtempSync(path.join(tmpdir(), "levora-qa-review-test-")); ledgerDir = mkdtempSync(path.join(tmpdir(), "levora-qa-ledger-test-")); process.env.QA_APPROVAL_LEDGER = path.join(ledgerDir, "approvals.jsonl"); });
+afterEach(() => { rmSync(tmp, { recursive: true, force: true }); rmSync(ledgerDir, { recursive: true, force: true }); if (OLD_LEDGER === undefined) delete process.env.QA_APPROVAL_LEDGER; else process.env.QA_APPROVAL_LEDGER = OLD_LEDGER; });
 
 const el = (o: any = {}) => ({ key: "k" + Math.random(), pk: null, tag: "DIV", role: "", text: "texto", visible: true, x: 10, y: 10, w: 100, h: 20, color: "rgb(0,0,0)", bg: "rgba(0,0,0,0)", font: "Arial", size: "16px", weight: "400", lh: "20px", display: "block", clipped: false, overflow: "visible/visible", ...o });
 const fp = (els: any[], doc = { w: 375, h: 600 }) => ({ count: els.length, truncated: false, doc, elements: els });
