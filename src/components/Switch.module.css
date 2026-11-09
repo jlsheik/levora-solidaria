@@ -15,6 +15,13 @@
     flex-shrink: 0;
   }
 
+  /* M05/F09: trilho de 42×24 px; área de clique efetiva de 50×46 px (pseudo-elemento), visual inalterado */
+  .root::after {
+    content: "";
+    position: absolute;
+    inset: -11px -4px;
+  }
+
   .root:hover {
     background-color: var(--muted-foreground);
   }

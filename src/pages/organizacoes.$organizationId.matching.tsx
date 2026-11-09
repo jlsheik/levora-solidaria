@@ -31,6 +31,7 @@ import { Button } from "../components/Button";
 import { Switch } from "../components/Switch";
 import { UnitSelect } from "../components/UnitSelect";
 import { Skeleton } from "../components/Skeleton";
+import { ActiveTab } from "../components/ActiveTab";
 import { z } from "zod";
 import { ArrowLeft, Plus, Warehouse, Truck, MapPin, Pencil, Trash2, Info } from "lucide-react";
 import { toast } from "sonner";
@@ -111,7 +112,7 @@ export default function OrganizationMatchingSettingsPage() {
         <Link to={`/organizacoes/${organizationId}/prestacao-contas`} className={styles.tabNavItem}>
           Prestação de contas
         </Link>
-        <span className={styles.tabNavItemActive}>Configurações de Matching</span>
+        <ActiveTab className={styles.tabNavItemActive}>Configurações de Matching</ActiveTab>
         {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
           <Link to={`/organizacoes/${organizationId}/unidades`} className={styles.tabNavItem}>
             Unidades

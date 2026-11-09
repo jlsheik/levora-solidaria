@@ -1,10 +1,6 @@
 .page { box-sizing: border-box; min-height: 100vh; background: var(--background); color: var(--foreground); padding: var(--spacing-8); max-width: calc(72rem + 2 * var(--spacing-8)); margin: 0 auto; }
-.backLink { display: inline-flex; align-items: center; gap: var(--spacing-1); color: var(--muted-foreground); font-size: 0.875rem; text-decoration: none; margin-bottom: var(--spacing-4); }
+.backLink { min-height: 2rem; /* M05/F09: 18 px medidos */ display: inline-flex; align-items: center; gap: var(--spacing-1); color: var(--muted-foreground); font-size: 0.875rem; text-decoration: none; margin-bottom: var(--spacing-4); }
 .backLink:hover { color: var(--foreground); }
-.tabNav { display: flex; gap: var(--spacing-1); border-bottom: 1px solid var(--border); margin-bottom: var(--spacing-6); flex-wrap: wrap; }
-.tabNavItem, .tabNavItemActive { padding: var(--spacing-2) var(--spacing-1); font-size: 0.875rem; text-decoration: none; color: var(--muted-foreground); border-bottom: 2px solid transparent; margin-right: var(--spacing-4); }
-.tabNavItem:hover { color: var(--foreground); }
-.tabNavItemActive { color: var(--foreground); font-weight: 500; border-bottom-color: var(--primary); }
 .titleRow { margin-bottom: var(--spacing-6); }
 .title { display: flex; align-items: center; gap: var(--spacing-2); font-family: var(--font-family-display); font-size: 1.5rem; font-weight: 600; margin: 0 0 var(--spacing-1) 0; }
 .subtitle { color: var(--muted-foreground); font-size: 0.875rem; margin: 0; max-width: 40rem; line-height: 1.5; }
@@ -46,4 +42,16 @@
 .deadlineExpired { border-left-color: var(--destructive); }
 .closedLine { font-size: 0.8125rem; color: var(--muted-foreground); margin: var(--spacing-2) 0 0 0; }
 .errorBox { padding: var(--spacing-3); border: 1px solid var(--destructive); border-radius: var(--radius-md); color: var(--destructive); font-size: 0.875rem; margin-bottom: var(--spacing-4); }
-.navBadge { display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; margin-left: 0.375rem; border-radius: 999px; background: var(--warning); color: var(--warning-foreground); font-size: 0.6875rem; font-weight: 600; line-height: 1; }
+.navBadge { display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; margin-left: 0.375rem; border-radius: 999px; background: color-mix(in srgb, var(--warning) 85%, black); /* M05/F18: texto branco sobre --warning media 3,79:1; 85% dá ~5,0:1 */ color: var(--warning-foreground); font-size: 0.75rem; /* M06: 11 px -> 12 px */ font-weight: 600; line-height: 1; }
+
+/* M04 (F05/F06): barra de abas compartilhada */
+.tabNav { composes: tabNav from "../components/OrgTabs.module.css"; }
+.tabNavItem { composes: tabNavItem from "../components/OrgTabs.module.css"; }
+.tabNavItemActive { composes: tabNavItemActive from "../components/OrgTabs.module.css"; }
+
+/* M04 (F16): mesma margem lateral em todas as páginas da organização no celular */
+@media (max-width: 40rem) {
+  .page { padding: var(--spacing-4); }
+}
+@media (max-width: 40rem), (pointer: coarse) { .backLink { min-height: 2.75rem; } }
+

@@ -9,6 +9,7 @@
 }
 
 .backLink {
+  min-height: 2rem; /* M05/F09: o link tinha 18 px de altura; 32 px no desktop (>= 24) e 44 px no mobile */
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-1);
@@ -21,34 +22,8 @@
 .backLink:hover {
   color: var(--foreground);
 }
+@media (max-width: 40rem), (pointer: coarse) { .backLink { min-height: 2.75rem; } }
 
-.tabNav {
-  display: flex;
-  gap: var(--spacing-1);
-  border-bottom: 1px solid var(--border);
-  margin-bottom: var(--spacing-6);
-  flex-wrap: wrap;
-}
-
-.tabNavItem,
-.tabNavItemActive {
-  padding: var(--spacing-2) var(--spacing-1);
-  font-size: 0.875rem;
-  text-decoration: none;
-  color: var(--muted-foreground);
-  border-bottom: 2px solid transparent;
-  margin-right: var(--spacing-4);
-}
-
-.tabNavItem:hover {
-  color: var(--foreground);
-}
-
-.tabNavItemActive {
-  color: var(--foreground);
-  font-weight: 500;
-  border-bottom-color: var(--primary);
-}
 
 .titleRow {
   display: flex;
@@ -163,7 +138,7 @@
 }
 
 .progressLabel {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--muted-foreground);
 }
 
@@ -210,6 +185,13 @@
   .progressValue {
     margin-left: auto;
     text-align: right;
+  }
+}
+
+/* M04 (F19): coluna de ações com largura FIXA no desktop — antes cada cartão media a sua ("Reabrir registro" × "Encerrar") e a largura útil de métricas/barra variava de cartão para cartão */
+@media (min-width: 40.0625rem) {
+  .needActions {
+    width: 17.5rem;
   }
 }
 
@@ -281,7 +263,8 @@
 .progressBar {
   height: 8px;
   border-radius: 999px;
-  background: var(--muted);
+  /* M04/F18: o trilho (--muted) quase não se distinguia do cartão no tema escuro; mistura com o texto secundário para manter ~1,5:1 de contraste não-textual nos dois temas */
+  background: color-mix(in srgb, var(--muted-foreground) 28%, var(--card));
   overflow: hidden;
 }
 
@@ -307,4 +290,14 @@
   white-space: normal;
   max-width: 100%;
   text-align: left;
+}
+
+/* M04 (F05/F06): barra de abas compartilhada */
+.tabNav { composes: tabNav from "../components/OrgTabs.module.css"; }
+.tabNavItem { composes: tabNavItem from "../components/OrgTabs.module.css"; }
+.tabNavItemActive { composes: tabNavItemActive from "../components/OrgTabs.module.css"; }
+
+/* M04 (F16): mesma margem lateral em todas as páginas da organização no celular */
+@media (max-width: 40rem) {
+  .page { padding: var(--spacing-4); }
 }

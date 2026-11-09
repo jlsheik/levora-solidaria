@@ -16,6 +16,7 @@ import { Skeleton } from "../components/Skeleton";
 import { UnitSelect } from "../components/UnitSelect";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/Dialog";
 import inputStyles from "../components/Input.module.css";
+import { ActiveTab } from "../components/ActiveTab";
 import styles from "./organizacoes.$organizationId.regularizacao.module.css";
 
 type Action = { kind: "confer" | "validate" | "close" | "correct"; item: RegularizationCase } | null;
@@ -91,7 +92,7 @@ export default function OrganizationRegularizationPage() {
         <Link to={`/organizacoes/${organizationId}/prestacao-contas`} className={styles.tabNavItem}>Prestação de contas</Link>
         <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>Configurações de Matching</Link>
         {canManage && <Link to={`/organizacoes/${organizationId}/unidades`} className={styles.tabNavItem}>Unidades</Link>}
-        <span className={styles.tabNavItemActive} aria-current="page">Pendências de unidade</span>
+        <ActiveTab className={styles.tabNavItemActive} aria-current="page">Pendências de unidade</ActiveTab>
       </nav>
 
       <h1 className={styles.title}>Pendências de unidade</h1>
@@ -151,7 +152,7 @@ export default function OrganizationRegularizationPage() {
                 </select>
               </div>
               <div className={styles.filterActions}>
-                <Button variant="outline" size="sm" disabled={!hasFilters} onClick={() => { setStatus("ativos"); setSource(""); setCategory(""); setOrder("antigos"); }}>
+                <Button variant="outline" disabled={!hasFilters} onClick={() => { setStatus("ativos"); setSource(""); setCategory(""); setOrder("antigos"); }}>
                   <RotateCcw size={14} /> Limpar filtros
                 </Button>
               </div>

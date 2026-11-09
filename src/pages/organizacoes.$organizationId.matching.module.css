@@ -9,6 +9,7 @@
 }
 
 .backLink {
+  min-height: 2rem; /* M05/F09: o link tinha 18 px de altura; 32 px no desktop (>= 24) e 44 px no mobile */
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-1);
@@ -21,35 +22,8 @@
 .backLink:hover {
   color: var(--foreground);
 }
+@media (max-width: 40rem), (pointer: coarse) { .backLink { min-height: 2.75rem; } }
 
-.tabNav {
-  display: flex;
-  gap: var(--spacing-1);
-  border-bottom: 1px solid var(--border);
-  margin-bottom: var(--spacing-6);
-  flex-wrap: wrap;
-}
-
-.tabNavItem,
-.tabNavItemActive {
-  padding: var(--spacing-2) var(--spacing-1);
-  font-size: 0.875rem;
-  text-decoration: none;
-  color: var(--muted-foreground);
-  border-bottom: 2px solid transparent;
-  margin-right: var(--spacing-4);
-  white-space: nowrap;
-}
-
-.tabNavItem:hover {
-  color: var(--foreground);
-}
-
-.tabNavItemActive {
-  color: var(--foreground);
-  font-weight: 500;
-  border-bottom-color: var(--primary);
-}
 
 .titleRow {
   display: flex;
@@ -146,7 +120,7 @@
 .emptyText {
   color: var(--muted-foreground);
   font-size: 0.875rem;
-  padding: var(--spacing-4) 0;
+  padding: var(--spacing-2) 0 0; /* M05/N04: ver unidades.module.css */
 }
 
 .listSkeleton {
@@ -251,4 +225,14 @@
     flex-direction: column;
     align-items: stretch;
   }
+}
+
+/* M04 (F05/F06): barra de abas compartilhada */
+.tabNav { composes: tabNav from "../components/OrgTabs.module.css"; }
+.tabNavItem { composes: tabNavItem from "../components/OrgTabs.module.css"; }
+.tabNavItemActive { composes: tabNavItemActive from "../components/OrgTabs.module.css"; }
+
+/* M04 (F16): mesma margem lateral em todas as páginas da organização no celular */
+@media (max-width: 40rem) {
+  .page { padding: var(--spacing-4); }
 }

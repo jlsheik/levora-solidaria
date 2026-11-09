@@ -1,16 +1,12 @@
 .page { box-sizing: border-box; min-height: 100vh; background: var(--background); color: var(--foreground); padding: var(--spacing-8); max-width: calc(72rem + 2 * var(--spacing-8)); margin: 0 auto; }
-.backLink { display: inline-flex; align-items: center; gap: var(--spacing-1); color: var(--muted-foreground); font-size: 0.875rem; text-decoration: none; margin-bottom: var(--spacing-4); }
+.backLink { min-height: 2rem; /* M05/F09: 18 px medidos */ display: inline-flex; align-items: center; gap: var(--spacing-1); color: var(--muted-foreground); font-size: 0.875rem; text-decoration: none; margin-bottom: var(--spacing-4); }
 .backLink:hover { color: var(--foreground); }
-.tabNav { display: flex; gap: var(--spacing-1); border-bottom: 1px solid var(--border); margin-bottom: var(--spacing-6); flex-wrap: wrap; }
-.tabNavItem, .tabNavItemActive { padding: var(--spacing-2) var(--spacing-1); font-size: 0.875rem; text-decoration: none; color: var(--muted-foreground); border-bottom: 2px solid transparent; margin-right: var(--spacing-4); }
-.tabNavItem:hover { color: var(--foreground); }
-.tabNavItemActive { color: var(--foreground); font-weight: 500; border-bottom-color: var(--primary); }
 .titleRow { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing-4); margin-bottom: var(--spacing-6); flex-wrap: wrap; }
 .title { display: flex; align-items: center; gap: var(--spacing-2); font-family: var(--font-family-display); font-size: 1.5rem; font-weight: 600; margin: 0 0 var(--spacing-1) 0; }
 .subtitle { color: var(--muted-foreground); font-size: 0.875rem; margin: 0; max-width: 36rem; line-height: 1.5; }
 .notAllowed { display: flex; flex-direction: column; align-items: center; gap: var(--spacing-3); padding: var(--spacing-12); text-align: center; color: var(--muted-foreground); }
 .filters { display: flex; gap: var(--spacing-4); margin-bottom: var(--spacing-3); flex-wrap: wrap; }
-.filterField { flex: 1 1 10rem; max-width: 18rem; }
+.filterField { flex: 1 1 15rem; max-width: 22rem; } /* M05/N07: 10 rem (6 por linha) cortava "Todas as necessidades" em "Todas as necess…"; 15 rem = 4 por linha (mesma largura mínima de Destinação, M04/F07) */
 .filterLabel { display: block; font-size: 0.75rem; color: var(--muted-foreground); margin-bottom: var(--spacing-1); }
 .reportSkeleton { height: 24rem; border-radius: var(--radius-lg); }
 .report { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--spacing-8); }
@@ -18,7 +14,8 @@
 .reportPeriod { color: var(--muted-foreground); font-size: 0.875rem; margin: var(--spacing-1) 0 var(--spacing-6) 0; }
 .summaryGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--spacing-4); margin-bottom: var(--spacing-8); }
 .summaryCard { display: flex; flex-direction: column; gap: var(--spacing-1); padding: var(--spacing-4); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
-.summaryValue { font-family: var(--font-family-monospace); font-size: 1.5rem; font-weight: 600; color: var(--primary); }
+.summaryValue { font-family: var(--font-family-monospace); font-size: 1.5rem; font-weight: 600; color: color-mix(in srgb, var(--primary) 90%, black); /* M05/F18: --primary sobre o tom de resumo media 4,46:1; 90% dá 5,27:1 */ }
+:global(.dark) .summaryValue { color: var(--primary); }
 .summaryLabel { font-size: 0.75rem; color: var(--muted-foreground); }
 .sectionTitle { font-family: var(--font-family-display); font-size: 1.0625rem; font-weight: 600; margin: var(--spacing-8) 0 var(--spacing-3) 0; color: var(--card-foreground); }
 .emptyText { color: var(--muted-foreground); font-size: 0.875rem; }
@@ -27,15 +24,19 @@
 .table th { text-align: left; padding: var(--spacing-2); border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-weight: 500; }
 .table td { padding: var(--spacing-2); border-bottom: 1px solid var(--border); font-family: var(--font-family-monospace); color: var(--card-foreground); }
 .table td:first-child { font-family: var(--font-family-base); }
+/* M08/R8: a célula de STATUS (pílula Badge) herdava a fonte monoespaçada de `.table td`, pensada para os valores numéricos; a pílula usa a fonte do corpo como as demais (Entrada manual, Aberta em Necessidades). */
+.table td.statusCell { font-family: var(--font-family-base); }
 .receivedList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-2); }
 .receivedRow { font-size: 0.8125rem; color: var(--card-foreground); padding-bottom: var(--spacing-2); border-bottom: 1px solid var(--border); }
 .disclaimer { margin-top: var(--spacing-8); padding-top: var(--spacing-4); border-top: 1px dashed var(--border); font-size: 0.75rem; color: var(--muted-foreground); line-height: 1.5; }
 .noPrint { }
 
 .scopeNote { font-size: 0.75rem; color: var(--muted-foreground); line-height: 1.5; margin: 0 0 var(--spacing-6) 0; max-width: 60rem; }
-.summarySub { font-size: 0.6875rem; color: var(--muted-foreground); line-height: 1.4; }
+.summarySub { font-size: 0.75rem; color: var(--muted-foreground); line-height: 1.4; }
 .sectionHint { font-size: 0.75rem; color: var(--muted-foreground); margin: calc(var(--spacing-2) * -1) 0 var(--spacing-3) 0; line-height: 1.5; }
-.cellSub { font-family: var(--font-family-base); font-size: 0.6875rem; color: var(--muted-foreground); margin-top: 2px; }
+/* M04 (F-OVERLAP, achado da inspeção M04): a nota que vem DEPOIS da tabela/lista herdava a margem negativa pensada para dicas sob títulos e a borda da última linha cortava o texto */
+.cardList + .sectionHint, .tableScroll + .sectionHint { margin-top: var(--spacing-3); }
+.cellSub { font-family: var(--font-family-base); font-size: 0.75rem; color: var(--muted-foreground); margin-top: 2px; }
 .table td, .table th { vertical-align: top; }
 .cardList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-3); }
 .miniCard { display: flex; flex-direction: column; gap: var(--spacing-1); padding: var(--spacing-3); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8125rem; color: var(--card-foreground); }
@@ -76,6 +77,8 @@
   .summaryValue { font-size: 1.25rem; }
   .filters button, .filters input { min-height: 2.75rem; }
 }
+@media (max-width: 40rem), (pointer: coarse) { .backLink { min-height: 2.75rem; } }
+
 
 @media print {
   .backLink, .tabNav, .filters, .noPrint, .scopeNote { display: none !important; }
@@ -85,9 +88,19 @@
   .page { padding: 0; max-width: none; }
   .report { border: none; padding: 0; }
   .group, .miniCard, .summaryCard { break-inside: avoid; }
-  .table { font-size: 0.6875rem; }
+  .table { font-size: 0.75rem; }
 }
 
 /* Campos de data nativos têm largura mínima intrínseca: nunca deixar o campo vazar do contêiner (overflow horizontal em 375px). */
 .filterField { min-width: 0; }
 .filterField input { width: 100%; min-width: 0; box-sizing: border-box; max-width: 100%; }
+
+/* M04 (F05/F06): barra de abas compartilhada */
+.tabNav { composes: tabNav from "../components/OrgTabs.module.css"; }
+.tabNavItem { composes: tabNavItem from "../components/OrgTabs.module.css"; }
+.tabNavItemActive { composes: tabNavItemActive from "../components/OrgTabs.module.css"; }
+
+/* M04 (F16): mesma margem lateral em todas as páginas da organização no celular */
+@media (max-width: 40rem) {
+  .page { padding: var(--spacing-4); }
+}

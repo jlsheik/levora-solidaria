@@ -13,6 +13,7 @@ import { Skeleton } from "../components/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/Select";
 import { ArrowLeft, FileText, Printer, ShieldAlert, CornerDownRight, TriangleAlert, CheckCircle2 } from "lucide-react";
 import { DESTINATION_LABELS, DESTINATION_TYPES, type DestinationType } from "../helpers/destinationRules";
+import { ActiveTab } from "../components/ActiveTab";
 import styles from "./organizacoes.$organizationId.prestacao-contas.module.css";
 
 const nf = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
@@ -150,7 +151,8 @@ function DestinationSection({ data }: { data: OutputType }) {
                 <span>{r.itemName} ({r.unit})</span>
                 <span>
                   {r.balanced && r.exitsBalanced ? <CheckCircle2 size={12} aria-label="Conciliado" /> : <TriangleAlert size={12} aria-label="Não concilia" />}{" "}
-                  {fmt(r.balanceAtStart)} + {fmt(r.entradas)} {signed(r.ajustes)} − {fmt(r.saidas)} = {fmt(r.balanceAtEnd)} · saídas: {fmt(r.saidasComDestinacao)} com destinação + {fmt(r.saidasSemDestinacao)} sem
+                  {/* M04/F10: sinais explícitos e espaçados (`signed(0)` devolvia "0" sem sinal e o ajuste grudava na entrada: "0 + 5 0 − 2"); frase completa. Valores e cálculo não mudam. */}
+                  {fmt(r.balanceAtStart)} + {fmt(r.entradas)} {r.ajustes < 0 ? "−" : "+"} {fmt(Math.abs(r.ajustes))} − {fmt(r.saidas)} = {fmt(r.balanceAtEnd)} · saídas: {fmt(r.saidasComDestinacao)} com destinação + {fmt(r.saidasSemDestinacao)} sem destinação estruturada
                 </span>
               </div>
             </li>
@@ -307,7 +309,7 @@ export default function ImpactReportPage() {
         <Link to={`/organizacoes/${organizationId}/necessidades`} className={styles.tabNavItem}>Necessidades</Link>
         <Link to={`/organizacoes/${organizationId}/oportunidades`} className={styles.tabNavItem}>Oportunidades</Link>
         <Link to={`/organizacoes/${organizationId}/atribuicoes`} className={styles.tabNavItem}>Rede Levora</Link>
-        <span className={styles.tabNavItemActive}>Prestação de contas</span>
+        <ActiveTab className={styles.tabNavItemActive}>Prestação de contas</ActiveTab>
         <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>Configurações de Matching</Link>
         {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
           <Link to={`/organizacoes/${organizationId}/unidades`} className={styles.tabNavItem}>
@@ -555,7 +557,7 @@ export default function ImpactReportPage() {
                               <div className={styles.cellSub}>falta {fmt(n.today.requiredRemaining)}</div>
                               <div className={styles.cellSub}>{n.historicalAttended ? "atendimento histórico sem destinação estruturada" : `atendido (destinações): ${fmt(n.attendance.attended)} de ${fmt(n.attendance.requested)}`}</div>
                             </td>
-                            <td>
+                            <td className={styles.statusCell}>
                               <Badge variant={n.status === "atendida" ? "success" : n.status === "cancelada" ? "destructive" : "outline"}>{STATUS_LABELS[n.status] ?? n.status}</Badge>
                               {n.statusWarning && (
                                 <div className={styles.statusWarning}><TriangleAlert size={12} aria-hidden /> Marcada como atendida, mas há saldo faltante após ajustes.</div>

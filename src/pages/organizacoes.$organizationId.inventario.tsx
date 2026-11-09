@@ -44,6 +44,7 @@ import {
 } from "../components/Select";
 import { z } from "zod";
 import { movementSchema } from "../helpers/inventoryFormSchemas";
+import { ActiveTab } from "../components/ActiveTab";
 import { ArrowLeft, Plus, Package, ArrowDownCircle, ArrowUpCircle, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import styles from "./organizacoes.$organizationId.inventario.module.css";
@@ -151,7 +152,10 @@ export default function InventoryPage() {
         <Link to={`/organizacoes/${organizationId}`} className={styles.tabNavItem}>
           Visão geral
         </Link>
-        <span className={styles.tabNavItemActive}>Inventário</span>
+        <ActiveTab className={styles.tabNavItemActive}>Inventário</ActiveTab>
+        <Link to={`/organizacoes/${organizationId}/destinacoes`} className={styles.tabNavItem}>
+          Destinação
+        </Link>
         <Link to={`/organizacoes/${organizationId}/necessidades`} className={styles.tabNavItem}>
           Necessidades
         </Link>

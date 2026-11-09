@@ -38,6 +38,7 @@ import {
 } from "../components/DropdownMenu";
 import { ArrowLeft, ShieldAlert, Users, ScrollText, UserPlus, X, MoreVertical, LogOut, Pencil } from "lucide-react";
 import { RenameOrganizationDialog } from "../components/RenameOrganizationDialog";
+import { ActiveTab } from "../components/ActiveTab";
 import { toast } from "sonner";
 import styles from "./organizacoes.$organizationId.module.css";
 
@@ -299,9 +300,12 @@ export default function OrganizationDetailPage() {
       )}
 
       <nav className={styles.tabNav}>
-        <span className={styles.tabNavItemActive}>Visão geral</span>
+        <ActiveTab className={styles.tabNavItemActive}>Visão geral</ActiveTab>
         <Link to={`/organizacoes/${organizationId}/inventario`} className={styles.tabNavItem}>
           Inventário
+        </Link>
+        <Link to={`/organizacoes/${organizationId}/destinacoes`} className={styles.tabNavItem}>
+          Destinação
         </Link>
         <Link to={`/organizacoes/${organizationId}/necessidades`} className={styles.tabNavItem}>
           Necessidades

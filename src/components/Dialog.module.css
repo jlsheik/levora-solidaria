@@ -19,6 +19,11 @@
        cada lado. Descontar o padding aqui deixa o total em 90vw sem alterar
        a largura em telas largas (onde vale width: 32rem). */
     max-width: calc(90vw - 2 * var(--spacing-6));
+    /* M10/R12 — GEOMETRIA INTEIRA. A 375 px o diálogo media 337,5 px e ficava em x=18,75; as bordas internas (ex.: borda direita do campo de link) caíam em meio pixel e eram
+       rasterizadas ora num pixel ora no vizinho, de forma intermitente (20–50% das capturas da mesma célula). Aqui a margem lateral é arredondada para pixel inteiro
+       (100vw − 2·round(5vw)), o que mantém a paridade da janela (largura e x inteiros) e muda a largura em no máximo ~1,5 px. A linha acima fica como reserva para navegadores
+       sem a função round(). */
+    max-width: calc(100vw - 2 * round(down, 5vw, 1px) - 2 * var(--spacing-6));
     max-height: 85vh;
     width: 32rem;
     background-color: var(--popup);
@@ -30,6 +35,14 @@
     padding: var(--spacing-6);
     animation: contentShow var(--animation-duration-normal)
       cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* M11 / R10 (residual): enquanto um aviso (toast) cobriria o conteúdo do diálogo, `SonnerToaster` define `--toast-reserve` (px, inteiro par) e `data-toast-reserve` no <html>.
+     O diálogo passa a ocupar só a região ACIMA da faixa dos avisos: centralizado nela e com o max-height reduzido (a caixa fica a pelo menos --spacing-4 das bordas). O conteúdo rola e o
+     rodapé continua fixo. Sem o atributo, nada muda. */
+  :global(html[data-toast-reserve]) .content {
+    top: calc(50% - var(--toast-reserve) / 2);
+    max-height: min(85vh, calc(100vh - var(--toast-reserve) - 2 * var(--spacing-6) - 2 * var(--spacing-4)));
   }
 
   /* Tema escuro: texto na cor primária (botão outline "Cancelar", links) sobre --popup (hsl 20 18% 15%) dá 4,48:1, abaixo do 4,5:1 do AA para texto
@@ -58,6 +71,13 @@
       transform var(--animation-duration-fast) ease;
   }
 
+  /* M05/F09: botão visual de 32 px; área de clique efetiva de 46 px (pseudo-elemento) */
+  .close::after {
+    content: "";
+    position: absolute;
+    inset: -0.4375rem;
+  }
+
   .close:hover {
     background-color: var(--muted-foreground);
     color: var(--muted);
@@ -78,15 +98,36 @@
     margin-bottom: var(--spacing-4);
   }
 
+  /* M04 (F08): rodapé de ações FIXO no fim da área rolável do diálogo. Antes, em diálogos mais altos que 85vh (ex.: Registrar recebimento) o botão
+     de confirmar ficava escondido abaixo da dobra e só aparecia rolando o conteúdo; agora fica sempre visível, sobre o fundo do próprio diálogo. */
   .footer {
     display: flex;
     justify-content: flex-end;
     gap: var(--spacing-2);
     margin-top: var(--spacing-6);
+    position: sticky;
+    bottom: calc(-1 * var(--spacing-6));
+    margin-left: calc(-1 * var(--spacing-6));
+    margin-right: calc(-1 * var(--spacing-6));
+    margin-bottom: calc(-1 * var(--spacing-6));
+    padding: var(--spacing-4) var(--spacing-6);
+    background-color: var(--popup);
+    border-top: 1px solid var(--border);
+    border-bottom-left-radius: var(--radius-md);
+    border-bottom-right-radius: var(--radius-md);
+  }
+
+  :global(.dark) .footer {
+    background-color: var(--card);
   }
 
   .title {
-    font-family: var(--font-family-heading);
+    /* M04/F02: `--font-family-heading` nunca foi definida (o título caía na fonte herdada); usa a família de exibição da marca. */
+    font-family: var(--font-family-display);
+    padding-right: 2.5rem; /* reserva o espaço do botão fechar (títulos longos não colidem) */
+    /* M06/F-título: uma palavra longa sem pontos de quebra (identificador, nome composto) estourava o diálogo (568 px além da borda a 1280 px), passava por baixo do botão X e gerava rolagem horizontal; só quebra quando não cabe, sem reduzir a fonte */
+    overflow-wrap: anywhere;
+    min-width: 0;
     font-size: 1.25rem;
     font-weight: 600;
     color: var(--popup-foreground);
@@ -96,6 +137,7 @@
 
   .description {
     font-size: 0.875rem;
+    overflow-wrap: anywhere; /* M06: mesma proteção do título para palavras longas sem espaço */
     color: var(--muted-foreground);
     line-height: 1.5;
     margin-bottom: var(--spacing-4);

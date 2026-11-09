@@ -12,6 +12,7 @@ import { Button } from "../components/Button";
 import inputStyles from "../components/Input.module.css";
 import { DESTINATION_LABELS, DESTINATION_TYPES, type DestinationType } from "../helpers/destinationRules";
 import { DESTINATION_DATE_BASES, DESTINATION_STATES, validateDateRange } from "../helpers/destinationFilters";
+import { ActiveTab } from "../components/ActiveTab";
 import styles from "./organizacoes.$organizationId.destinacoes.module.css";
 
 const STATE_LABELS: Record<string, string> = { ativa: "Ativa (sem reversão)", parcialmente_revertida: "Parcialmente revertida", revertida: "Revertida", com_correcao: "Com correção documental" };
@@ -65,9 +66,18 @@ export default function DestinationsPage() {
       <nav className={styles.tabNav}>
         <Link to={`/organizacoes/${organizationId}`} className={styles.tabNavItem}>Visão geral</Link>
         <Link to={`/organizacoes/${organizationId}/inventario`} className={styles.tabNavItem}>Inventário</Link>
-        <span className={styles.tabNavItemActive}>Destinação</span>
+        <ActiveTab className={styles.tabNavItemActive}>Destinação</ActiveTab>
         <Link to={`/organizacoes/${organizationId}/necessidades`} className={styles.tabNavItem}>Necessidades</Link>
+        <Link to={`/organizacoes/${organizationId}/oportunidades`} className={styles.tabNavItem}>Oportunidades</Link>
+        <Link to={`/organizacoes/${organizationId}/atribuicoes`} className={styles.tabNavItem}>Rede Levora</Link>
         <Link to={`/organizacoes/${organizationId}/prestacao-contas`} className={styles.tabNavItem}>Prestação de contas</Link>
+        <Link to={`/organizacoes/${organizationId}/matching`} className={styles.tabNavItem}>Configurações de Matching</Link>
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
+          <Link to={`/organizacoes/${organizationId}/unidades`} className={styles.tabNavItem}>Unidades</Link>
+        )}
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador" || org?.myRole === "operador") && (
+          <Link to={`/organizacoes/${organizationId}/regularizacao`} className={styles.tabNavItem}>Pendências de unidade</Link>
+        )}
       </nav>
       <div>
         <h1 className={styles.title}>Destinação</h1>

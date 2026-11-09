@@ -153,7 +153,7 @@ describe("layout global", () => {
 
   it("base.css zera a margem do body (e não esconde conteúdo com overflow:hidden)", () => {
     const css = readFileSync("src/base.css", "utf8").replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "");
-    expect(css).toMatch(/(^|\n)body\s*\{\s*margin:\s*0;\s*\}/);
+    expect(css).toMatch(/(^|\n)body\s*\{\s*margin:\s*0;/); // M11: o corpo agora também define fundo, cor e fonte do tema (M04/F01–F02); a margem zerada continua sendo a primeira declaração
     expect(css).not.toMatch(/overflow\s*:\s*hidden/);
   });
 });

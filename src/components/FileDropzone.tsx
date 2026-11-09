@@ -10,6 +10,8 @@ export interface FileDropzoneProps {
   maxSize?: number; // in bytes
   onFilesSelected?: (files: File[]) => void;
   disabled?: boolean;
+  /** M10/R11: operação em andamento (ex.: enviando). Mantém o texto de status legível (a área segue desabilitada; só ícone e borda ficam esmaecidos) e o anuncia aos leitores de tela por região viva (`aria-live`). Sem `aria-busy`: com ele o leitor de tela ADIA os anúncios da região enquanto durar o envio. */
+  busy?: boolean;
   icon?: React.ReactNode;
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
@@ -22,8 +24,9 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
   maxSize,
   onFilesSelected,
   disabled = false,
+  busy,
   icon = <Upload size={48} />,
-  title = "Click to upload or drag and drop",
+  title = "Clique para enviar ou arraste e solte",
   subtitle,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
@@ -48,7 +51,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
     const files = Array.from(fileList);
     
     if (files.length > maxFiles) {
-      setError(`Maximum ${maxFiles} file${maxFiles === 1 ? '' : 's'} allowed`);
+      setError(maxFiles === 1 ? "Selecione apenas um arquivo." : `Selecione no máximo ${maxFiles} arquivos.`);
       return [];
     }
 
@@ -64,7 +67,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
       );
       
       if (invalidFiles.length > 0) {
-        setError(`Invalid file type. Accepted: ${accept}`);
+        setError("Tipo de arquivo não permitido. Selecione um formato aceito.");
         return [];
       }
     }
@@ -72,7 +75,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
     if (maxSize) {
       const oversizedFiles = files.filter(file => file.size > maxSize);
       if (oversizedFiles.length > 0) {
-        setError(`File size exceeds ${Math.round(maxSize/1024/1024)}MB limit`);
+        setError(`O arquivo excede o limite de ${Math.round(maxSize / 1024 / 1024)} MB.`);
         return [];
       }
     }
@@ -112,8 +115,8 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
 
   const defaultSubtitle = (accept || maxFiles > 1) && (
     <>
-      {accept && `Accepted types: ${accept}`}
-      {maxFiles > 1 && ` (Up to ${maxFiles} files)`}
+      {accept && `Tipos aceitos: ${accept}`}
+      {maxFiles > 1 && ` (até ${maxFiles} arquivos)`}
     </>
   );
 
@@ -124,6 +127,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
           ${styles.dropzone}
           ${isDragging ? styles.dragging : ''}
           ${disabled ? styles.disabled : ''}
+          ${busy ? styles.busy : ''}
         `}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
@@ -136,11 +140,11 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
           accept={accept}
           multiple={maxFiles > 1}
           disabled={disabled}
-          aria-label="File upload"
+          aria-label="Enviar arquivo"
         />
         
         <span className={styles.icon}>{icon}</span>
-        <span className={styles.title}>{title}</span>
+        <span className={styles.title} aria-live={busy === undefined ? undefined : "polite"}>{title}</span>
         {(subtitle || defaultSubtitle) && (
           <span className={styles.subtitle}>{subtitle || defaultSubtitle}</span>
         )}
@@ -153,7 +157,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
             variant="ghost"
             size="icon-sm"
             onClick={clearError}
-            aria-label="Clear error"
+            aria-label="Fechar aviso de erro"
           >
             <X size={16} />
           </Button>

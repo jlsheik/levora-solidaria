@@ -1,16 +1,26 @@
-.page { display: flex; flex-direction: column; gap: var(--spacing-4); min-height: 100vh; background: var(--background); color: var(--foreground); padding: var(--spacing-6) var(--spacing-4); max-width: 72rem; margin: 0 auto; width: 100%; box-sizing: border-box; min-width: 0; }
-.backLink { display: inline-flex; align-items: center; gap: var(--spacing-1); font-size: 0.875rem; color: var(--muted-foreground); text-decoration: none; }
-.tabNav { flex-wrap: wrap; display: flex; gap: var(--spacing-1); overflow-x: auto; border-bottom: 1px solid var(--border); }
-.tabNavItem, .tabNavItemActive { padding: var(--spacing-2) var(--spacing-3); font-size: 0.875rem; white-space: nowrap; text-decoration: none; color: var(--muted-foreground); }
-.tabNavItemActive { color: var(--foreground); border-bottom: 2px solid var(--primary); font-weight: 600; }
+.page { display: flex; flex-direction: column; gap: var(--spacing-4); min-height: 100vh; background: var(--background); color: var(--foreground); padding: var(--spacing-8); max-width: calc(72rem + 2 * var(--spacing-8)); margin: 0 auto; width: 100%; box-sizing: border-box; min-width: 0; }
+.backLink { min-height: 2rem; /* M05/F09: 18 px medidos */ display: inline-flex; align-items: center; gap: var(--spacing-1); font-size: 0.875rem; color: var(--muted-foreground); text-decoration: none; }
 .title { margin: 0; font-size: 1.5rem; font-weight: 700; color: var(--foreground); }
 .subtitle { margin: var(--spacing-1) 0 0; font-size: 0.875rem; color: var(--muted-foreground); line-height: 1.5; }
-.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: var(--spacing-3); align-items: end; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: var(--spacing-3); align-items: end; }
 .field { display: flex; flex-direction: column; gap: var(--spacing-1); min-width: 0; }
 .label { font-size: 0.75rem; font-weight: 500; color: var(--muted-foreground); }
-.select { height: 2.5rem; width: 100%; min-width: 0; box-sizing: border-box; }
-.error { margin: 0; font-size: 0.8125rem; color: var(--error-text); line-height: 1.4; }
+/* M04/F07: filtros em colunas de no mínimo 15 rem (antes 11 rem cortavam "Todas as finalidades/situações/necessidades"); reticências só se a opção for ainda maior */
+.select { height: 2.5rem; width: 100%; min-width: 0; box-sizing: border-box; text-overflow: ellipsis; }
+.error { margin: 0; font-size: 0.875rem; font-weight: 500; color: var(--error-text); line-height: 1.4; }
 .note { margin: 0; font-size: 0.8125rem; color: var(--muted-foreground); line-height: 1.5; }
 .notAllowed { padding: var(--spacing-6); text-align: center; color: var(--muted-foreground); }
 .recon { display: flex; flex-direction: column; gap: var(--spacing-2); padding: var(--spacing-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
 .reconList { margin: 0; padding-left: var(--spacing-4); font-size: 0.8125rem; color: var(--card-foreground); overflow-wrap: anywhere; }
+
+/* M04 (F05/F06): barra de abas compartilhada */
+.tabNav { composes: tabNav from "../components/OrgTabs.module.css"; }
+.tabNavItem { composes: tabNavItem from "../components/OrgTabs.module.css"; }
+.tabNavItemActive { composes: tabNavItemActive from "../components/OrgTabs.module.css"; }
+
+/* M04 (F16): mesma margem lateral em todas as páginas da organização no celular */
+@media (max-width: 40rem) {
+  .page { padding: var(--spacing-4); }
+}
+
+@media (max-width: 40rem), (pointer: coarse) { .backLink { min-height: 2.75rem; } } /* M05/F09 */
