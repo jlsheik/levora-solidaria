@@ -18,7 +18,7 @@ import { VIEWPORTS, viewportKey, viewportMatches, emulationParams, parseViewport
 // @ts-expect-error módulo .mjs sem tipos
 import { Cleanups } from "../scripts/qa-visual/lib/cleanup.mjs";
 // @ts-expect-error módulo .mjs sem tipos
-import { planRecovery, recoverOrphans, RunState, readState, OURS } from "../scripts/qa-visual/lib/orphans.mjs";
+import { RunState, readState } from "../scripts/qa-visual/lib/orphans.mjs";
 // @ts-expect-error módulo .mjs sem tipos
 import { candidatePaths, findBrowser } from "../scripts/qa-visual/lib/browser.mjs";
 // @ts-expect-error módulo .mjs sem tipos
@@ -262,36 +262,9 @@ describe("limpeza de recursos (sucesso, falha e execução morta à força)", ()
     await c.runAll(); // segunda chamada (Ctrl+C + fim normal) não repete nada
     expect(order).toHaveLength(3);
   });
-  it("planRecovery: execução anterior viva e nossa = ocupado; órfãos só se o PID ainda for processo NOSSO", () => {
-    const state = { orchestrator: 10, children: [{ pid: 11, kind: "api" }, { pid: 12, kind: "browser" }, { pid: 13, kind: "vite" }], profiles: ["/tmp/levora-qa-profile-x"], database: "levora_qa" };
-    const cmd: Record<number, string> = { 10: "node scripts/qa-visual/run.mjs", 11: "node tsx scripts/qa-visual/api.ts", 12: "msedge --user-data-dir=/tmp/levora-qa-profile-x", 13: "notepad.exe" };
-    const busy = planRecovery(state, { alive: () => true, cmdline: (p: number) => cmd[p] });
-    expect(busy).toMatchObject({ busy: true, pid: 10 });
-    const dead = planRecovery(state, { alive: (p: number) => p !== 10, cmdline: (p: number) => cmd[p] });
-    expect(dead).toMatchObject({ busy: false, kill: [11, 12], database: "levora_qa", profiles: ["/tmp/levora-qa-profile-x"] }); // 13 (PID reaproveitado por outro programa) NÃO é encerrado
-    expect(planRecovery(null, { alive: () => true, cmdline: () => "" })).toEqual({ busy: false, kill: [], profiles: [], database: null, containers: [] });
-    expect(OURS.test("qa-visual")).toBe(true);
-    expect(OURS.test("notepad.exe")).toBe(false);
-  });
-  it("recoverOrphans: encerra, apaga só perfis levora-qa-profile-*, derruba o banco e limpa o registro", async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "qa-orphans-test-"));
-    const file = path.join(dir, "active.json");
-    const profile = path.join(dir, "levora-qa-profile-abc"); mkdirSync(profile);
-    const alien = path.join(dir, "outra-pasta"); mkdirSync(alien);
-    const rs = new RunState(file); rs.s.orchestrator = 99999991; // um PID que não existe
-    rs.addChild(99999992, "browser"); rs.addProfile(profile); rs.addProfile(alien); rs.setDatabase("levora_f94_qa");
-    const killed: number[] = []; const dropped: string[] = [];
-    const out = await recoverOrphans({ file, alive: (p: number) => p === 99999992, cmdline: () => "msedge levora-qa-profile-abc", actions: { killTree: async (p: number) => { killed.push(p); }, removeDir: async (d: string) => { rmSync(d, { recursive: true, force: true }); }, dropDb: async (n: string) => { dropped.push(n); } } });
-    expect(out).toMatchObject({ busy: false, killed: [99999992], database: "levora_f94_qa" });
-    expect(killed).toEqual([99999992]); expect(dropped).toEqual(["levora_f94_qa"]);
-    expect(existsSync(profile)).toBe(false); // perfil nosso: apagado
-    expect(existsSync(alien)).toBe(true); // diretório que não é nosso: preservado
-    expect(readState(file)).toBeNull();
-    rmSync(dir, { recursive: true, force: true });
-  });
   it("RunState persiste cada recurso e remove o registro no fim", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "qa-state-test-")); const file = path.join(dir, "s.json");
-    const rs = new RunState(file); rs.begin(); rs.addChild(5, "api"); rs.addProfile("p"); rs.setDatabase("x_qa");
+    const rs = new RunState(file); rs.begin({ list: () => [] }); rs.addChild(5, "api", {}, { list: () => [] }); rs.addProfile("p"); rs.setDatabase("x_qa");
     expect(readState(file)).toMatchObject({ children: [{ pid: 5, kind: "api" }], profiles: ["p"], database: "x_qa" });
     expect(JSON.stringify(readState(file))).not.toMatch(/postgres:\/\//); // nunca guarda credenciais
     rs.dropChild(5); rs.dropProfile("p"); rs.clearDatabase();

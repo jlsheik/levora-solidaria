@@ -1,7 +1,8 @@
 // Lançador mínimo de Edge/Chrome (headless) + cliente CDP, SEM dependências: usa o WebSocket global (Node >= 22, a versão declarada em package.json),
 // `fetch` e `child_process`. O navegador roda com perfil temporário e porta de depuração escolhida pelo SO (--remote-debugging-port=0); tudo é
 // encerrado e apagado em `close()`.
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { killTree } from "./procowner.mjs";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -28,18 +29,8 @@ export function findBrowser(name, exists = existsSync, env = process.env, platfo
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Encerra um processo e seus filhos (no Windows, `taskkill /T`). */
-export function killTree(target) {
-  const pid = typeof target === "number" ? target : target?.pid;
-  if (typeof target === "object" && target && target.exitCode !== null) return;
-  if (pid === undefined) return;
-  try {
-    if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
-    else process.kill(-pid, "SIGKILL");
-  } catch {
-    try { process.kill(pid, "SIGKILL"); } catch { /* já encerrado */ }
-  }
-}
+/** M06: encerramento SÓ por propriedade explícita (ver lib/procowner.mjs). Sem taskkill, sem PID solto, sem filtro por nome/linha de comando. */
+export { killTree };
 
 class Cdp {
   constructor(ws) {
@@ -77,15 +68,22 @@ class Cdp {
   }
 }
 
+/**
+ * M11 / R14 — sinalizadores de RENDERIZAÇÃO determinística. Medido (m11-evidence/r14): sem eles, o Chrome produziu em 2 de 6 execuções independentes um texto rasterizado de outro modo (Δ até 131 em
+ * glifos de TODAS as 24 imagens Chrome); com eles, 4 execuções independentes só variaram em Δ ≤ 2 (ruído de borda). `--disable-lcd-text` (antialiasing em tons de cinza, sem subpixel),
+ * `--font-render-hinting=none` (sem hinting dependente do sistema) e `--force-color-profile=srgb` (sem perfil de cor do monitor). Fazem parte da configuração de captura (versão das baselines).
+ */
+export const RENDER_FLAGS = Object.freeze(["--disable-lcd-text", "--font-render-hinting=none", "--force-color-profile=srgb"]);
+
 /** Abre o navegador e devolve { cdp, version, close }. Lança se não conseguir (o chamador classifica como ENV). */
 export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone, extraArgs = [] } = {}) {
   const profile = mkdtempSync(path.join(tmpdir(), "levora-qa-profile-"));
   onProfile?.(profile);
   // `QA_BROWSER_NO_SANDBOX=1`: SÓ para runners descartáveis cujo kernel proíbe o sandbox de usuário (ex.: AppArmor no Ubuntu). Nunca é o padrão.
   const noSandbox = process.env.QA_BROWSER_NO_SANDBOX === "1" ? ["--no-sandbox"] : [];
-  const args = [...noSandbox, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-extensions", "--disable-background-networking", "--window-size=1280,900", ...extraArgs, "about:blank"];
+  const args = [...noSandbox, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-extensions", "--disable-background-networking", "--window-size=1280,900", ...extraArgs, ...RENDER_FLAGS, "about:blank"];
   const child = spawn(exe, args, { stdio: "ignore", windowsHide: true, detached: process.platform !== "win32" });
-  onSpawn?.(child.pid, "browser");
+  onSpawn?.(child.pid, "browser", { profile }); // perfil EXCLUSIVO desta execução: é parte da identidade do processo
   const cleanup = async () => {
     killTree(child);
     for (let i = 0; i < 8; i++) { try { rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 }); onProfileGone?.(profile); return; } catch { await sleep(300); } }

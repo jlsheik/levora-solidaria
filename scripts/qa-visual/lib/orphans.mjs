@@ -1,66 +1,68 @@
-// Registro em disco da execução em andamento + recuperação de ÓRFÃOS. Se o orquestrador for morto à força (taskkill /F, queda de energia), os filhos
-// (navegador, API, Vite), o perfil temporário e o banco `_qa` podem sobrar. A próxima execução (ou `--cleanup`) encontra o registro, confirma que
-// cada PID ainda é um processo NOSSO (linha de comando) antes de encerrá-lo, apaga os perfis e derruba o banco. Nunca guarda credenciais.
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+// Registro em disco POR EXECUÇÃO + recuperação de órfãos (M06: reescrito sobre propriedade explícita de processos).
+// Cada execução grava `<tmp>/levora-qa-visual/runs/<runId>.json` com a IDENTIDADE (PID + instante de criação + executável [+ perfil exclusivo]) de tudo o que criou.
+// Se o orquestrador morrer à força, a próxima execução só encerra um processo se a identidade registrada AINDA conferir; só apaga um diretório se ele tiver
+// o marcador desta execução e nenhum processo estiver usando-o; nunca age por nome de processo nem por trecho de linha de comando; nunca toca em execução viva.
+// O que não puder ser comprovado é PRESERVADO e fica registrado em `incertos.log`. Nunca guarda credenciais.
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { OWNER_MARKER, captureIdentity, killOwned, listProcesses, verifyOwnership } from "./procowner.mjs";
 
-/** Marcadores que identificam processos criados por esta rotina (linha de comando). */
-export const OURS = /qa-visual|levora-qa-profile/;
 /** Contêineres Docker criados por `qa:security` (nginx real): só estes nomes são removidos na recuperação. */
 export const OUR_CONTAINER = /^levora-qa-nginx-[a-z0-9-]+$/;
+export const PROFILE_PREFIX = "levora-qa-profile-";
 
-export const stateDir = () => path.join(tmpdir(), "levora-qa-visual");
-export const stateFile = () => path.join(stateDir(), "active.json");
+export const stateDir = () => path.join(tmpdir(), "levora-qa-visual", "runs");
+export const newRunId = () => `${Date.now().toString(36)}-${randomBytes(6).toString("hex")}`;
 
-export function readState(file = stateFile()) {
-  try { return JSON.parse(readFileSync(file, "utf8")); } catch { return null; }
-}
-export function writeState(state, file = stateFile()) {
+export function readState(file) { try { return JSON.parse(readFileSync(file, "utf8")); } catch { return null; } }
+export function writeState(state, file) {
   mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   writeFileSync(tmp, JSON.stringify(state));
   renameSync(tmp, file);
 }
-export function clearState(file = stateFile()) { try { rmSync(file, { force: true }); } catch { /* ok */ } }
-
-export function isAlive(pid) {
-  try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; }
-}
-
-/** Linha de comando de um PID (Windows: PowerShell/CIM; demais: ps). Vazio se não existir. */
-export function commandLineOf(pid) {
-  try {
-    if (process.platform === "win32") {
-      const r = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`], { encoding: "utf8", windowsHide: true, timeout: 15000 });
-      return (r.stdout || "").trim();
-    }
-    return (spawnSync("ps", ["-p", String(Number(pid)), "-o", "args="], { encoding: "utf8" }).stdout || "").trim();
-  } catch { return ""; }
-}
+export function clearState(file) { try { rmSync(file, { force: true }); } catch { /* ok */ } }
+export function isAlive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; } }
 
 /**
- * Decide o que fazer com um registro anterior (função PURA, testada):
- *  - se o orquestrador anterior ainda está vivo e é nosso → { busy: true } (não mexe em nada; evita duas execuções recriando o mesmo banco);
- *  - senão devolve os PIDs nossos ainda vivos a encerrar, os perfis a apagar e o banco a derrubar.
+ * Decide (PURA, testada): execução anterior viva (identidade do orquestrador confere) = { busy } e NADA é tocado;
+ * orquestrador com PID vivo mas sem identidade registrada = incerto = também { busy } (conservador);
+ * senão devolve os registros a verificar/encerrar, os diretórios a considerar e o banco a derrubar.
  */
-export function planRecovery(state, { alive, cmdline }) {
-  if (!state) return { busy: false, kill: [], profiles: [], database: null, containers: [] };
-  const orch = state.orchestrator;
-  if (orch && alive(orch) && OURS.test(cmdline(orch))) return { busy: true, pid: orch, kill: [], profiles: [], database: null, containers: [] };
-  const kill = (state.children ?? []).filter((c) => alive(c.pid) && OURS.test(cmdline(c.pid))).map((c) => c.pid);
-  return { busy: false, kill, profiles: state.profiles ?? [], database: state.database ?? null, containers: (state.containers ?? []).filter((n) => OUR_CONTAINER.test(n)) };
+export function planRecovery(state, { table, alive = isAlive }) {
+  const empty = { busy: false, children: [], profiles: [], database: null, containers: [] };
+  if (!state) return empty;
+  const o = state.orchestrator;
+  if (o && Number.isInteger(o.pid)) {
+    if (o.start) { if (verifyOwnership(o, table).owned) return { ...empty, busy: true, pid: o.pid }; }
+    else if (alive(o.pid)) return { ...empty, busy: true, pid: o.pid, uncertain: true };
+  }
+  return { busy: false, children: state.children ?? [], profiles: state.profiles ?? [], database: state.database ?? null, containers: (state.containers ?? []).filter((n) => OUR_CONTAINER.test(n)) };
 }
 
 /** Estado da execução atual, persistido a cada mudança. */
 export class RunState {
-  constructor(file = stateFile()) { this.file = file; this.s = { orchestrator: process.pid, children: [], profiles: [], containers: [], database: null, startedAt: new Date().toISOString() }; }
+  constructor(file, runId = newRunId()) {
+    this.runId = runId; this.file = file ?? path.join(stateDir(), `${runId}.json`); this.pending = [];
+    this.s = { runId, orchestrator: { pid: process.pid, start: null, exe: null }, children: [], profiles: [], containers: [], database: null, startedAt: new Date().toISOString() };
+  }
   save() { writeState(this.s, this.file); }
-  begin() { this.save(); }
-  addChild(pid, kind) { if (pid) { this.s.children.push({ pid, kind }); this.save(); } }
+  begin({ list = listProcesses } = {}) { this.save(); this.pending.push(captureIdentity(process.pid, { list }).then((id) => { if (id) { this.s.orchestrator = { pid: id.pid, start: id.start, exe: id.exe }; this.save(); } })); }
+  /** Registra um filho criado por esta execução; a identidade é capturada em seguida (`settle()` aguarda). */
+  addChild(pid, kind, extra = {}, { list = listProcesses } = {}) {
+    if (!pid) return; const rec = { pid, kind, start: null, exe: null, ...(extra.profile ? { profile: extra.profile } : {}) };
+    this.s.children.push(rec); this.save();
+    this.pending.push(captureIdentity(pid, { list }).then((id) => { if (id) { rec.start = id.start; rec.exe = id.exe; this.save(); } }));
+  }
+  async settle() { const p = this.pending; this.pending = []; await Promise.all(p); }
   dropChild(pid) { this.s.children = this.s.children.filter((c) => c.pid !== pid); this.save(); }
-  addProfile(dir) { this.s.profiles.push(dir); this.save(); }
+  /** Diretório ou arquivo temporário exclusivo desta execução. Diretórios recebem o marcador com o runId. */
+  addProfile(dir) {
+    this.s.profiles.push(dir); this.save();
+    try { if (existsSync(dir) && statSync(dir).isDirectory()) writeFileSync(path.join(dir, OWNER_MARKER), this.runId); } catch { /* sem marcador = nunca será apagado na recuperação */ }
+  }
   dropProfile(dir) { this.s.profiles = this.s.profiles.filter((d) => d !== dir); this.save(); }
   addContainer(name) { this.s.containers = [...(this.s.containers ?? []), name]; this.save(); }
   dropContainer(name) { this.s.containers = (this.s.containers ?? []).filter((n) => n !== name); this.save(); }
@@ -69,16 +71,52 @@ export class RunState {
   end() { clearState(this.file); }
 }
 
-/** Recupera órfãos de uma execução anterior. `actions` = { killTree(pid), removeDir(dir), dropDb(name) }. Retorna um resumo. */
-export async function recoverOrphans({ file = stateFile(), alive = isAlive, cmdline = commandLineOf, actions }) {
-  const state = readState(file);
-  const plan = planRecovery(state, { alive, cmdline });
-  if (plan.busy) return { busy: true, pid: plan.pid };
-  const done = { killed: [], profiles: [], containers: [], database: null, errors: [] };
-  for (const pid of plan.kill) { try { await actions.killTree(pid); done.killed.push(pid); } catch (e) { done.errors.push(`pid ${pid}: ${e.message}`); } }
-  for (const dir of plan.profiles) { try { if (existsSync(dir) && path.basename(dir).startsWith("levora-qa-profile-")) { await actions.removeDir(dir); done.profiles.push(dir); } } catch (e) { done.errors.push(`perfil: ${e.message}`); } }
-  for (const name of plan.containers) { try { await actions.removeContainer?.(name); done.containers.push(name); } catch (e) { done.errors.push(`contêiner: ${e.message}`); } }
-  if (plan.database) { try { await actions.dropDb(plan.database); done.database = plan.database; } catch (e) { done.errors.push(`banco: ${e.message}`); } }
-  if (state) clearState(file);
-  return { busy: false, ...done };
+/** Decide se um diretório/arquivo registrado pode ser apagado (puro, testado). */
+export function canRemoveProfile(dir, { runId, tmp = tmpdir(), exists = existsSync, isDir = (d) => { try { return statSync(d).isDirectory(); } catch { return false; } }, readMarker = (d) => { try { return readFileSync(path.join(d, OWNER_MARKER), "utf8"); } catch { return null; } }, table, uncertainProfiles = [] }) {
+  if (!dir || !exists(dir)) return { ok: false, reason: "não existe" };
+  const base = path.basename(dir);
+  if (!base.startsWith("levora-qa-") ) return { ok: false, reason: "nome fora do padrão de diretório de QA" };
+  if (path.resolve(path.dirname(dir)).toLowerCase() !== path.resolve(tmp).toLowerCase()) return { ok: false, reason: "fora do diretório temporário" };
+  if (isDir(dir)) { const m = readMarker(dir); if (m === null) return { ok: false, reason: "sem marcador de propriedade (pode pertencer a outra execução)" }; if (m.trim() !== runId) return { ok: false, reason: "marcador pertence a outra execução" }; }
+  if (uncertainProfiles.includes(dir)) return { ok: false, reason: "usado por processo de identidade incerta (preservado)" };
+  if (table && table.some((p) => (p.cmd || "").includes(dir))) return { ok: false, reason: "ainda em uso por um processo em execução" };
+  return { ok: true };
+}
+
+/**
+ * Recupera órfãos de execuções anteriores MORTAS. `actions` = { removeDir(dir), dropDb(name), removeContainer?(name) }.
+ * `list`/`kill` injetáveis (testes com processos sintéticos). Execução viva (identidade confere) → { busy } sem tocar em nada.
+ */
+export async function recoverOrphans({ dir = stateDir(), tmp = tmpdir(), ownRunId = null, list = listProcesses, alive = isAlive, kill, actions }) {
+  const out = { busy: false, killed: [], preserved: [], profiles: [], profilesPreserved: [], containers: [], database: null, errors: [], runs: 0 };
+  let files = []; try { files = readdirSync(dir).filter((f) => f.endsWith(".json")); } catch { return out; }
+  for (const f of files) {
+    const file = path.join(dir, f); const state = readState(file); if (!state || state.runId === ownRunId) continue;
+    let table = null; try { table = list(); } catch { table = null; }
+    const plan = planRecovery(state, { table, alive });
+    if (plan.busy) return { ...out, busy: true, pid: plan.pid };
+    out.runs++;
+    const ko = await killOwned(plan.children, { list, ...(kill ? { kill } : {}) });
+    out.killed.push(...ko.killed); out.errors.push(...ko.errors);
+    const unsure = ko.preserved.filter((p) => !p.gone);
+    out.preserved.push(...unsure);
+    const uncertainProfiles = plan.children.filter((c) => unsure.some((u) => u.pid === c.pid)).map((c) => c.profile).filter(Boolean);
+    let after = null; try { after = list(); } catch { after = null; }
+    for (const d of plan.profiles) {
+      const c = canRemoveProfile(d, { runId: state.runId, tmp, table: after ?? [{ cmd: d }], uncertainProfiles }); // sem tabela: assume "em uso"
+      if (!c.ok) { if (c.reason !== "não existe") out.profilesPreserved.push({ dir: d, reason: c.reason }); continue; }
+      try { await actions.removeDir(d); out.profiles.push(d); } catch (e) { out.errors.push(`perfil: ${e.message}`); }
+    }
+    for (const name of plan.containers) { try { await actions.removeContainer?.(name); out.containers.push(name); } catch (e) { out.errors.push(`contêiner: ${e.message}`); } }
+    if (plan.database) { try { await actions.dropDb(plan.database, state.runId); out.database = plan.database; } catch (e) { out.errors.push(`banco: ${e.message}`); } }
+    if (unsure.length || out.profilesPreserved.length) { try { appendFileSync(path.join(dir, "incertos.log"), `${new Date().toISOString()} run=${state.runId} preservados=${JSON.stringify([...unsure, ...out.profilesPreserved])}\n`); } catch { /* ok */ } }
+    clearState(file);
+  }
+  return out;
+}
+
+/** SIGINT/SIGTERM: executa a limpeza da PRÓPRIA execução (só o que ela criou), apaga o registro e sai. Injetável (testes usam um EventEmitter). */
+export function installSignalHandlers({ cleanups, state, proc = process, exitCode }) {
+  let started = false;
+  for (const sig of ["SIGINT", "SIGTERM"]) proc.on(sig, async () => { if (started) return; started = true; try { await cleanups.runAll(); } catch { /* erros de limpeza já ficam no registro do Cleanups */ } state.end(); proc.exit(exitCode); });
 }

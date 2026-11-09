@@ -146,13 +146,13 @@ describe("casos de upload", () => {
 
 describe("recuperação de contêineres órfãos", () => {
   it("planRecovery inclui só contêineres com o nome da rotina; recoverOrphans os remove e limpa o registro", async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "qa-orph-test-")); const file = path.join(dir, "active.json");
+    const dir = mkdtempSync(path.join(tmpdir(), "qa-orph-test-")); const file = path.join(dir, "run-a.json");
     try {
-      writeFileSync(file, JSON.stringify({ orchestrator: 99999991, children: [], profiles: [], containers: ["levora-qa-nginx-1-abc", "postgres-de-outra-coisa", "levora-qa-nginx-2-x; rm -rf"], database: null }));
+      writeFileSync(file, JSON.stringify({ runId: "run-a", orchestrator: { pid: 99999991, start: "1" }, children: [], profiles: [], containers: ["levora-qa-nginx-1-abc", "postgres-de-outra-coisa", "levora-qa-nginx-2-x; rm -rf"], database: null }));
       const removed: string[] = [];
-      const plan = planRecovery(JSON.parse(readFileSync(file, "utf8")), { alive: () => false, cmdline: () => "" });
+      const plan = planRecovery(JSON.parse(readFileSync(file, "utf8")), { table: [], alive: () => false });
       expect(plan.containers).toEqual(["levora-qa-nginx-1-abc"]);
-      const out = await recoverOrphans({ file, alive: () => false, cmdline: () => "", actions: { killTree: async () => {}, removeDir: async () => {}, dropDb: async () => {}, removeContainer: async (n: string) => { removed.push(n); } } });
+      const out = await recoverOrphans({ dir, ownRunId: "outra", list: () => [], alive: () => false, actions: { removeDir: async () => {}, dropDb: async () => {}, removeContainer: async (n: string) => { removed.push(n); } } });
       expect(removed).toEqual(["levora-qa-nginx-1-abc"]);
       expect(out.containers).toEqual(["levora-qa-nginx-1-abc"]);
       expect(() => readFileSync(file)).toThrow();
@@ -161,7 +161,7 @@ describe("recuperação de contêineres órfãos", () => {
   it("RunState registra e remove contêineres sem guardar segredos", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "qa-orph-test-")); const file = path.join(dir, "active.json");
     try {
-      const s = new RunState(file); s.begin(); s.addContainer("levora-qa-nginx-9-z");
+      const s = new RunState(file); s.begin({ list: () => [] }); s.addContainer("levora-qa-nginx-9-z");
       expect(JSON.parse(readFileSync(file, "utf8")).containers).toEqual(["levora-qa-nginx-9-z"]);
       s.dropContainer("levora-qa-nginx-9-z");
       expect(JSON.parse(readFileSync(file, "utf8")).containers).toEqual([]);

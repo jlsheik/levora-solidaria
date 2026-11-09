@@ -119,7 +119,7 @@ export const SCENARIOS = [
   { id: "dropzone-border", user: "owner", path: ATTRIBUTIONS, steps: [openReceive], target: dropzone, measure: "boundary", variant: "FileDropzone: limite" },
   { id: "dropzone-keyboard-focus", user: "owner", path: ATTRIBUTIONS, steps: [openReceive], target: dropzone, measure: "dropzoneFocus", variant: "FileDropzone: foco por teclado" },
   { id: "dropzone-error-text", user: "owner", path: ATTRIBUTIONS, steps: [openReceive, badFile], target: { css: '[role="alert"] span', within: '[role="dialog"]' }, measure: "text", variant: "FileDropzone: erro" },
-  { id: "dropzone-error-clear", user: "owner", path: ATTRIBUTIONS, steps: [openReceive, badFile], target: { css: 'button[aria-label="Clear error"]', within: '[role="dialog"]' }, measure: "button", variant: "ghost (ícone)", states: ALL4 },
+  { id: "dropzone-error-clear", user: "owner", path: ATTRIBUTIONS, steps: [openReceive, badFile], target: { css: 'button[aria-label="Fechar aviso de erro"], button[aria-label="Clear error"]', within: '[role="dialog"]' }, measure: "button", variant: "ghost (ícone)", states: ALL4 },
 
   // ---- Fase 99B: diagnóstico de unidades (somente leitura). Cada estado exigido pela especificação tem seu cenário.
   { id: "units-badge-canonical", user: "owner", path: UNITS, steps: [], target: { css: 'td [data-kind="canonica"]', text: "^Canônica" }, measure: "text", variant: "Unidades: classificadas" },

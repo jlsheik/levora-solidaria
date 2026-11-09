@@ -6,7 +6,7 @@ import { sql } from "kysely";
 import { businessDateOf } from "../../src/helpers/businessDate";
 import { db } from "../../src/helpers/db";
 import { generatePasswordHash } from "../../src/helpers/generatePasswordHash";
-import { buildRequest, createSessionCookie } from "../../test/helpers";
+import { buildRequest as buildRequestReal, createSessionCookie } from "../../test/helpers";
 import { handle as stockTransaction } from "../../src/endpoints/stock-transactions_POST";
 import { handle as stockDestination } from "../../src/endpoints/stock-destinations_POST";
 import { handle as receiveAllocation } from "../../src/endpoints/allocations-receive_POST";
@@ -16,6 +16,11 @@ import { handle as destinationCorrection } from "../../src/endpoints/stock-desti
 import superjson from "superjson";
 import { handle as filesUpload } from "../../src/endpoints/files-upload_POST";
 import { handle as destinationProof } from "../../src/endpoints/stock-destination-proof_POST";
+
+// M05 (fase F): o relógio da semente avança 1 s a cada chamada de endpoint (só existe quando a pilha de QA define QA_CLOCK_SEED_TICKS; a API em execução tem relógio constante).
+// Assim os eventos da trilha de auditoria têm instantes distintos, na ordem da semente, sem depender de quantas vezes alguma biblioteca lê o relógio.
+const tick = () => (globalThis as unknown as { __qaClockAdvance?: (ms: number) => void }).__qaClockAdvance?.(1000);
+const buildRequest: typeof buildRequestReal = (...args) => { tick(); return buildRequestReal(...args); };
 
 // vem do orquestrador (scenarios.mjs), para a semente e o login do navegador nunca divergirem
 const QA_PASSWORD = process.env.QA_PASSWORD ?? "";
