@@ -50,11 +50,15 @@ export const QA_DB_OWNER_MARK = "levora-qa-owned";
  *  - "adopt": existe, SEM marca, mas está vazio (nenhuma tabela em public) — pode ser marcado e usado;
  *  - "refuse": existe, sem marca e com tabelas (pode ser um banco de outro uso): nunca apagar.
  */
-export function decideDatabaseOwnership({ exists, comment, publicTableCount, otherSessions = 0 }) {
+export function decideDatabaseOwnership({ exists, comment, publicTableCount, otherSessions = 0, runId = null }) {
   if (!exists) return "create";
   // M23: banco com sessões de OUTRA execução viva nunca é recriado/reutilizado, mesmo marcado ("é do QA" ≠ "é desta execução"): falha segura.
   if (Number(otherSessions) > 0) return "busy";
-  if (typeof comment === "string" && comment.startsWith(QA_DB_OWNER_MARK)) return "reuse";
+  if (typeof comment === "string" && comment.startsWith(QA_DB_OWNER_MARK)) {
+    // M24: marca com runId de OUTRA execução (viva ou morta) nunca é reutilizada em silêncio; marca antiga (sem runId) continua aceita; a mesma execução reutiliza.
+    const owner = markRunId(comment);
+    return owner && owner !== runId ? "foreign" : "reuse";
+  }
   return Number(publicTableCount) === 0 ? "adopt" : "refuse";
 }
 

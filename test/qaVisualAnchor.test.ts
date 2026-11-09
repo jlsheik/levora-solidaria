@@ -106,3 +106,10 @@ describe("M23 — isolamento por execução do banco de QA (a marca prova 'é do
   });
   it("comentário que apenas CONTÉM a marca no meio não conta como runId válido", () => { expect(gd.markRunId("x levora-qa-owned run=A")).toBeNull(); expect(gd.markRunId("levora-qa-owned run=A; DROP")).toBeNull(); });
 });
+
+describe("M24 — marca de outra execução e reivindicação exclusiva (decisão pura; o comportamento real foi validado em PostgreSQL: m24-evidence/isolamento-real.json)", () => {
+  const d = gd.decideDatabaseOwnership;
+  it("marca com runId de OUTRA execução ⇒ foreign (nunca reutilizada em silêncio), inclusive sem runId informado", () => { expect(d({ exists: true, comment: "levora-qa-owned run=A", publicTableCount: 9, runId: "B" })).toBe("foreign"); expect(d({ exists: true, comment: "levora-qa-owned run=A", publicTableCount: 9 })).toBe("foreign"); });
+  it("a MESMA execução reutiliza a sua marca; marca antiga (sem runId) continua aceita", () => { expect(d({ exists: true, comment: "levora-qa-owned run=A", publicTableCount: 9, runId: "A" })).toBe("reuse"); expect(d({ exists: true, comment: gd.QA_DB_OWNER_MARK, publicTableCount: 9, runId: "B" })).toBe("reuse"); });
+  it("sessões ativas têm precedência sobre a marca (busy)", () => { expect(d({ exists: true, comment: "levora-qa-owned run=A", publicTableCount: 9, runId: "A", otherSessions: 1 })).toBe("busy"); });
+});

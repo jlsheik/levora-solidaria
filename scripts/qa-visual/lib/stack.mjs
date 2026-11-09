@@ -31,22 +31,42 @@ export function resolveDatabaseUrl({ cli, env = process.env, root }) {
 }
 
 /** Cria o banco (se faltar) e recria o schema a partir de db/schema.sql — SÓ depois da guarda de banco descartável. */
+/** M24: classid das travas de reivindicação de banco do QA (distinto do 842013 das tarefas agendadas da aplicação). */
+export const QA_DB_CLAIM_CLASS = 842099;
+const claims = new Map(); // nome do banco -> { admin, runId }: reivindicações DESTE processo (a conexão dedicada mantém a trava de sessão)
+async function openClaim(adminUrl, dbName) {
+  const { default: postgres } = await import("postgres");
+  // conexão única, sem reciclagem por tempo: a trava de sessão só vale enquanto ESTA conexão viver (se o processo morrer, o PostgreSQL a libera)
+  const admin = postgres(adminUrl, { max: 1, prepare: false, onnotice: () => {}, idle_timeout: 0, max_lifetime: null });
+  let ok = false;
+  try { ok = (await admin`SELECT pg_try_advisory_lock(${QA_DB_CLAIM_CLASS}, hashtext(${dbName})) AS ok`)[0].ok; } catch (e) { await admin.end(); throw e; }
+  if (!ok) { await admin.end(); throw new Error(`o banco "${dbName}" já está reivindicado por outra execução do QA (trava consultiva ativa): recusado (nada é recriado nem apagado). Use um banco exclusivo desta execução.`); }
+  return admin;
+}
+/** Libera a reivindicação deste processo (idempotente). */
+export async function releaseDatabaseClaim(dbName) { const c = claims.get(dbName); if (!c) return; claims.delete(dbName); try { await c.admin.end(); } catch { /* a conexão já caiu: a trava já foi liberada */ } }
+
 export async function prepareDatabase(url, root, { clock, runId } = {}) {
   const target = assertDisposableDatabase(url);
   const { default: postgres } = await import("postgres");
   const adminUrl = new URL(url); adminUrl.pathname = "/postgres";
-  const admin = postgres(adminUrl.toString(), { max: 1, prepare: false, onnotice: () => {} });
+  if (claims.has(target.database)) throw new Error(`o banco "${target.database}" já está reivindicado por esta execução; use um banco por preparação`);
+  const admin = await openClaim(adminUrl.toString(), target.database); // M24: exclusividade ANTES de qualquer verificação ou alteração
+  claims.set(target.database, { admin, runId });
+  let claimed = false;
   try {
     const found = await admin`SELECT oid, pg_catalog.shobj_description(oid, 'pg_database') AS comment FROM pg_database WHERE datname = ${target.database}`;
     let tableCount = 0;
     if (found.length > 0) { const probe = postgres(url, { max: 1, prepare: false, onnotice: () => {} }); try { tableCount = Number((await probe`SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'public'`)[0].n); } finally { await probe.end(); } }
     const others = found.length > 0 ? Number((await admin`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = ${target.database} AND pid <> pg_backend_pid()`)[0].n) : 0; // M23: sessões de outra execução
-    const decision = decideDatabaseOwnership({ exists: found.length > 0, comment: found[0]?.comment, publicTableCount: tableCount, otherSessions: others });
+    const decision = decideDatabaseOwnership({ exists: found.length > 0, comment: found[0]?.comment, publicTableCount: tableCount, otherSessions: others, runId });
     if (decision === "busy") throw new Error(`o banco "${target.database}" está em uso por ${others} sessão(ões) de outra execução: recusado (nada é recriado nem apagado). Use um banco exclusivo desta execução.`);
+    if (decision === "foreign") throw new Error(`o banco "${target.database}" está marcado como de OUTRA execução do QA (${markRunId(found[0]?.comment)}): recusado (nada é reutilizado, recriado nem apagado). Se aquela execução morreu, a recuperação (--cleanup) ou o descarte explícito do banco resolvem.`);
     if (decision === "refuse") throw new Error(`o banco "${target.database}" existe, não tem a marca de propriedade do QA (${QA_DB_OWNER_MARK}) e contém tabelas: recusado (nada é apagado). Use um banco novo.`);
     if (decision === "create") await admin.unsafe(`CREATE DATABASE "${target.database.replace(/"/g, '""')}" TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C'`); // M09: ordenação FIXADA em C — sem isso a ordem dos itens (ORDER BY name) depende do locale do cluster (pt-BR: Água, Arroz, Lenço; C: Arroz, Lenço, Água) e as imagens mudam entre ambientes
     if (decision === "create" || decision === "adopt" || decision === "reuse") await admin.unsafe(`COMMENT ON DATABASE "${target.database.replace(/"/g, '""')}" IS '${dbOwnerComment(runId)}'`);
-  } finally { await admin.end(); }
+    claimed = true;
+  } finally { if (!claimed) await releaseDatabaseClaim(target.database); }
   const sql = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
   try {
     if (clock) { // M04: relógio congelado do banco `_qa` (função qa_clock.now + search_path do banco); a sessão do schema usa o mesmo search_path para os DEFAULT now()
@@ -58,17 +78,32 @@ export async function prepareDatabase(url, root, { clock, runId } = {}) {
     }
     await sql.unsafe("DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;");
     await sql.unsafe(readFileSync(path.join(root, "db", "schema.sql"), "utf8"));
-  } finally { await sql.end(); }
+  } catch (e) { await releaseDatabaseClaim(target.database); throw e; } finally { await sql.end(); }
   return target;
 }
 
-/** Remove o banco de QA ao final (só passa pela guarda `_qa`). `FORCE` derruba conexões que tenham sobrado. */
+/**
+ * Remove o banco de QA (só passa pela guarda `_qa`). M24: (1) exige a reivindicação exclusiva (trava consultiva) — a da própria execução ou, para limpeza de órfão, uma obtida aqui; se outra execução a detém, RECUSA;
+ * (2) exige a marca do QA e, com `runId`, que a marca seja desta execução; (3) `FORCE` só na reivindicação da PRÓPRIA execução (sessões que sobraram são dela); numa reivindicação obtida aqui,
+ * qualquer sessão ativa faz a limpeza ser recusada (nunca encerra sessão alheia).
+ */
 export async function dropDatabase(url, { runId } = {}) {
   const target = assertDisposableDatabase(url);
   const { default: postgres } = await import("postgres");
   const adminUrl = new URL(url); adminUrl.pathname = "/postgres";
-  const admin = postgres(adminUrl.toString(), { max: 1, prepare: false, onnotice: () => {} });
-  try { const c = await admin`SELECT pg_catalog.shobj_description(oid, 'pg_database') AS comment FROM pg_database WHERE datname = ${target.database}`; if (c.length === 0) return; const dd = decideDrop({ comment: c[0].comment, runId }); if (dd === "refuse-unmarked") throw new Error(`o banco "${target.database}" não tem a marca de propriedade do QA: não será apagado`); if (dd === "refuse-other-run") throw new Error(`o banco "${target.database}" pertence a OUTRA execução do QA (${markRunId(c[0].comment)}): não será apagado`); await admin.unsafe(`DROP DATABASE IF EXISTS "${target.database.replace(/"/g, '""')}" WITH (FORCE)`); } finally { await admin.end(); }
+  const own = claims.get(target.database);
+  const admin = own ? own.admin : await openClaim(adminUrl.toString(), target.database); // recusa se outra execução detém a trava
+  try {
+    const c = await admin`SELECT pg_catalog.shobj_description(oid, 'pg_database') AS comment FROM pg_database WHERE datname = ${target.database}`; if (c.length === 0) return;
+    const dd = decideDrop({ comment: c[0].comment, runId: runId ?? own?.runId });
+    if (dd === "refuse-unmarked") throw new Error(`o banco "${target.database}" não tem a marca de propriedade do QA: não será apagado`);
+    if (dd === "refuse-other-run") throw new Error(`o banco "${target.database}" pertence a OUTRA execução do QA (${markRunId(c[0].comment)}): não será apagado`);
+    if (!own) {
+      const n = Number((await admin`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = ${target.database} AND pid <> pg_backend_pid()`)[0].n);
+      if (n > 0) throw new Error(`o banco "${target.database}" tem ${n} sessão(ões) ativa(s) que não são desta execução: não será apagado (nenhuma sessão alheia é encerrada)`);
+    }
+    await admin.unsafe(`DROP DATABASE IF EXISTS "${target.database.replace(/"/g, '""')}"${own ? " WITH (FORCE)" : ""}`);
+  } finally { if (own) await releaseDatabaseClaim(target.database); else await admin.end(); }
 }
 
 function runNode(root, args, env, label, onSpawn, onLog) {

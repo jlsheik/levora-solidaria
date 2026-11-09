@@ -48,3 +48,11 @@ describe("isolamento entre execuções do QA (sintético)", () => {
     const act = actions(); const r = await run(sd, act, { alive: (pid: number) => pid === 4242 }); expect(r.busy).toBe(true); expect(existsSync(d2)).toBe(true); expect(act.dropped).not.toContain("levora_viva_qa");
   });
 });
+
+describe("M24 — a recuperação passa o runId da execução MORTA ao descarte do banco", () => {
+  it("dropDb recebe (nome, runId da morta): a limpeza só vale para o banco marcado com esse runId", async () => {
+    const sd = mk("lvm-state-"); state(sd, "MORTA-7", { database: "levora_morta7_qa" }); const seen: unknown[][] = [];
+    await orph.recoverOrphans({ dir: sd, ownRunId: "ATUAL", list: () => [], alive: () => false, actions: { removeDir: async () => {}, dropDb: async (...a: unknown[]) => { seen.push(a); } } });
+    expect(seen).toEqual([["levora_morta7_qa", "MORTA-7"]]);
+  });
+});
