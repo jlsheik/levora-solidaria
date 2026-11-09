@@ -50,9 +50,27 @@ export const QA_DB_OWNER_MARK = "levora-qa-owned";
  *  - "adopt": existe, SEM marca, mas está vazio (nenhuma tabela em public) — pode ser marcado e usado;
  *  - "refuse": existe, sem marca e com tabelas (pode ser um banco de outro uso): nunca apagar.
  */
-export function decideDatabaseOwnership({ exists, comment, publicTableCount }) {
+export function decideDatabaseOwnership({ exists, comment, publicTableCount, otherSessions = 0, runId = null }) {
   if (!exists) return "create";
-  if (typeof comment === "string" && comment.startsWith(QA_DB_OWNER_MARK)) return "reuse";
+  // M23: banco com sessões de OUTRA execução viva nunca é recriado/reutilizado, mesmo marcado ("é do QA" ≠ "é desta execução"): falha segura.
+  if (Number(otherSessions) > 0) return "busy";
+  if (typeof comment === "string" && comment.startsWith(QA_DB_OWNER_MARK)) {
+    // M24: marca com runId de OUTRA execução (viva ou morta) nunca é reutilizada em silêncio; marca antiga (sem runId) continua aceita; a mesma execução reutiliza.
+    const owner = markRunId(comment);
+    return owner && owner !== runId ? "foreign" : "reuse";
+  }
   return Number(publicTableCount) === 0 ? "adopt" : "refuse";
 }
 
+
+/** M23: texto da marca com o identificador da execução que criou/adotou o banco. */
+export const dbOwnerComment = (runId) => (runId ? `${QA_DB_OWNER_MARK} run=${runId}` : QA_DB_OWNER_MARK);
+/** M23: runId gravado na marca (ou null para marca antiga sem runId). */
+export const markRunId = (comment) => { const m = /^levora-qa-owned run=([A-Za-z0-9-]+)$/.exec(String(comment ?? "")); return m ? m[1] : null; };
+/** M23: decide a limpeza: "drop" | "refuse-unmarked" | "refuse-other-run". Sem runId informado ou marca antiga, mantém o comportamento anterior (só exige a marca). */
+export function decideDrop({ comment, runId }) {
+  if (typeof comment !== "string" || !comment.startsWith(QA_DB_OWNER_MARK)) return "refuse-unmarked";
+  const owner = markRunId(comment);
+  if (runId && owner && owner !== runId) return "refuse-other-run";
+  return "drop";
+}

@@ -93,3 +93,23 @@ describe("A8 — propriedade do banco de QA (marca, além do sufixo _qa)", () =>
   it("sem marca e vazio → adopt", () => { expect(d({ exists: true, comment: null, publicTableCount: 0 })).toBe("adopt"); });
   it("sem marca e com tabelas (banco de outro uso, mesmo com sufixo _qa) → refuse", () => { expect(d({ exists: true, comment: null, publicTableCount: 12 })).toBe("refuse"); expect(d({ exists: true, comment: "outro comentario", publicTableCount: 3 })).toBe("refuse"); });
 });
+
+describe("M23 — isolamento por execução do banco de QA (a marca prova 'é do QA', não 'é desta execução')", () => {
+  const d = gd.decideDatabaseOwnership;
+  it("banco MARCADO mas com sessões de outra execução ativa → busy (nunca reutilizado/recriado)", () => { expect(d({ exists: true, comment: gd.QA_DB_OWNER_MARK, publicTableCount: 40, otherSessions: 1 })).toBe("busy"); });
+  it("o mesmo vale para banco vazio sem marca e para banco com tabelas: sessões ativas → busy antes de qualquer outra decisão", () => { expect(d({ exists: true, comment: null, publicTableCount: 0, otherSessions: 3 })).toBe("busy"); expect(d({ exists: true, comment: null, publicTableCount: 9, otherSessions: 2 })).toBe("busy"); });
+  it("sem sessões ativas o comportamento anterior é mantido", () => { expect(d({ exists: true, comment: gd.QA_DB_OWNER_MARK, publicTableCount: 40, otherSessions: 0 })).toBe("reuse"); expect(d({ exists: false })).toBe("create"); });
+  it("a marca carrega o runId e é lida de volta; marca antiga (sem runId) continua válida", () => { const c = gd.dbOwnerComment("abc-123"); expect(c).toBe("levora-qa-owned run=abc-123"); expect(gd.markRunId(c)).toBe("abc-123"); expect(gd.markRunId(gd.QA_DB_OWNER_MARK)).toBeNull(); expect(gd.dbOwnerComment()).toBe(gd.QA_DB_OWNER_MARK); });
+  it("limpeza: banco de OUTRA execução é recusado; o próprio é apagado; marca antiga ou runId não informado mantém o comportamento anterior; sem marca é recusado", () => {
+    const dd = gd.decideDrop; expect(dd({ comment: "levora-qa-owned run=A", runId: "B" })).toBe("refuse-other-run"); expect(dd({ comment: "levora-qa-owned run=A", runId: "A" })).toBe("drop");
+    expect(dd({ comment: gd.QA_DB_OWNER_MARK, runId: "B" })).toBe("drop"); expect(dd({ comment: "levora-qa-owned run=A" })).toBe("drop"); expect(dd({ comment: null, runId: "A" })).toBe("refuse-unmarked"); expect(dd({ comment: "outro", runId: "A" })).toBe("refuse-unmarked");
+  });
+  it("comentário que apenas CONTÉM a marca no meio não conta como runId válido", () => { expect(gd.markRunId("x levora-qa-owned run=A")).toBeNull(); expect(gd.markRunId("levora-qa-owned run=A; DROP")).toBeNull(); });
+});
+
+describe("M24 — marca de outra execução e reivindicação exclusiva (decisão pura; o comportamento real foi validado em PostgreSQL: m24-evidence/isolamento-real.json)", () => {
+  const d = gd.decideDatabaseOwnership;
+  it("marca com runId de OUTRA execução ⇒ foreign (nunca reutilizada em silêncio), inclusive sem runId informado", () => { expect(d({ exists: true, comment: "levora-qa-owned run=A", publicTableCount: 9, runId: "B" })).toBe("foreign"); expect(d({ exists: true, comment: "levora-qa-owned run=A", publicTableCount: 9 })).toBe("foreign"); });
+  it("a MESMA execução reutiliza a sua marca; marca antiga (sem runId) continua aceita", () => { expect(d({ exists: true, comment: "levora-qa-owned run=A", publicTableCount: 9, runId: "A" })).toBe("reuse"); expect(d({ exists: true, comment: gd.QA_DB_OWNER_MARK, publicTableCount: 9, runId: "B" })).toBe("reuse"); });
+  it("sessões ativas têm precedência sobre a marca (busy)", () => { expect(d({ exists: true, comment: "levora-qa-owned run=A", publicTableCount: 9, runId: "A", otherSessions: 1 })).toBe("busy"); });
+});

@@ -108,7 +108,7 @@ export async function recoverOrphans({ dir = stateDir(), tmp = tmpdir(), ownRunI
       try { await actions.removeDir(d); out.profiles.push(d); } catch (e) { out.errors.push(`perfil: ${e.message}`); }
     }
     for (const name of plan.containers) { try { await actions.removeContainer?.(name); out.containers.push(name); } catch (e) { out.errors.push(`contêiner: ${e.message}`); } }
-    if (plan.database) { try { await actions.dropDb(plan.database); out.database = plan.database; } catch (e) { out.errors.push(`banco: ${e.message}`); } }
+    if (plan.database) { try { await actions.dropDb(plan.database, state.runId); out.database = plan.database; } catch (e) { out.errors.push(`banco: ${e.message}`); } }
     if (unsure.length || out.profilesPreserved.length) { try { appendFileSync(path.join(dir, "incertos.log"), `${new Date().toISOString()} run=${state.runId} preservados=${JSON.stringify([...unsure, ...out.profilesPreserved])}\n`); } catch { /* ok */ } }
     clearState(file);
   }
