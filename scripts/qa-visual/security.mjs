@@ -305,9 +305,9 @@ async function main() {
     let target; try { target = assertDisposableDatabase(dbUrl); } catch (e) { report.addEnv(`banco: ${e.message}`); return; }
     console.log(`banco de QA: ${target.database} em ${target.host}:${target.port} (schema recriado a partir de db/schema.sql)`);
     try {
-      if (!opt["keep-db"]) cleanups.add("banco de QA", async () => { await dropDatabase(dbUrl); state.clearDatabase(); });
+      if (!opt["keep-db"]) cleanups.add("banco de QA", async () => { await dropDatabase(dbUrl, { runId: state.runId }); state.clearDatabase(); });
       state.setDatabase(target.database);
-      await prepareDatabase(dbUrl, root);
+      await prepareDatabase(dbUrl, root, { runId: state.runId });
       process.env.QA_PASSWORD = QA_PASSWORD;
       // armazenamento de arquivos DESCARTÁVEL (a API e a semente gravam aqui; nunca em storage/uploads do projeto)
       storageDir = mkdtempSync(path.join(tmpdir(), "levora-qa-profile-storage-")); state.addProfile(storageDir);

@@ -107,9 +107,9 @@ async function main() {
   console.log(`banco de QA: ${target.database} em ${target.host}:${target.port} (schema recriado a partir de db/schema.sql)`);
   let stack; let diag;
   try {
-    if (!opt["keep-db"]) cleanups.add("banco de QA", async () => { await dropDatabase(dbUrl); state.clearDatabase(); }); // roda por ÚLTIMO (depois de parar API/Vite/navegador)
+    if (!opt["keep-db"]) cleanups.add("banco de QA", async () => { await dropDatabase(dbUrl, { runId: state.runId }); state.clearDatabase(); }); // roda por ÚLTIMO (depois de parar API/Vite/navegador)
     state.setDatabase(target.database);
-    await prepareDatabase(dbUrl, root, { clock: testClock });
+    await prepareDatabase(dbUrl, root, { clock: testClock, runId: state.runId });
     process.env.QA_PASSWORD = QA_PASSWORD;
     if (opt.diagnostics) diag = new Diagnostics({ dir: opt.diagnostics });
     stack = await startStack({ root, databaseUrl: dbUrl, clock: testClock, onSpawn: (pid, kind, extra) => state.addChild(pid, kind, extra), onLog: diag ? (label, text) => diag.serverLog(label, text) : undefined });
