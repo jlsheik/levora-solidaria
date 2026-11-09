@@ -120,6 +120,8 @@ diretórios `levora-qa-profile-*` e derrube o banco `_qa`. Uma execução simult
 
 ## Execução reduzida no CI (GitHub Actions)
 
+> **Estado atual do repositório:** o workflow `CI` está **desabilitado manualmente** no GitHub (e o plano do repositório privado não oferece proteção de branch nem checks obrigatórios). O texto abaixo descreve o que o job `qa-browser` faz **quando o workflow é habilitado**; enquanto estiver desabilitado, nenhum resultado de CI existe e nada aqui deve ser lido como "CI verde".
+
 > **Não é a matriz completa.** O CI roda um **subconjunto** explícito; a matriz completa (2 navegadores, 27 cenários, `qa:security` com Edge e Chrome) continua sendo **local**.
 > O que o CI não executa **não é dado como aprovado**: aparece como "não executado" no relatório e no resumo do job.
 
@@ -442,7 +444,7 @@ Nenhum cenário novo: o estado da análise aparece só nos diálogos já coberto
 - **Manifesto.** Caminhos de `file`/`fingerprintFile` precisam ficar dentro da pasta de baselines (`safeJoin`); fora disso o baseline é `CORRUPT`. Versão do navegador desconhecida ou sem major legível ⇒ `STALE`.
 - **Banco de QA.** Além do sufixo `_qa`, o banco criado pelo QA recebe a marca `levora-qa-owned` (`COMMENT ON DATABASE`). Banco existente sem marca e com tabelas é **recusado** (nada é apagado); sem marca e vazio é adotado; `dropDatabase` só apaga banco marcado.
 
-### M23 — isolamento por execução do banco de QA (correção local, ainda não publicada)
+### M23 — isolamento por execução do banco de QA (etapa intermediária; ver M24, que a completa e foi validada em PostgreSQL real)
 A marca `levora-qa-owned` prova que o banco **é do QA**, não que **é desta execução**. Agora: (1) `prepareDatabase` recusa (falha segura) um banco com **sessões de outra execução ativa**, mesmo marcado; (2) a marca passa a carregar o `runId` (`levora-qa-owned run=<id>`); (3) `dropDatabase` recusa apagar banco marcado com **outro** `runId` (nunca derruba, com `FORCE`, o banco de outra execução). Banco com marca antiga (sem `runId`) continua aceito. A suíte de testes do produto (`vitest`, banco `*_test`) **não** usa este mecanismo: seu `globalSetup` recria o schema do banco informado sem checar uso concorrente; duas suítes sobre o mesmo banco se corrompem — risco do ambiente de testes (um banco de teste por execução), não do PR A.
 
 ### M24 — reivindicação exclusiva do banco de QA (validada em PostgreSQL real)
