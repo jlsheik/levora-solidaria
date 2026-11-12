@@ -9,6 +9,14 @@ export type AllocationStatus = "aceita" | "cancelada" | "em_coleta" | "em_transp
 
 export type ApprovalStatus = "aprovada" | "expirada" | "pendente" | "rejeitada";
 
+export type AuditActorType = "agent" | "system" | "user";
+
+export type ExceptionStatus = "aprovada" | "pendente" | "rejeitada";
+
+export type IntegrityAlertLevel = "alto_risco" | "operacional" | "seguranca";
+
+export type IntegrityAlertStatus = "aberto" | "descartado" | "reconhecido" | "resolvido";
+
 export type BackgroundTaskStatus = "cancelada" | "concluida" | "executando" | "falhou" | "pendente";
 
 export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
@@ -93,8 +101,233 @@ export interface ApprovalRequests {
   status: Generated<ApprovalStatus>;
 }
 
+export interface AgentPrincipals {
+  createdAt: Generated<Timestamp>;
+  enabled: Generated<boolean>;
+  id: Generated<number>;
+  name: string;
+  organizationId: number | null;
+  updatedAt: Generated<Timestamp>;
+  version: string;
+}
+
+export interface AutomationControls {
+  changedByUserId: number | null;
+  emergency: Generated<boolean>;
+  id: Generated<number>;
+  organizationId: number | null;
+  paused: Generated<boolean>;
+  reason: string | null;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface DomainEventConsumptions {
+  attempts: Generated<number>;
+  consumer: string;
+  error: string | null;
+  eventId: Int8;
+  outcome: Generated<string>;
+  processedAt: Generated<Timestamp>;
+}
+
+export interface DomainEvents {
+  correlationId: string | null;
+  createdAt: Generated<Timestamp>;
+  entityId: string | null;
+  entityType: string;
+  eventType: string;
+  id: Generated<Int8>;
+  organizationId: number | null;
+  payload: Generated<Json>;
+}
+
+export interface ExceptionDecisions {
+  decidedAt: Generated<Timestamp>;
+  decision: string;
+  exceptionId: Int8;
+  notes: string | null;
+  userId: number;
+}
+
+export interface AgentEventRunHistory {
+  actorType: Generated<AuditActorType>;
+  actorUserId: number | null;
+  createdAt: Generated<Timestamp>;
+  exceptionId: Int8 | null;
+  fromStatus: string | null;
+  id: Generated<Int8>;
+  reasonCode: string | null;
+  runId: Int8;
+  toStatus: string;
+}
+
+export type AgentEventRunStatus =
+  | "recebido"
+  | "validado"
+  | "ignorado"
+  | "bloqueado_politica"
+  | "aguardando_aprovacao"
+  | "rejeitado"
+  | "autorizado_simulacao"
+  | "simulacao_concluida"
+  | "falha"
+  | "dados_insuficientes";
+
+export type AgentEventReevaluationOutcome = "iniciada" | "concluida" | "ainda_insuficiente" | "bloqueada";
+
+export interface AgentEventReevaluations {
+  correlationId: string;
+  createdAt: Generated<Timestamp>;
+  finishedAt: Timestamp | null;
+  id: Generated<Int8>;
+  newDecision: string | null;
+  newStatus: string | null;
+  organizationId: number;
+  outcome: AgentEventReevaluationOutcome;
+  previousDecision: string | null;
+  previousExplanation: Json | null;
+  previousStatus: string;
+  reason: string | null;
+  requestedByUserId: number;
+  runId: Int8;
+  supplement: Generated<Json>;
+}
+
+export type AuditChainVerificationStatus = "em_andamento" | "integra" | "inconsistencia" | "incompleta" | "falha_tecnica";
+
+export interface AuditChainVerifications {
+  divergenceCount: number | null;
+  divergences: Generated<Json>;
+  durationMs: number | null;
+  errorKind: string | null;
+  finishedAt: Timestamp | null;
+  id: Generated<Int8>;
+  maxAuditIdAtStart: Int8 | null;
+  requestedByUserId: number;
+  scope: "global_chain";
+  startedAt: Generated<Timestamp>;
+  status: Generated<AuditChainVerificationStatus>;
+  totalEvents: number | null;
+  unhashedEvents: number | null;
+  verifiedEvents: number | null;
+}
+
+export interface OpportunityChanges {
+  changedByUserId: number;
+  correlationId: string;
+  createdAt: Generated<Timestamp>;
+  field: "category";
+  id: Generated<Int8>;
+  newValue: string | null;
+  opportunityId: number;
+  organizationId: number;
+  previousValue: string | null;
+  reason: string | null;
+  versionAfter: number;
+  versionBefore: number;
+}
+
+export interface AgentEventRuns {
+  correlationId: string | null;
+  agentPrincipalId: number;
+  attempts: Generated<number>;
+  createdAt: Generated<Timestamp>;
+  detail: Generated<Json>;
+  eventId: Int8;
+  eventType: string;
+  exceptionId: Int8 | null;
+  id: Generated<Int8>;
+  organizationId: number | null;
+  reason: string | null;
+  reasonCode: string | null;
+  ruleCode: string | null;
+  simulated: Generated<boolean>;
+  status: AgentEventRunStatus;
+  updatedAt: Generated<Timestamp>;
+}
+
+export interface ExceptionQueue {
+  correlationId: string | null;
+  agentPrincipalId: number;
+  approvalsRequired: Generated<number>;
+  consumedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  id: Generated<Int8>;
+  organizationId: number | null;
+  request: Json;
+  requestHash: string;
+  ruleCode: string;
+  status: Generated<ExceptionStatus>;
+  toolName: string;
+}
+
+export interface IntegrityAlerts {
+  acknowledgedAt: Timestamp | null;
+  acknowledgedByUserId: number | null;
+  category: string;
+  createdAt: Generated<Timestamp>;
+  createdByAgentPrincipalId: number | null;
+  dedupeKey: string | null;
+  detail: Generated<Json>;
+  entityId: string | null;
+  entityType: string | null;
+  id: Generated<Int8>;
+  level: IntegrityAlertLevel;
+  organizationId: number | null;
+  resolutionNote: string | null;
+  resolvedAt: Timestamp | null;
+  resolvedByUserId: number | null;
+  status: Generated<IntegrityAlertStatus>;
+  title: string;
+}
+
+export interface PolicyLimits {
+  id: Generated<number>;
+  key: string;
+  organizationId: number | null;
+  updatedAt: Generated<Timestamp>;
+  updatedByUserId: number | null;
+  value: Json;
+}
+
+export type AuditOutcome = "concluida" | "recusada" | "falhou" | "pendente";
+
+export interface AuditChainReceipts {
+  algorithm: "sha256";
+  canonical: string;
+  capturedAt: Generated<Timestamp>;
+  createdByUserId: number;
+  eventCount: Int8;
+  formatVersion: number;
+  headHash: string;
+  id: Generated<Int8>;
+  lastEventId: Int8;
+  receiptDigest: string;
+  scope: "global_chain";
+  verificationId: Int8;
+}
+
+export type AuditReceiptComparisonStatus = "conferido" | "divergencia" | "malformado" | "nao_suportado" | "escopo_diferente";
+
+export interface AuditChainReceiptComparisons {
+  comparedAt: Generated<Timestamp>;
+  comparedByUserId: number;
+  comparedUpToEventId: Int8 | null;
+  eventsSinceReceipt: Int8 | null;
+  id: Generated<Int8>;
+  reasonCode: string | null;
+  receiptDigest: string | null;
+  receiptId: Int8 | null;
+  status: AuditReceiptComparisonStatus;
+}
+
 export interface AuditLog {
   action: string;
+  correlationId: string | null;
+  outcome: AuditOutcome | null;
+  recordVersion: Generated<number>;
+  actorAgentPrincipalId: number | null;
+  actorType: Generated<AuditActorType>;
   actorUserId: number | null;
   createdAt: Generated<Timestamp>;
   entityId: string | null;
@@ -126,6 +359,7 @@ export interface BackgroundTaskRuns {
 }
 
 export interface DonationOpportunities {
+  correlationId: string | null;
   category: string | null;
   createdAt: Generated<Timestamp>;
   createdByUserId: number;
@@ -140,6 +374,7 @@ export interface DonationOpportunities {
   title: string;
   unit: string | null;
   updatedAt: Generated<Timestamp>;
+  version: Generated<number>;
 }
 
 export interface Files {
@@ -705,11 +940,25 @@ export interface OauthAttempts {
 
 export interface DB {
   authChallenges: AuthChallenges;
+  agentPrincipals: AgentPrincipals;
   approvalRequests: ApprovalRequests;
   auditLog: AuditLog;
+  automationControls: AutomationControls;
   backgroundTaskRuns: BackgroundTaskRuns;
+  domainEventConsumptions: DomainEventConsumptions;
+  domainEvents: DomainEvents;
   donationOpportunities: DonationOpportunities;
+  agentEventReevaluations: AgentEventReevaluations;
+  opportunityChanges: OpportunityChanges;
+  auditChainVerifications: AuditChainVerifications;
+  auditChainReceipts: AuditChainReceipts;
+  auditChainReceiptComparisons: AuditChainReceiptComparisons;
+  agentEventRunHistory: AgentEventRunHistory;
+  agentEventRuns: AgentEventRuns;
+  exceptionDecisions: ExceptionDecisions;
+  exceptionQueue: ExceptionQueue;
   files: Files;
+  integrityAlerts: IntegrityAlerts;
   inventoryItems: InventoryItems;
   loginAttempts: LoginAttempts;
   logisticsEvents: LogisticsEvents;
@@ -734,6 +983,7 @@ export interface DB {
   registrationAccessCodes: RegistrationAccessCodes;
   userIdentities: UserIdentities;
   oauthAttempts: OauthAttempts;
+  policyLimits: PolicyLimits;
   sessions: Sessions;
   needClosures: NeedClosures;
   sources: Sources;
@@ -775,3 +1025,7 @@ export const ApprovalStatusArrayValues: [ApprovalStatus, ...ApprovalStatus[]] = 
 export const kyselyIdentifierOverrides: Record<string, string> = {};
 
 // Note: kysely maps the table/column/enum names from snake_case to camelCase and PascalCase. When running SQL statements, make sure to use snake_case, but TypeScript code should use camelCase or PascalCase.
+export const AuditActorTypeArrayValues: [AuditActorType, ...AuditActorType[]] = ["agent","system","user"];
+export const ExceptionStatusArrayValues: [ExceptionStatus, ...ExceptionStatus[]] = ["aprovada","pendente","rejeitada"];
+export const IntegrityAlertLevelArrayValues: [IntegrityAlertLevel, ...IntegrityAlertLevel[]] = ["alto_risco","operacional","seguranca"];
+export const IntegrityAlertStatusArrayValues: [IntegrityAlertStatus, ...IntegrityAlertStatus[]] = ["aberto","descartado","reconhecido","resolvido"];

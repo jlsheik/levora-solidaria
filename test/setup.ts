@@ -25,6 +25,20 @@ const { resetAllRateLimitsForTests } = await import("../src/helpers/rateLimit");
 // de banco bloqueiam DELETE) — TRUNCATE ainda é permitido porque não passa
 // pelo trigger de linha, e é isto que usamos para limpar entre testes.
 const TABLES_IN_DEPENDENCY_ORDER = [
+  "audit_chain_receipt_comparisons",
+  "audit_chain_receipts",
+  "audit_chain_verifications",
+  "opportunity_changes",
+  "agent_event_reevaluations",
+  "agent_event_run_history",
+  "agent_event_runs",
+  "exception_decisions",
+  "exception_queue",
+  "integrity_alerts",
+  "domain_event_consumptions",
+  "domain_events",
+  "policy_limits",
+  "automation_controls",
   "files",
   "match_evaluations",
   "approval_requests",
@@ -38,6 +52,7 @@ const TABLES_IN_DEPENDENCY_ORDER = [
   "stock_transactions",
   "inventory_items",
   "audit_log",
+  "agent_principals",
   "organization_invites",
   "organization_capacities",
   "organization_matching_settings",

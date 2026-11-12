@@ -5,6 +5,7 @@ import { expireApprovalRequests } from "./expireApprovalRequests.js";
 import { expireAssignmentDeadlines } from "./expireAssignmentDeadlines.js";
 import { retryFileScansScheduled } from "./retryFileScansTask.js";
 import { verifyAuditChainScheduled } from "./verifyAuditChainTask.js";
+import { processAgentEventsScheduled } from "./processAgentEventsTask.js";
 
 /**
  * Único ponto de verdade para o mapeamento nome-da-tarefa → função que a
@@ -26,4 +27,5 @@ export const TASK_HANDLERS: Record<string, () => Promise<void>> = {
   expireAssignmentDeadlines,
   verifyAuditChain: verifyAuditChainScheduled,
   retryFileScans: retryFileScansScheduled,
+  processAgentEvents: processAgentEventsScheduled,
 };

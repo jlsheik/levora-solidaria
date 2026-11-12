@@ -15,6 +15,7 @@ import { ApiRequestError } from "../helpers/apiRequestError";
 import type { MembershipRole } from "../helpers/schema";
 import type { OutputType as MembersOutput } from "../endpoints/organization-members_GET.schema";
 import { getAuditLog } from "../endpoints/audit-log_GET.schema";
+import { getAgents } from "../endpoints/agents_GET.schema";
 import { Badge } from "../components/Badge";
 import { Skeleton } from "../components/Skeleton";
 import { Button } from "../components/Button";
@@ -117,6 +118,17 @@ export default function OrganizationDetailPage() {
     refetchInterval: 60_000,
   });
   const pendingCount = allocationsQuery.data?.pendingCount ?? 0;
+
+  // M34: indicador da aba "Automação" = totais REAIS do servidor (exceções pendentes + alertas abertos da organização). Só é consultado por quem pode ler a automação; sem dado, não há contador.
+  const canSeeAutomation = org?.myRole === "proprietario" || org?.myRole === "administrador";
+  const automationQuery = useQuery({
+    queryKey: ["agents", organizationId],
+    queryFn: () => getAgents({ organizationId }),
+    enabled: Number.isFinite(organizationId) && canSeeAutomation,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  const automationPending = (automationQuery.data?.totals?.pendingExceptions ?? 0) + (automationQuery.data?.totals?.openAlerts ?? 0);
 
   const membersQuery = useQuery({
     queryKey: ["organization-members", organizationId],
@@ -331,6 +343,17 @@ export default function OrganizationDetailPage() {
         {(org?.myRole === "proprietario" || org?.myRole === "administrador" || org?.myRole === "operador") && (
           <Link to={`/organizacoes/${organizationId}/regularizacao`} className={styles.tabNavItem}>
             Pendências de unidade
+          </Link>
+        )}
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
+          <Link to={`/organizacoes/${organizationId}/automacao`} className={styles.tabNavItem}>
+            Automação
+            {automationPending > 0 && <Badge variant="destructive" aria-label={`${automationPending} pendência(s) de automação: exceções aguardando decisão e alertas abertos`}>{automationPending}</Badge>}
+          </Link>
+        )}
+        {(org?.myRole === "proprietario" || org?.myRole === "administrador") && (
+          <Link to={`/organizacoes/${organizationId}/auditoria`} className={styles.tabNavItem}>
+            Auditoria
           </Link>
         )}
       </nav>
@@ -630,6 +653,7 @@ export default function OrganizationDetailPage() {
           <h2 className={styles.sectionTitle}>
             <ScrollText size={18} /> Trilha de auditoria
           </h2>
+          {canSeeAuditLog && <p className={styles.emptyText}><Link to={`/organizacoes/${organizationId}/auditoria`}>Abrir a Central de Auditoria</Link> — filtros, detalhes, rastreabilidade das decisões dos agentes e verificação de integridade.</p>}
           {!canSeeAuditLog ? (
             <p className={styles.emptyText}>
               Apenas proprietários e administradores podem visualizar a trilha

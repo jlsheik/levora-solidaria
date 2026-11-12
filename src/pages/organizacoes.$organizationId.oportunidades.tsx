@@ -1,8 +1,12 @@
-import React, { useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import React, { useState, useMemo, useEffect } from "react";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getOrganizations } from "../endpoints/organizations_GET.schema";
 import { getOpportunities } from "../endpoints/opportunities_GET.schema";
+import { OpportunityCategoryDialog } from "../components/OpportunityCategoryDialog";
+import { OpportunityAssessmentBox } from "../components/OpportunityAssessmentBox";
+import { MISSING_CATEGORY_HELP } from "../components/opportunityCategoryView";
+import agentStyles from "../components/OpportunityAgent.module.css";
 import { postOpportunities } from "../endpoints/opportunities_POST.schema";
 import { postOpportunitiesStatus } from "../endpoints/opportunities-status_POST.schema";
 import { postOpportunitiesReceive } from "../endpoints/opportunities-receive_POST.schema";
@@ -94,16 +98,25 @@ export default function OpportunitiesPage() {
   const queryClient = useQueryClient();
   const [newOpen, setNewOpen] = useState(false);
   const [receiveTarget, setReceiveTarget] = useState<{ id: number; title: string } | null>(null);
+  const [categoryTarget, setCategoryTarget] = useState<{ id: number; title: string; category: string | null; version: number } | null>(null);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const highlightId = Number(searchParams.get("destaque")) || null; // navegação contextual: vindo da justificativa do agente, destaca a oferta
 
   const orgsQuery = useQuery({ queryKey: ["organizations"], queryFn: () => getOrganizations() });
   const org = orgsQuery.data?.organizations.find((o) => o.id === organizationId);
   const canManage = org && ["proprietario", "administrador", "operador"].includes(org.myRole);
+  const canRequestReevaluation = !!org && ["proprietario", "administrador"].includes(org.myRole); // permissão de automação (o servidor decide de verdade)
 
   const opportunitiesQuery = useQuery({
     queryKey: ["opportunities", organizationId],
     queryFn: () => getOpportunities({ organizationId }),
     enabled: Number.isFinite(organizationId),
   });
+
+  useEffect(() => {
+    if (highlightId && opportunitiesQuery.data) document.getElementById(`oportunidade-${highlightId}`)?.scrollIntoView({ block: "center" });
+  }, [highlightId, opportunitiesQuery.data]);
 
   const needsQuery = useQuery({
     queryKey: ["needs", organizationId],
@@ -299,6 +312,22 @@ export default function OpportunitiesPage() {
                       <FormMessage />
                     </FormItem>
                   </div>
+                  <FormItem name="category">
+                    <FormLabel>Categoria (opcional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        list="categoria-sugestoes-cadastro"
+                        placeholder="Deixe em branco se ainda não souber"
+                        maxLength={60}
+                        autoComplete="off"
+                        value={form.values.category || ""}
+                        onChange={(e) => form.setValues((p: any) => ({ ...p, category: e.target.value }))}
+                      />
+                    </FormControl>
+                    <datalist id="categoria-sugestoes-cadastro">{(opportunitiesQuery.data?.categorySuggestions ?? []).map((s) => <option key={s.value} value={s.value} />)}</datalist>
+                    <p className={agentStyles.help}>{MISSING_CATEGORY_HELP}</p>
+                    <FormMessage />
+                  </FormItem>
                   <FormItem name="description">
                     <FormLabel>Detalhes (opcional)</FormLabel>
                     <FormControl>
@@ -352,7 +381,7 @@ export default function OpportunitiesPage() {
             const suggestions = suggestedNeedsFor(opp).filter((n) => n.id !== opp.linkedNeedId);
             const isFinal = opp.status === "recebida" || opp.status === "cancelada";
             return (
-              <li key={opp.id} className={styles.oppCard}>
+              <li key={opp.id} id={`oportunidade-${opp.id}`} className={`${styles.oppCard} ${highlightId === opp.id ? agentStyles.highlight : ""}`}>
                 <div className={styles.oppHeaderRow}>
                   <h3 className={styles.oppTitle}>{opp.title}</h3>
                   <Badge variant={statusVariant[opp.status]}>{statusLabels[opp.status]}</Badge>
@@ -364,6 +393,28 @@ export default function OpportunitiesPage() {
                   {opp.createdByDisplayName} em {new Date(opp.createdAt).toLocaleDateString("pt-BR")}
                 </p>
                 {opp.description && <p className={styles.oppDescription}>{opp.description}</p>}
+                <p className={agentStyles.categoryRow}>
+                  <strong>Categoria:</strong>
+                  {opp.category ? <Badge variant="secondary">{opp.category}</Badge> : <Badge variant="outline">Sem categoria</Badge>}
+                  {opp.canEditCategory && opp.version !== undefined && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setCategoryTarget({ id: opp.id, title: opp.title, category: opp.category, version: opp.version! })} aria-label={`${opp.category ? "Corrigir" : "Definir"} a categoria de ${opp.title}`}>
+                      {opp.category ? "Corrigir categoria…" : "Definir categoria…"}
+                    </Button>
+                  )}
+                </p>
+                {!opp.category && !isFinal && <p className={agentStyles.help}>{MISSING_CATEGORY_HELP}</p>}
+                {opp.assessment && (
+                  <OpportunityAssessmentBox
+                    organizationId={organizationId}
+                    opportunityId={opp.id}
+                    assessment={opp.assessment}
+                    canRequest={canRequestReevaluation}
+                    justificationHref={`/organizacoes/${organizationId}/automacao?run=${opp.assessment.runId}`}
+                    onOpenJustification={() => navigate(`/organizacoes/${organizationId}/automacao?run=${opp.assessment!.runId}`)}
+                    traceHref={canRequestReevaluation ? `/organizacoes/${organizationId}/auditoria?aba=rastreabilidade&oportunidade=${opp.id}` : undefined}
+                    onOpenTrace={() => navigate(`/organizacoes/${organizationId}/auditoria?aba=rastreabilidade&oportunidade=${opp.id}`)}
+                  />
+                )}
                 {opp.linkedNeedTitle && (
                   <p className={styles.linkedNeed}>Vinculada à necessidade: {opp.linkedNeedTitle}</p>
                 )}
@@ -436,6 +487,8 @@ export default function OpportunitiesPage() {
           Nenhuma oportunidade registrada ainda para esta organização.
         </div>
       )}
+
+      <OpportunityCategoryDialog organizationId={organizationId} target={categoryTarget} suggestions={opportunitiesQuery.data?.categorySuggestions ?? []} onClose={() => setCategoryTarget(null)} />
 
       <Dialog open={!!receiveTarget} onOpenChange={(open) => !open && setReceiveTarget(null)}>
         <DialogContent>

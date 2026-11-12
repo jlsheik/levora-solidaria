@@ -2,6 +2,7 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { publishStockTransactionCreated } from "../helpers/domainEventPublishers.js";
 import { schema } from "./inventory-items_POST.schema.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
@@ -43,7 +44,7 @@ export async function handle(request: Request) {
 
       let currentStock = 0;
       if (input.initialQuantity && input.initialQuantity > 0) {
-        await trx
+        const [initialTx] = await trx
           .insertInto("stockTransactions")
           .values({
             organizationId: input.organizationId,
@@ -53,7 +54,10 @@ export async function handle(request: Request) {
             reason: "Quantidade inicial no cadastro do item",
             createdByUserId: user.id,
           })
+          .returning(["id"])
           .execute();
+        // M36: a quantidade inicial é um lançamento do ledger (altera o saldo) e chega à Sentinela, identificada como `estoque_inicial` (contrato v2, mesma transação; só para ESTE cadastro, sem backfill).
+        await publishStockTransactionCreated(trx, { organizationId: input.organizationId, transactionId: String(initialTx.id), itemId: newItem.id, type: "entrada", delta: Number(input.initialQuantity), source: "estoque_inicial", actorUserId: user.id });
 
         await recordAuditLogEntry(
           {

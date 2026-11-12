@@ -29,6 +29,9 @@ import { Form, FormControl, FormItem, FormLabel, FormMessage, useForm } from "..
 import { Input } from "../components/Input";
 import { UnitSelect } from "../components/UnitSelect";
 import { PlatformUnitRegularizationSection } from "../components/PlatformUnitRegularization";
+import { FileScanOperationsPanel } from "../components/FileScanOperationsPanel";
+import { AutomationControlsPanel } from "../components/AutomationControlsPanel";
+import { PlatformLimitsPanel } from "../components/PlatformLimitsPanel";
 import { Textarea } from "../components/Textarea";
 import { Button } from "../components/Button";
 import { Badge } from "../components/Badge";
@@ -519,6 +522,12 @@ export default function PlatformPage() {
         </section>
 
         <PlatformUnitRegularizationSection />
+
+        <FileScanOperationsPanel />
+
+        <AutomationControlsPanel scope="plataforma" canManage />
+
+        <PlatformLimitsPanel />
 
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}><RefreshCw size={18} /> Tarefas de fundo</h2>

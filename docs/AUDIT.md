@@ -52,6 +52,13 @@ entram na mesma cadeia). `event_hash` é
 `SHA256(organization_id | actor_user_id | action | entity_type | entity_id | metadata | created_at | previous_event_hash)`,
 calculado em `computeAuditEventHash` (`src/helpers/auditLog.tsx`).
 
+**Autor do evento (Fase 74):** `audit_log.actor_type` (`user` | `agent` |
+`system`) e `actor_agent_principal_id`. Para eventos de `user` (todo o
+histórico anterior) o autor **não** entra no hash canônico, então nenhum hash
+já gravado muda. Para `agent` e `system` acrescenta-se
+`actor:<tipo>:<principal>` ao final do conteúdo protegido. Evento de agente
+sem principal é recusado. `verifyAuditLogChain` considera os dois campos.
+
 - **Concorrência**: `recordAuditLogEntry` toma um advisory lock
   (`pg_advisory_xact_lock`) antes de ler o último `event_hash` e inserir —
   serializa toda escrita na cadeia, mesmo entre organizações diferentes,
@@ -131,3 +138,15 @@ novo referenciando o anterior (ex.: `needs-status_POST` grava
 anterior). `stock_transactions` e `logistics_events` seguem o mesmo
 princípio — append-only, também com triggers de banco bloqueando
 `UPDATE`/`DELETE`.
+
+## Motor de eventos dos agentes (M34)
+
+Cada transição de uma execução do motor (`agent_event_runs`) grava, na MESMA transação do compare-and-set, uma linha em `agent_event_run_history` (append-only por gatilho) e — quando o autor é
+agente ou sistema — um evento de auditoria `agente.evento_<estado>` (`entity_type = agent_event_run`, `actor_type = agent`, metadata só com tipo do evento, estado anterior, código do motivo e
+`simulado: true`; nunca o conteúdo do evento). Transições feitas por uma PESSOA (aprovar/rejeitar a exceção) já são auditadas por `automacao.excecao_decidida`; o histórico da execução registra o autor
+humano. Ligar/desligar agente: `automacao.agente_ligado` / `automacao.agente_desligado`. Alteração de limite continua registrando só chave e escopo (nunca o valor). M37: `oportunidade.categoria_alterada` (campo, versão anterior/nova, se a categoria anterior estava preenchida, correlação, se houve motivo — nunca os valores; os valores ficam em `opportunity_changes`, histórico append-only do recurso). M35: `agente.evento_dados_insuficientes` (análise incompleta, nada aprovado) e a explicação estruturada da decisão ficam em `agent_event_runs.detail` (fatos numéricos/booleanos/ids, nunca texto livre). A cadeia de hash é verificada
+nos testes depois de cada jornada do motor.
+
+## Central de Auditoria e verificação pela interface (M38)
+
+Ver `docs/AUDITORIA_CENTRAL.md`. Resumo: a cadeia continua **única e global**; a verificação pela interface (`POST /audit-chain-verify`, só equipe da plataforma) reutiliza `verifyAuditLogChain` e registra pedido/resultado em `audit_chain_verifications` (tabela operacional separada, **nunca** dentro de `audit_log`). Nova ação auditada: `auditoria.verificacao_solicitada` (organização nula, sem dados pessoais). M39: `audit_log` ganhou `outcome` (resultado explícito; NULL = "não registrado", nunca deduzido do nome), `correlation_id` (gerada no servidor) e `record_version` (1 = hash histórico, 2 = hash cobre resultado e correlação); comprovantes locais e comparação (garantia B) — ver `docs/AUDITORIA_CENTRAL.md` §7. Novas ações auditadas: `auditoria.comprovante_gerado`. Resultado "íntegra" prova só consistência interna dos eventos cobertos — sem âncora independente não prova ausência de truncamento do fim da trilha nem de recálculo por quem escreve direto no banco.

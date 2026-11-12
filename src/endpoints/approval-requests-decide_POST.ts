@@ -3,6 +3,7 @@ import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
 import { getItemStockBalance } from "../helpers/stockBalance.js";
+import { publishStockTransactionCreated } from "../helpers/domainEventPublishers.js";
 import { APPROVAL_REQUEST_EXPIRATION_DAYS } from "../helpers/expireApprovalRequests.js";
 import { buildLedgerAuditEntry, executeApprovedLedgerRequest, isLedgerApprovalActionType, type ApprovedLedgerResult } from "../helpers/needFulfillmentCorrections.js";
 import { DESTINATION_APPROVAL_ACTION, executeApprovedDestinationRequest, markDestinationRequestRejected } from "../helpers/stockExit.js";
@@ -135,7 +136,7 @@ export async function handle(request: Request) {
         if (stockAdjustment) {
           const { payload, itemName } = stockAdjustment;
 
-          await trx
+          const [adjustment] = await trx
             .insertInto("stockTransactions")
             .values({
               organizationId: payload.organizationId,
@@ -145,7 +146,10 @@ export async function handle(request: Request) {
               reason: `${payload.reason} (aprovado por segunda pessoa: ${user.displayName})`,
               createdByUserId: req.requestedByUserId,
             })
+            .returning(["id"])
             .execute();
+          // M35: o ajuste de alto risco, agora aprovado por uma segunda pessoa, é lançado no ledger e chega à Sentinela (origem "ajuste_aprovado").
+          await publishStockTransactionCreated(trx, { organizationId: payload.organizationId, transactionId: String(adjustment.id), itemId: payload.itemId, type: "ajuste", delta: Number(payload.quantity), source: "ajuste_aprovado", actorUserId: req.requestedByUserId });
 
           await recordAuditLogEntry(
             {

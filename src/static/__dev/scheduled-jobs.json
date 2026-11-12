@@ -33,5 +33,10 @@
     "enabled": true,
     "schedule": "*/5 * * * *",
     "timezone": "UTC"
+  },
+  "processAgentEvents": {
+    "enabled": true,
+    "schedule": "*/5 * * * *",
+    "timezone": "UTC"
   }
 }
