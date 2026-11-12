@@ -100,7 +100,7 @@ export async function handle(request: Request) {
     // Entrar em "aguardando destinação" dispara o matching automático na
     // hora — não fica esperando um humano escolher a organização.
     if (input.status === "aguardando_destinacao") {
-      await runMatchingForOpportunity(input.opportunityId, user.id);
+      await runMatchingForOpportunity(input.opportunityId, user.id, "mudanca_de_estado");
     }
 
     return new Response(superjson.stringify({ opportunity: result.opportunity, closedProposals: result.closedProposals }), {

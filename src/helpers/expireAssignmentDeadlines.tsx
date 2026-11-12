@@ -118,7 +118,7 @@ async function runExpireAssignmentDeadlines() {
 
     for (const oppId of toRematch) {
       try {
-        await runMatchingForOpportunity(oppId, null);
+        await runMatchingForOpportunity(oppId, null, "expiracao");
       } catch (err) {
         // A oportunidade já foi reaberta (transação confirmada): o sweep periódico a avaliará depois.
         failures.push({ allocationId: -oppId, message: `rematch da oportunidade ${oppId}: ${err instanceof Error ? err.message : String(err)}` });

@@ -2,6 +2,7 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { newCorrelationId } from "../helpers/correlation.js";
 import { schema } from "./needs_POST.schema.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
@@ -29,6 +30,7 @@ export async function handle(request: Request) {
       }
     }
 
+    const correlationId = newCorrelationId();
     const need = await db.transaction().execute(async (trx) => {
       const [newNeed] = await trx
         .insertInto("needs")
@@ -41,6 +43,7 @@ export async function handle(request: Request) {
           unit: input.unit,
           priority: input.priority,
           createdByUserId: user.id,
+          correlationId, // M40: origem da jornada da necessidade (gerada no servidor; o corpo da requisição nunca a define)
         })
         .returning(["id", "title", "status", "createdAt"])
         .execute();
@@ -50,6 +53,8 @@ export async function handle(request: Request) {
           organizationId: input.organizationId,
           actorUserId: user.id,
           action: "necessidade.criada",
+          outcome: "concluida", // mesma transação do cadastro: rollback leva o registro junto
+          correlationId,
           entityType: "need",
           entityId: String(newNeed.id),
           metadata: { title: newNeed.title, priority: input.priority, quantityNeeded: input.quantityNeeded, unit: input.unit },

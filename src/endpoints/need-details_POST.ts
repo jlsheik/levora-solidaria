@@ -3,6 +3,7 @@ import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { readActorUnderLock } from "../helpers/membershipAdmin.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "../helpers/journeyCorrelation.js";
 import { checkRateLimit, rateLimitResponse } from "../helpers/rateLimit.js";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
 import type { Json } from "../helpers/schema.js";
@@ -74,6 +75,8 @@ export async function handle(request: Request) {
           organizationId: input.organizationId,
           actorUserId: user.id,
           action: "necessidade.editada",
+          outcome: "concluida",
+          correlationId: await needCorrelation(trx, input.needId),
           entityType: "need",
           entityId: String(input.needId),
           metadata: { alteracoes: changes as unknown as Json },

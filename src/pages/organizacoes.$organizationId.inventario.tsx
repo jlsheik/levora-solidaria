@@ -152,6 +152,7 @@ export default function InventoryPage() {
         <Link to={`/organizacoes/${organizationId}`} className={styles.tabNavItem}>
           Visão geral
         </Link>
+        <Link to={`/organizacoes/${organizationId}/jornada`} className={styles.tabNavItem}>Jornada</Link>
         <ActiveTab className={styles.tabNavItemActive}>Inventário</ActiveTab>
         <Link to={`/organizacoes/${organizationId}/destinacoes`} className={styles.tabNavItem}>
           Destinação

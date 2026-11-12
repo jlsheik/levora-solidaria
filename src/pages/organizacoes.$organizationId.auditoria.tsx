@@ -84,6 +84,7 @@ export default function OrganizationAuditPage() {
 
       <nav className={styles.tabNav} aria-label="Áreas da organização">
         <Link to={`/organizacoes/${organizationId}`} className={styles.tabNavItem}>Visão geral</Link>
+        <Link to={`/organizacoes/${organizationId}/jornada`} className={styles.tabNavItem}>Jornada</Link>
         <Link to={`/organizacoes/${organizationId}/inventario`} className={styles.tabNavItem}>Inventário</Link>
         <Link to={`/organizacoes/${organizationId}/destinacoes`} className={styles.tabNavItem}>Destinação</Link>
         <Link to={`/organizacoes/${organizationId}/necessidades`} className={styles.tabNavItem}>Necessidades</Link>

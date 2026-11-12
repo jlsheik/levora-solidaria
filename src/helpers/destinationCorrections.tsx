@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { sql, type Kysely, type Transaction } from "kysely";
 import type { DB } from "./schema.js";
 import { recordAuditLogEntry } from "./auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "./journeyCorrelation.js";
 import { roundQuantity } from "./quantityRules.js";
 import { checkEffectiveDate, MAX_RETROACTIVE_DAYS } from "./businessDate.js";
 import { computeAttendanceProgress, getNeedAttendance } from "./needAttendance.js";
@@ -264,6 +265,8 @@ export async function auditReversal(trx: Transaction<DB>, organizationId: number
         organizationId,
         actorUserId,
         action: applied.physicalMovement === "entrada" ? "inventario.entrada_registrada" : "inventario.ajuste_registrado",
+        outcome: "concluida",
+        correlationId: await needCorrelation(trx, applied.target.needId),
         entityType: "inventory_item",
         entityId: String(applied.target.itemId),
         metadata: { delta: applied.quantity, itemName: applied.itemName, motivo: input.kind, destinacaoId: applied.target.id, reversaoId: applied.eventId },
@@ -276,6 +279,8 @@ export async function auditReversal(trx: Transaction<DB>, organizationId: number
       organizationId,
       actorUserId,
       action: "destinacao.revertida",
+      outcome: "concluida",
+      correlationId: await needCorrelation(trx, applied.target.needId),
       entityType: "stock_destination",
       entityId: applied.target.id,
       metadata: {
@@ -302,6 +307,8 @@ export async function auditReversal(trx: Transaction<DB>, organizationId: number
         organizationId,
         actorUserId,
         action: "necessidade.reaberta_automaticamente",
+        outcome: "concluida",
+        correlationId: await needCorrelation(trx, applied.need.needId),
         entityType: "need",
         entityId: String(applied.need.needId),
         metadata: { reversaoId: applied.eventId, destinacaoId: applied.target.id, solicitado: applied.need.requested, atendidoAntes: applied.need.attendedBefore, atendidoDepois: applied.need.attendedAfter, nenhumMovimentoCriadoPelaTransicao: true },
@@ -429,6 +436,8 @@ export async function auditCorrection(trx: Transaction<DB>, organizationId: numb
       organizationId,
       actorUserId,
       action: "destinacao.corrigida",
+      outcome: "concluida",
+      correlationId: await destinationCorrelation(trx, applied.target.id),
       entityType: "stock_destination",
       entityId: applied.target.id,
       metadata: { correcaoId: applied.eventId, alteracoes: applied.changes as never, motivo: input.reason.trim(), nenhumMovimentoDeEstoque: true, chaveIdempotencia: idempotencyKey },

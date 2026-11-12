@@ -7,6 +7,7 @@ import { publishStockTransactionCreated } from "./domainEventPublishers.js";
 import { sql, type Transaction } from "kysely";
 import type { DB } from "./schema.js";
 import { recordAuditLogEntry } from "./auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "./journeyCorrelation.js";
 import { getItemStockBalance } from "./stockBalance.js";
 import { concludeOpportunityIfAllTerminalAndReceived } from "./concludeOpportunity.js";
 import { computeNeedProgress, createNeedFulfillment, getNeedFulfillmentBalance } from "./needFulfillment.js";
@@ -93,6 +94,8 @@ export async function postAllocationReceipt(trx: Transaction<DB>, p: PostAllocat
       organizationId: p.organizationId,
       actorUserId: p.userId,
       action: "atribuicao.recebida",
+      outcome: "concluida", // mesma transação da entrada de estoque e do ledger
+      correlationId: await needCorrelation(trx, ledgerRow?.needId ?? null),
       entityType: "opportunity_allocation",
       entityId: String(p.allocation.id),
       metadata: {
@@ -114,7 +117,7 @@ export async function postAllocationReceipt(trx: Transaction<DB>, p: PostAllocat
 
   if (concluded) {
     await recordAuditLogEntry(
-      { organizationId: null, actorUserId: p.userId, action: "descoberta_central.concluida", entityType: "opportunity_registry", entityId: String(p.allocation.opportunityRegistryId), metadata: {} },
+      { organizationId: null, actorUserId: p.userId, action: "descoberta_central.concluida", outcome: "concluida", entityType: "opportunity_registry", entityId: String(p.allocation.opportunityRegistryId), metadata: {} },
       trx
     );
   }
@@ -172,6 +175,8 @@ export async function postLocalDonationReceipt(
       organizationId: p.organizationId,
       actorUserId: p.userId,
       action: "oportunidade.recebida",
+      outcome: "concluida",
+      correlationId: (await trx.selectFrom("donationOpportunities").select("correlationId").where("id", "=", p.opportunity.id).executeTakeFirst())?.correlationId ?? null,
       entityType: "donation_opportunity",
       entityId: String(p.opportunity.id),
       metadata: {

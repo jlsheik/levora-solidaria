@@ -313,6 +313,7 @@ export default function OrganizationDetailPage() {
 
       <nav className={styles.tabNav}>
         <ActiveTab className={styles.tabNavItemActive}>Visão geral</ActiveTab>
+        <Link to={`/organizacoes/${organizationId}/jornada`} className={styles.tabNavItem}>Jornada</Link>
         <Link to={`/organizacoes/${organizationId}/inventario`} className={styles.tabNavItem}>
           Inventário
         </Link>

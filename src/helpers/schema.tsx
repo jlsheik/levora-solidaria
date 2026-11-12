@@ -430,6 +430,32 @@ export interface LogisticsEvents {
   scheduledFor: Timestamp | null;
 }
 
+export interface MatchingRuns {
+  algorithmVersion: string;
+  candidatesConsidered: number | null;
+  candidatesRelated: number | null;
+  correlationId: string;
+  errorCode: string | null;
+  finishedAt: Timestamp | null;
+  id: Generated<Int8>;
+  lastRepeatedAt: Timestamp | null;
+  opportunityRegistryId: number;
+  origin: string;
+  repeatCount: Generated<number>;
+  signature: string | null;
+  startedAt: Generated<Timestamp>;
+  status: string;
+  triggeredByUserId: number | null;
+  validMatches: number | null;
+}
+
+export interface MatchingRunNeeds {
+  needId: number;
+  organizationId: number;
+  relation: string;
+  runId: Int8;
+}
+
 export interface MatchEvaluations {
   aiModelUsed: string | null;
   algorithmVersion: string;
@@ -439,6 +465,7 @@ export interface MatchEvaluations {
   decision: string;
   finalScore: Numeric;
   id: Generated<Int8>;
+  matchingRunId: Int8 | null;
   needId: number | null;
   opportunityRegistryId: number;
   organizationId: number;
@@ -480,6 +507,7 @@ export interface NeedResolutions {
 }
 
 export interface Needs {
+  correlationId: string | null;
   createdAt: Generated<Timestamp>;
   createdByUserId: number;
   description: string | null;
@@ -963,6 +991,8 @@ export interface DB {
   loginAttempts: LoginAttempts;
   logisticsEvents: LogisticsEvents;
   matchEvaluations: MatchEvaluations;
+  matchingRuns: MatchingRuns;
+  matchingRunNeeds: MatchingRunNeeds;
   memberships: Memberships;
   mfaMethods: MfaMethods;
   mfaRecoveryCodes: MfaRecoveryCodes;

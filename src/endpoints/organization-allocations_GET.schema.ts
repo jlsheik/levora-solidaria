@@ -22,6 +22,8 @@ export type OutputType = {
     pendingAction: boolean;
     /** Fase 99C: caso de regularização de unidade ativo desta atribuição (o recurso foi apresentado, mas nada foi lançado no estoque). */
     pendingRegularizationCaseId: number | null;
+    /** M40: necessidade da atribuição (null = atribuição sem necessidade conhecida). */
+    needId: number | null;
     opportunityId: number;
     opportunityTitle: string;
     opportunityDescription: string | null;
