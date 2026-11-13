@@ -28,6 +28,8 @@
     "platform:owner-recovery": "tsx db/platform-bootstrap-cli.ts owner-recovery",
     "platform:bootstrap-revoke": "tsx db/platform-bootstrap-cli.ts revoke",
     "platform:bootstrap-status": "tsx db/platform-bootstrap-cli.ts status",
+    "release:validate": "node scripts/release-validate.mjs",
+    "release:db-check": "node scripts/release-db-check.mjs",
     "microsoft:preflight": "tsx scripts/microsoft-preflight.ts"
   },
   "dependencies": {
