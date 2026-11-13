@@ -28,14 +28,16 @@
     "enabled": true,
     "schedule": "0 */6 * * *",
     "timezone": "UTC"
-  },
+  }
+,
   "retryFileScans": {
     "enabled": true,
     "schedule": "*/5 * * * *",
     "timezone": "UTC"
   },
   "processAgentEvents": {
-    "enabled": true,
+    "enabled": false,
+    "enableWith": "AGENT_EVENTS_SCHEDULER_ENABLED",
     "schedule": "*/5 * * * *",
     "timezone": "UTC"
   }

@@ -8,6 +8,7 @@
  * provedor).
  */
 import nodemailer, { type Transporter } from "nodemailer";
+import { logEvent, safeErrorCode } from "./opLog.js";
 
 export interface SendEmailInput {
   to: string;
@@ -52,7 +53,8 @@ class SmtpEmailAdapter implements EmailAdapter {
       });
       return { sent: true, messageId: info.messageId };
     } catch (error) {
-      console.error("Falha ao enviar e-mail via SMTP:", error);
+      // M46: só um código seguro (o objeto de erro do SMTP pode carregar host, destinatário e trechos da resposta do servidor).
+      logEvent({ event: "email_send", status: "falha", errorCode: safeErrorCode(error) });
       return { sent: false, reason: "provider_error", error: error instanceof Error ? error.message : String(error) };
     }
   }

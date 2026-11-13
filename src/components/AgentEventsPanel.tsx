@@ -64,7 +64,7 @@ export function AgentEventsPanel({ organizationId, canManage, onOpenExceptions, 
   return (
     <section className={styles.section} aria-labelledby="eventos-titulo" aria-busy={query.isFetching}>
       <h2 id="eventos-titulo" className={styles.sectionTitle}><Activity size={18} aria-hidden="true" /> Processamento de eventos <Badge variant="outline">Simulação</Badge></h2>
-      <p className={styles.help}>Os agentes avaliam eventos internos (por exemplo, uma oportunidade criada) conforme as regras de proteção e os limites. <strong>Tudo é simulado:</strong> nenhuma ação, mensagem ou pagamento acontece fora do sistema, e aprovar uma exceção também não executa nada.</p>
+      <p className={styles.help}>Os agentes avaliam eventos internos (por exemplo, uma oportunidade criada) conforme as regras de proteção e os limites. <strong>Tudo é simulado:</strong> nenhuma ação, mensagem ou pagamento acontece fora do sistema, e aprovar uma exceção também não executa nada. O processamento automático periódico só acontece se a plataforma o tiver habilitado no servidor; numa instalação nova ele vem desligado, e “Processar eventos agora” continua disponível.</p>
 
       {query.isError ? (
         <div className={styles.error}>
