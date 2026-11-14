@@ -16,5 +16,8 @@ Uma linha JSON por evento (`http_request`, `scheduled_task`, `scheduler_task_dis
 ## Agendador
 `processAgentEvents` fica desabilitado por padrão; ver `docs/AGENTES_PLATAFORMA.md`.
 
+## Idioma do PostgreSQL de teste (M47)
+Alguns testes comparam mensagens de erro do servidor. Para o resultado não depender do idioma do Windows ou da instalação: (1) `test/global-setup.ts` executa `ALTER DATABASE <banco_test> SET lc_messages = 'C'` e **falha de forma explícita** se o idioma efetivo não for inglês/`C`; (2) recomenda-se iniciar o PostgreSQL de teste com `lc_messages = 'C'` (`initdb --lc-messages=C`). As três asserções que dependiam do texto (`check`, `null value`, `read-only`) agora verificam o SQLSTATE (`23514`, `23502`, `25006`). Provado com o servidor em `Portuguese_Brazil.1252`: sem a correção, 3 falhas; com ela, 0.
+
 ## Limites
 Resultados locais, com dados sintéticos. Backup/restauração aqui não equivalem a backup de produção homologado. Não foram testados: infraestrutura real, e-mail/SMTP, scanner antimalware real, Safari/Firefox, leitor de tela.

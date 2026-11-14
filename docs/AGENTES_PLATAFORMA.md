@@ -261,3 +261,16 @@ permissões, isolamento e eventos publicados pelos fluxos de negócio).
 - Política de retenção (hoje só classificação/simulação; nenhuma exclusão).
 - Escrita do limite global pela plataforma (aguarda regras de negócio).
 - `ai_runs`, `ai_cache`, `ai_budgets` e `AiProvider` (Fase 5): nada aqui chama IA.
+
+## Execução automática × reprocessamento operacional × ação manual (M47)
+
+O controle `AGENT_EVENTS_SCHEDULER_ENABLED` NÃO é um bloqueio universal do motor de eventos: ele desliga somente o que é **automático e periódico**. Há três caminhos distintos:
+
+| Caminho | Quem aciona | Controlado por `AGENT_EVENTS_SCHEDULER_ENABLED`? | Proteções que continuam valendo |
+|---|---|---|---|
+| **Execução automática** (cron `processAgentEvents`, a cada 5 min) | o servidor | **Sim** — desabilitada por padrão; só liga com o valor exato `true`, na própria inicialização do servidor | agente ligado por uma pessoa na organização, pausa global/emergência, limites, simulação (nada externo) |
+| **Reprocessamento operacional** (`background-tasks-retry`, botão "Reprocessar" em Tarefas de fundo) | administrador da plataforma | **Sim** — responde 409 enquanto a tarefa estiver desligada (nada executa); para outras tarefas, vale como sempre | só administrador da plataforma; só execuções com status "falhou" |
+| **Ação manual** (botão "Processar eventos agora…", `agent-engine-run`) | proprietário/administrador da organização, com confirmação | **Não** — é decisão humana explícita, por organização | permissão do papel, isolamento da organização, agente ligado, pausa global/emergência, limites, simulação |
+
+Decisão registrada: a ação manual continua disponível com o agendador desligado porque é um ato humano, autorizado e limitado a uma organização; ela não contorna a pausa global nem os limites (teste `schedulerControl`, grupo "M47"). Quem precisa impedir também a ação manual usa a pausa global da plataforma.
+
