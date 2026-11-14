@@ -145,4 +145,21 @@ describe("log estruturado: minimizacao e seguranca", () => {
     const all = lines.join("\n");
     for (const secret of ["COOKIE-SECRETO-123", "TOKEN-SECRETO-456", "SENHA-SECRETA-789", "pessoa@exemplo.test"]) expect(all).not.toContain(secret);
   });
+
+  it("M47: x-request-id enviado pelo cliente NUNCA é usado: o id é gerado no servidor, uma linha por requisição, sem linha forjada nem conteúdo gigante no log", async () => {
+    const lines: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((m: unknown) => { lines.push(String(m)); });
+    vi.spyOn(console, "error").mockImplementation((m: unknown) => { lines.push(String(m)); });
+    const forged = '","event":"admin_login","status":"ok"}{"forjado":true' + "X".repeat(5000);
+    const res = await fetch(`${base}/_api/v1/auth/login_with_password`, { method: "POST", headers: { "content-type": "application/json", "x-request-id": forged, "x-correlation-id": "corr-" + "Y".repeat(3000) }, body: JSON.stringify({ email: "a@exemplo.test", password: "x" }) });
+    const id = res.headers.get("x-request-id");
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    const all = lines.join(String.fromCharCode(10));
+    expect(all).not.toContain("forjado");
+    expect(all).not.toContain("XXXXXXXXXX");
+    expect(all).not.toContain("YYYYYYYYYY");
+    for (const l of lines) expect(() => JSON.parse(l)).not.toThrow();
+    expect(lines.filter((l) => JSON.parse(l).event === "http_request")).toHaveLength(1);
+    expect(all.length).toBeLessThan(4000);
+  });
 });

@@ -159,3 +159,57 @@ describe("a própria tarefa e o reprocessamento manual respeitam o controle", ()
     expect(spy).toHaveBeenCalledTimes(1);
   });
 });
+
+// M47 — o controle desliga só a execução AUTOMÁTICA. A ação manual de uma pessoa autorizada ("Processar eventos agora") continua existindo e continua protegida por permissão, organização e pausa global.
+import { handle as postRunNow } from "../src/endpoints/agent-engine-run_POST";
+import { parseJson } from "./helpers";
+
+describe("M47: ação manual com o agendador desabilitado (distinta da execução automática e do reprocessamento operacional)", () => {
+  let owner: AuthenticatedTestUser; let orgId: number;
+  beforeEach(async () => { owner = await createAuthenticatedUser(); orgId = (await createTestOrganization(owner.userId)).id; });
+
+  it("agendador desabilitado (padrão): 'Processar eventos agora' por proprietário autorizado funciona, só em simulação, e não depende da variável", async () => {
+    expect(isOptInTaskEnabled("processAgentEvents")).toBe(false);
+    await postEnable(post("agents-enable", owner, { organizationId: orgId, agent: "risk-engine", enabled: true }));
+    await new Promise((x) => setTimeout(x, 15));
+    await publish(orgId, "m1");
+    const out = await parseJson<{ registered: number; simulated: boolean }>(await postRunNow(post("agent-engine-run", owner, { organizationId: orgId })));
+    expect(out.simulated).toBe(true);
+    expect(out.registered).toBeGreaterThan(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(isOptInTaskEnabled("processAgentEvents")).toBe(false);
+  });
+
+  it("sem sessão, ou usuário de outra organização: a ação manual é negada e nada é processado", async () => {
+    await postEnable(post("agents-enable", owner, { organizationId: orgId, agent: "risk-engine", enabled: true }));
+    await new Promise((x) => setTimeout(x, 15));
+    await publish(orgId, "m2");
+    const stranger = await createAuthenticatedUser();
+    const anon = await postRunNow(post("agent-engine-run", undefined, { organizationId: orgId }));
+    const other = await postRunNow(post("agent-engine-run", stranger, { organizationId: orgId }));
+    expect([401, 403]).toContain(anon.status);
+    expect([401, 403, 404]).toContain(other.status);
+    expect(await runsCount()).toBe(0);
+  });
+
+  it("pausa global: a ação manual também fica bloqueada por política (não é caminho para contornar a pausa)", async () => {
+    const staff = await createPlatformAdmin();
+    await postEnable(post("agents-enable", owner, { organizationId: orgId, agent: "risk-engine", enabled: true }));
+    await postPlatformControls(post("platform-automation-controls", staff, { paused: true, emergency: false, reason: "manutenção sintética" }));
+    await new Promise((x) => setTimeout(x, 15));
+    await publish(orgId, "m3");
+    await postRunNow(post("agent-engine-run", owner, { organizationId: orgId }));
+    const rows = await db.selectFrom("agentEventRuns").select("status").execute();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.status === "bloqueado_politica")).toBe(true);
+  });
+
+  it("reprocessamento operacional (background-tasks-retry) exige administrador da plataforma: proprietário comum é negado e nada executa", async () => {
+    const row = await db.insertInto("backgroundTaskRuns").values({ taskName: "processAgentEvents", status: "falhou", startedAt: new Date(), idempotencyKey: "m47-sintetico" } as never).returning("id").executeTakeFirstOrThrow();
+    vi.stubEnv(ENV, "true");
+    const spy = vi.spyOn(engine, "runAgentEventEngine");
+    const res = await postRetry(post("background-tasks-retry", owner, { runId: Number(row.id) }));
+    expect([401, 403]).toContain(res.status);
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
