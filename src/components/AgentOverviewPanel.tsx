@@ -181,7 +181,7 @@ export function AgentOverviewPanel({ organizationId, onOpenTab, canManage = fals
                 {detail.tools.map((t) => (
                   <li key={t.name} className={styles.row} style={{ padding: "0.75rem" }}>
                     <div className={styles.rowMain}>
-                      <p className={styles.rowTitle}>{TOOL_LABEL[t.name] ?? t.name} <Badge variant="outline">{TOOL_CLASS_LABEL[t.klass]?.label ?? t.klass}</Badge></p>
+                      <div className={styles.rowTitle}>{TOOL_LABEL[t.name] ?? t.name} <Badge variant="outline">{TOOL_CLASS_LABEL[t.klass]?.label ?? t.klass}</Badge></div>
                       <span className={styles.rowMeta}>{TOOL_CLASS_LABEL[t.klass]?.help}</span>
                     </div>
                   </li>
