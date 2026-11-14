@@ -273,4 +273,3 @@ O controle `AGENT_EVENTS_SCHEDULER_ENABLED` NÃO é um bloqueio universal do mot
 | **Ação manual** (botão "Processar eventos agora…", `agent-engine-run`) | proprietário/administrador da organização, com confirmação | **Não** — é decisão humana explícita, por organização | permissão do papel, isolamento da organização, agente ligado, pausa global/emergência, limites, simulação |
 
 Decisão registrada: a ação manual continua disponível com o agendador desligado porque é um ato humano, autorizado e limitado a uma organização; ela não contorna a pausa global nem os limites (teste `schedulerControl`, grupo "M47"). Quem precisa impedir também a ação manual usa a pausa global da plataforma.
-
