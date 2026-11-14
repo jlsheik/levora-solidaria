@@ -434,7 +434,7 @@ export default function PlatformPage() {
                     {!isFinal && (
                       <div className={styles.registryActions}>
                         <Select value={o.status} onValueChange={(v) => statusMutation.mutate({ opportunityId: o.id, status: v as (typeof curatableStatuses)[number] })}>
-                          <SelectTrigger className={styles.statusSelect}><SelectValue /></SelectTrigger>
+                          <SelectTrigger className={styles.statusSelect}><SelectValue>{registryStatusLabels[o.status] ?? o.status}</SelectValue></SelectTrigger>
                           <SelectContent>
                             {curatableStatuses.map((s) => <SelectItem key={s} value={s}>{registryStatusLabels[s]}</SelectItem>)}
                           </SelectContent>

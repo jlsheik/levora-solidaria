@@ -21,3 +21,10 @@ describe("plataforma: texto de Tarefas de fundo não afirma o que deixou de ser 
     expect(tsx).toMatch(/ficam\s+desligadas\s+até\s+a\s+plataforma\s+habilitá-las\s+explicitamente/);
   });
 });
+
+describe("plataforma: o seletor de status da oferta mostra o status atual mesmo quando ele não é uma das opções curáveis (M47)", () => {
+  it("o SelectValue do status declara o rótulo atual (antes ficava em branco para 'Reservada', 'Atribuída' etc.)", () => {
+    const tsx = readFileSync(path.resolve(__dirname, "../src/pages/plataforma.tsx"), "utf-8");
+    expect(tsx).toMatch(/className=\{styles\.statusSelect\}><SelectValue>\{registryStatusLabels\[o\.status\] \?\? o\.status\}<\/SelectValue>/);
+  });
+});
