@@ -163,3 +163,33 @@ describe("log estruturado: minimizacao e seguranca", () => {
     expect(all.length).toBeLessThan(4000);
   });
 });
+
+describe("M47: e-mail — logs sem destinatário, assunto, host nem credenciais", () => {
+  const RECIP = "pessoa.destino@exemplo.test"; const SUBJ = "Convite para participar da Associação Sintética";
+  const capture = () => {
+    const lines: string[] = [];
+    for (const m of ["log", "info", "warn", "error"] as const) vi.spyOn(console, m).mockImplementation((...a: unknown[]) => { lines.push(a.map(String).join(" ")); });
+    return lines;
+  };
+  it("SMTP não configurado (padrão): o aviso não imprime destinatário nem assunto e o resultado continua 'not_configured'", async () => {
+    vi.resetModules(); for (const k of ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"]) vi.stubEnv(k, "");
+    const lines = capture();
+    const { emailAdapter } = await import("../src/helpers/emailAdapter");
+    expect(emailAdapter.isConfigured).toBe(false);
+    expect(await emailAdapter.send({ to: RECIP, subject: SUBJ, text: "corpo com https://exemplo.test/convites/TOKEN-SECRETO-ABC" })).toEqual({ sent: false, reason: "not_configured" });
+    const all = lines.join("\n"); expect(all).not.toContain(RECIP); expect(all).not.toContain("Associação Sintética"); expect(all).not.toContain("TOKEN-SECRETO-ABC");
+  });
+  it("SMTP configurado e falhando: o log traz só o código; a mensagem do provedor (host, destinatário, senha) nunca é impressa", async () => {
+    vi.resetModules();
+    vi.doMock("nodemailer", () => ({ default: { createTransport: () => ({ sendMail: async () => { throw Object.assign(new Error(`535 auth falhou para ${RECIP} em smtp.exemplo.test com a senha SENHA-SMTP-999`), { code: "EAUTH" }); } }) } }));
+    vi.stubEnv("SMTP_HOST", "smtp.exemplo.test"); vi.stubEnv("SMTP_PORT", "587"); vi.stubEnv("SMTP_USER", "usuario-smtp"); vi.stubEnv("SMTP_PASS", "SENHA-SMTP-999"); vi.stubEnv("SMTP_FROM", "nao-responda@exemplo.test");
+    const lines = capture();
+    const { emailAdapter } = await import("../src/helpers/emailAdapter");
+    expect(emailAdapter.isConfigured).toBe(true);
+    const out = await emailAdapter.send({ to: RECIP, subject: SUBJ, text: "x" });
+    expect(out).toMatchObject({ sent: false, reason: "provider_error" });
+    const all = lines.join("\n"); expect(all).toContain("EAUTH");
+    for (const secret of [RECIP, "smtp.exemplo.test", "SENHA-SMTP-999", "usuario-smtp", "Associação Sintética"]) expect(all).not.toContain(secret);
+    vi.doUnmock("nodemailer"); vi.resetModules();
+  });
+});

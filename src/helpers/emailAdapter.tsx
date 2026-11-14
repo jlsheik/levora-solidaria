@@ -71,7 +71,8 @@ class NotConfiguredEmailAdapter implements EmailAdapter {
       );
       this.warned = true;
     }
-    console.info(`[email] (não enviado — SMTP não configurado) destinatário=${input.to} assunto="${input.subject}"`);
+    // M47: o log NÃO traz destinatário nem assunto (e-mail é dado pessoal; o assunto pode citar nomes). Só o fato de que não foi enviado.
+    logEvent({ event: "email_send", status: "ignorado", context: { reason: "smtp_nao_configurado" } });
     return { sent: false, reason: "not_configured" };
   }
 }
