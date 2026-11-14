@@ -174,7 +174,7 @@ function MatchingSection({ m }: { m: { state: string; runs: Array<{ id: string; 
   return (
     <section className={styles.section} aria-labelledby="jd-match">
       <h3 id="jd-match" className={styles.sectionTitle}>Matching desta necessidade</h3>
-      <p style={{ margin: "0 0 0.5rem 0" }}><Badge variant={tone as "success" | "secondary" | "outline"}>{MATCHING_STATE_LABEL[m.state] ?? m.state}</Badge></p>
+      <div style={{ margin: "0 0 0.5rem 0" }}><Badge variant={tone as "success" | "secondary" | "outline"}>{MATCHING_STATE_LABEL[m.state] ?? m.state}</Badge></div>
       <p className={styles.help}>{MATCHING_STATE_HELP[m.state] ?? ""}</p>
       {m.runs.length === 0 ? <p className={styles.rowMeta} style={{ margin: 0 }}>Nenhuma execução do matching registrada para esta necessidade.</p> : (
         <ol className={styles.list} aria-label="Execuções do matching que consideraram esta necessidade">
