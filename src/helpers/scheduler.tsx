@@ -24,10 +24,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { TASK_HANDLERS } from "./taskHandlers.js";
+import { getTaskEnablement, setSchedulerStatus, type SchedulerStatusEntry, type TaskEnablementConfig } from "./schedulerControl.js";
+import { logEvent, newOperationId, safeErrorCode } from "./opLog.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-interface ScheduledJobConfig {
+interface ScheduledJobConfig extends TaskEnablementConfig {
   enabled: boolean;
   schedule: string;
   timezone?: string;
@@ -44,8 +46,15 @@ export function startScheduler(): void {
   }
 
   let started = 0;
+  const status: SchedulerStatusEntry[] = [];
   for (const [taskName, jobConfig] of Object.entries(config)) {
-    if (!jobConfig.enabled) continue;
+    // M46: habilitação explícita. Tarefas com opt-in (processAgentEvents) só entram no cron com a variável de ambiente exata; o estado padrão é desabilitado.
+    const enablement = getTaskEnablement(taskName, jobConfig);
+    if (!enablement.enabled) {
+      status.push({ task: taskName, state: "desabilitada", reason: enablement.reason });
+      logEvent({ event: "scheduler_task_disabled", status: "ignorado", context: { task: taskName, reason: enablement.reason } });
+      continue;
+    }
 
     const handler = TASK_HANDLERS[taskName];
     if (!handler) {
@@ -61,18 +70,24 @@ export function startScheduler(): void {
     cron.schedule(
       jobConfig.schedule,
       () => {
-        handler().catch((err) => {
-          // As funções de tarefa já gravam a falha em background_task_runs
-          // (failTaskRun); aqui só evitamos que uma exceção não tratada
-          // derrube o processo do servidor.
-          console.error(`Tarefa agendada "${taskName}" falhou:`, err);
-        });
+        const operationId = newOperationId();
+        const startedAt = Date.now();
+        handler()
+          .then(() => logEvent({ event: "scheduled_task", status: "ok", operationId, durationMs: Date.now() - startedAt, context: { task: taskName } }))
+          .catch((err) => {
+            // As funções de tarefa já gravam a falha em background_task_runs
+            // (failTaskRun); aqui só evitamos que uma exceção não tratada
+            // derrube o processo do servidor. O log leva só um código seguro (nunca a mensagem do erro).
+            logEvent({ event: "scheduled_task", status: "falha", operationId, durationMs: Date.now() - startedAt, errorCode: safeErrorCode(err), context: { task: taskName } });
+          });
       },
       { timezone: jobConfig.timezone ?? "UTC" }
     );
     started += 1;
+    status.push({ task: taskName, state: "ativa" });
     console.log(`Agendador: "${taskName}" registrado (${jobConfig.schedule}, ${jobConfig.timezone ?? "UTC"})`);
   }
 
+  setSchedulerStatus({ started: true, tasks: status });
   console.log(`Agendador: ${started} tarefa(s) agendada(s) ativa(s).`);
 }

@@ -380,7 +380,7 @@ describe("migração 0017 (códigos de acesso) sobre o estado da Fase 90", () =>
     const second = await addUser("segundo@x.com");
     await sql`UPDATE users SET registered_via_code_id = ${code.id} WHERE id = ${existing}`;
     await expect(sql`UPDATE users SET registered_via_code_id = ${code.id} WHERE id = ${second}`).rejects.toThrow(/registered_via_code/);
-    await expect(sql`INSERT INTO registration_access_codes (code_hash, pepper_version, code_last4, created_by_user_id, expires_at) VALUES (decode(repeat('02', 32), 'hex'), 1, 'ABCD', ${existing}, now() + interval '100 days')`).rejects.toThrow(/check/i);
+    await expect(sql`INSERT INTO registration_access_codes (code_hash, pepper_version, code_last4, created_by_user_id, expires_at) VALUES (decode(repeat('02', 32), 'hex'), 1, 'ABCD', ${existing}, now() + interval '100 days')`).rejects.toMatchObject({ code: "23514" }); // check_violation (SQLSTATE: independe do idioma do servidor)
   });
 
   it("a migração é atômica: falhando no meio (tabela já existente), a coluna de users não fica", async () => {

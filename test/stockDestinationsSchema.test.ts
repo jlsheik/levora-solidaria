@@ -135,7 +135,7 @@ describe("stock_destinations — destinação original", () => {
 
   it("13: autoria e data de registro são obrigatórias; data efetiva é obrigatória na original e não pode ser absurdamente futura", async () => {
     const w = await world();
-    await expect(insert(original(w, await exit5(w), { createdByUserId: null }))).rejects.toThrow(/null value|not-null/i);
+    await expect(insert(original(w, await exit5(w), { createdByUserId: null }))).rejects.toMatchObject({ code: "23502" }); // not_null_violation (SQLSTATE: independe do idioma)
     await expect(insert(original(w, await exit5(w), { deliveredOn: null }))).rejects.toThrow(/original_shape/);
     await expect(insert(original(w, await exit5(w), { deliveredOn: sql`current_date + 5` }))).rejects.toThrow(/delivered_on_sane/);
     await expect(insert(original(w, await exit5(w), { createdAt: null }))).rejects.toThrow();

@@ -1,7 +1,7 @@
 /**
  * M34 — endpoints do motor: ligar/desligar agente (ação humana), processar agora, listagem/detalhe com paginação e filtros, retenção (só simulação), limites globais (só leitura), histórico de limites.
  */
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { db } from "../src/helpers/db";
 import { publishDomainEvent } from "../src/helpers/domainEvents";
 import { handle as getRuns } from "../src/endpoints/agent-events_GET";
@@ -68,12 +68,16 @@ describe("ligar o agente é uma decisão humana; sem isso o motor é inerte", ()
     expect((await verifyAuditLogChain()).integra).toBe(true);
   });
 
+  // M46: a tarefa só roda com a habilitação explícita; o teste a habilita de forma sintética e a desfaz ao fim.
+  afterEach(() => { vi.unstubAllEnvs(); });
+
   it("a tarefa agendada processa TODAS as organizações com agente ligado e deixa registro só com contagens", async () => {
     const o2 = await createAuthenticatedUser(); const org2 = (await createTestOrganization(o2.userId)).id;
     await postEnable(post("agents-enable", owner, { organizationId: orgId, agent: "risk-engine", enabled: true }));
     await postEnable(post("agents-enable", o2, { organizationId: org2, agent: "risk-engine", enabled: true }));
     await new Promise((x) => setTimeout(x, 15));
     await publish(orgId, "roupa", {}, "a"); await publish(org2, "medicamento", {}, "b");
+    vi.stubEnv("AGENT_EVENTS_SCHEDULER_ENABLED", "true");
     await processAgentEventsScheduled();
     const rows = await db.selectFrom("agentEventRuns").select(["organizationId", "status"]).orderBy("organizationId").execute();
     expect(rows.map((r) => r.status).sort()).toEqual(["aguardando_aprovacao", "simulacao_concluida"]);

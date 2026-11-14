@@ -9,7 +9,8 @@
 .listSkeleton { height: 8rem; border-radius: var(--radius); }
 .emptyText { color: var(--muted-foreground); font-size: 0.875rem; }
 .sourceList, .registryList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-3); }
-.sourceRow { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-3); padding-bottom: var(--spacing-3); border-bottom: 1px solid var(--border); }
+.sourceRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--spacing-3); padding-bottom: var(--spacing-3); border-bottom: 1px solid var(--border); }
+.sourceRow > :first-child { min-width: 0; overflow-wrap: anywhere; } /* M47: a 375 px a linha não pode estourar a largura (a ação desce para a linha de baixo) */
 .sourceRow:last-child { border-bottom: none; padding-bottom: 0; }
 .sourceActions { display: flex; align-items: center; gap: var(--spacing-2); flex-shrink: 0; }
 .sourceName { font-size: 0.875rem; font-weight: 500; color: var(--card-foreground); }

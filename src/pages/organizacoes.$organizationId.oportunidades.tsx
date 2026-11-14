@@ -394,7 +394,7 @@ export default function OpportunitiesPage() {
                   {opp.createdByDisplayName} em {new Date(opp.createdAt).toLocaleDateString("pt-BR")}
                 </p>
                 {opp.description && <p className={styles.oppDescription}>{opp.description}</p>}
-                <p className={agentStyles.categoryRow}>
+                <div className={agentStyles.categoryRow}>
                   <strong>Categoria:</strong>
                   {opp.category ? <Badge variant="secondary">{opp.category}</Badge> : <Badge variant="outline">Sem categoria</Badge>}
                   {opp.canEditCategory && opp.version !== undefined && (
@@ -402,7 +402,7 @@ export default function OpportunitiesPage() {
                       {opp.category ? "Corrigir categoria…" : "Definir categoria…"}
                     </Button>
                   )}
-                </p>
+                </div>
                 {!opp.category && !isFinal && <p className={agentStyles.help}>{MISSING_CATEGORY_HELP}</p>}
                 {opp.assessment && (
                   <OpportunityAssessmentBox

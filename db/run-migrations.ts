@@ -19,7 +19,12 @@ import path from "node:path";
 import { formatPreflight, runPreflight } from "./legacyPreflight.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS_DIR = path.resolve(__dirname, "migrations");
+// M46: o diretório de migrations pode ser trocado SOMENTE com NODE_ENV=test (usado por scripts/release-db-check.mjs para provar a falha controlada de uma migration em banco descartável).
+// Em qualquer outro ambiente a variável é ignorada: uma configuração esquecida nunca desvia o runner de produção.
+const MIGRATIONS_DIR =
+  process.env.NODE_ENV === "test" && process.env.LEVORA_MIGRATIONS_DIR
+    ? path.resolve(process.env.LEVORA_MIGRATIONS_DIR)
+    : path.resolve(__dirname, "migrations");
 
 async function main() {
   const connectionString = process.env.DATABASE_URL || process.env.FLOOT_DATABASE_URL;
