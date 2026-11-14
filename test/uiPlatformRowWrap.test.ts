@@ -13,3 +13,11 @@ describe("plataforma: linhas de lista não estouram a largura em telas estreitas
     expect(css).toMatch(/\.sourceRow\s*>\s*:first-child\s*\{[^}]*min-width:\s*0/);
   });
 });
+
+describe("plataforma: texto de Tarefas de fundo não afirma o que deixou de ser verdade (M46)", () => {
+  it("não diz que o agendamento 'só roda em produção ... plano pago' e explica que tarefas opcionais ficam desligadas", () => {
+    const tsx = readFileSync(path.resolve(__dirname, "../src/pages/plataforma.tsx"), "utf-8");
+    expect(tsx).not.toMatch(/plano\s+pago/);
+    expect(tsx).toMatch(/ficam\s+desligadas\s+até\s+a\s+plataforma\s+habilitá-las\s+explicitamente/);
+  });
+});
