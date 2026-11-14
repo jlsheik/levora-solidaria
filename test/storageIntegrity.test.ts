@@ -94,7 +94,7 @@ describe("auditoria em disco (diretório temporário isolado)", () => {
 
   it("o mecanismo é real: numa transação READ ONLY o Postgres recusa o INSERT", async () => {
     const u = await createAuthenticatedUser(); const org = (await createTestOrganization(u.userId)).id;
-    await expect(db.transaction().execute(async (trx) => { await sql`SET TRANSACTION READ ONLY`.execute(trx); await trx.insertInto("files").values({ scanStatus: "legado_nao_analisado", organizationId: org, uploadedByUserId: u.userId, storageProvider: "local", storageKey: `${org}/${uuid()}`, originalFilename: "x", contentType: "image/png", sizeBytes: 1, purpose: "comprovante_entrega" }).execute(); })).rejects.toThrow(/read-only/i);
+    await expect(db.transaction().execute(async (trx) => { await sql`SET TRANSACTION READ ONLY`.execute(trx); await trx.insertInto("files").values({ scanStatus: "legado_nao_analisado", organizationId: org, uploadedByUserId: u.userId, storageProvider: "local", storageKey: `${org}/${uuid()}`, originalFilename: "x", contentType: "image/png", sizeBytes: 1, purpose: "comprovante_entrega" }).execute(); })).rejects.toMatchObject({ code: "25006" }); // read_only_sql_transaction (SQLSTATE: independe do idioma)
   });
 
   it("links simbólicos não são seguidos (nem o conteúdo de fora da raiz é lido) — ficam como não reconhecidos", async () => {
