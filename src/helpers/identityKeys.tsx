@@ -73,6 +73,22 @@ function mfaKeyFor(keyId: number): Buffer {
 export const currentMfaKeyId = () => currentVersion("MFA_ENCRYPTION_KEY");
 
 /**
+ * Verifica, sem expor valores, se as chaves de identidade exigidas por contas protegidas por MFA e por códigos de acesso existem e são válidas
+ * (pepper ≥ 32 bytes; chave de cifra do TOTP com 32 bytes). Usado pela prontidão (M49): sem isto, uma implantação sem chaves só falhava
+ * (HTTP 500 genérico) no primeiro login de uma conta protegida.
+ */
+export function identityKeysConfigured(): boolean {
+  try {
+    pepperFor(currentVersion("IDENTITY_CODE_PEPPER"));
+    mfaKeyFor(currentVersion("MFA_ENCRYPTION_KEY"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+
+/**
  * Formato armazenado (coluna BYTEA): `iv(12) || tag(16) || ciphertext`. `keyId` vai em coluna própria (`secret_key_id`).
  * AAD (dados autenticados, não secretos) liga o texto cifrado ao registro: o ciphertext de um usuário não decifra em
  * outro nem em outro propósito.

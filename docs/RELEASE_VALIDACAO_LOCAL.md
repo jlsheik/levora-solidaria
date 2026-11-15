@@ -8,7 +8,7 @@
 
 ## Prontidão e vivacidade
 - `GET /_api/__health` — **liveness**: o processo responde; não consulta o banco.
-- `GET /_api/__ready` — **readiness**: 200 só se o banco responde **e** todas as migrations do código estão em `schema_migrations`; 503 caso contrário. Corpo grosseiro (`database`, `schema`, `scheduler`, `agentEventsScheduler`), sem nomes de migration, erros, URLs ou dados de organizações. Sinal para um orquestrador/monitor futuro; nenhum alerta externo é enviado.
+- `GET /_api/__ready` — **readiness**: 200 só se o banco responde **e** todas as migrations do código estão em `schema_migrations`; 503 caso contrário. Corpo grosseiro (`database`, `schema`, `scheduler`, `agentEventsScheduler`, `identityKeys`), sem nomes de migration, erros, URLs ou dados de organizações. **M49:** `identityKeys` = `ausente` (pepper ≥ 32 bytes ou chave de cifra do TOTP ausente/inválida) torna a aplicação **não pronta (503) quando `NODE_ENV=production`**; fora de produção apenas sinaliza. Antes, a falta das chaves só aparecia como HTTP 500 no primeiro login de conta protegida por MFA. Sinal para um orquestrador/monitor futuro; nenhum alerta externo é enviado.
 
 ## Logs estruturados
 Uma linha JSON por evento (`http_request`, `scheduled_task`, `scheduler_task_disabled`, `readiness_check`, `server_start`, `startup_readiness`, `email_send`): `ts`, `level`, `event`, `status`, `operationId` (também devolvido em `x-request-id`), `durationMs`, `errorCode` seguro e contexto mínimo (rota registrada, método, status HTTP). Nunca corpo, cabeçalhos, cookies, usuário, organização ou mensagem de erro. No processo do servidor, objetos de erro impressos por `console.error` viram `[erro CÓDIGO]`. Sem retenção automática (depende de política).

@@ -57,9 +57,33 @@ describe("liveness x readiness", () => {
     const dir = tmpMigrations(["0001_a.sql", "0002_b.sql"]);
     await stampMigrations(["0001_a.sql", "0002_b.sql"]);
     const r = await checkReadiness({ migrationsDir: dir });
-    expect(r).toEqual({ ready: true, checks: { database: "ok", schema: "ok", scheduler: "nao_iniciado", agentEventsScheduler: "desabilitado" } });
+    expect(r).toEqual({ ready: true, checks: { database: "ok", schema: "ok", scheduler: "nao_iniciado", agentEventsScheduler: "desabilitado", identityKeys: expect.stringMatching(/^(ok|ausente)$/) } });
     vi.stubEnv("AGENT_EVENTS_SCHEDULER_ENABLED", "true");
     expect((await checkReadiness({ migrationsDir: dir })).checks.agentEventsScheduler).toBe("habilitado");
+  });
+
+  it("M49: chaves de identidade ausentes tornam a producao NAO pronta (antes so falhava no primeiro login protegido); fora de producao so sinaliza", async () => {
+    const dir = tmpMigrations(["0001_a.sql"]);
+    await stampMigrations(["0001_a.sql"]);
+    vi.stubEnv("IDENTITY_CODE_PEPPER_V1", "");
+    vi.stubEnv("IDENTITY_CODE_PEPPER_CURRENT", "");
+    vi.stubEnv("MFA_ENCRYPTION_KEY_V1", "");
+    vi.stubEnv("MFA_ENCRYPTION_KEY_CURRENT", "");
+    expect(await checkReadiness({ migrationsDir: dir })).toMatchObject({ ready: true, checks: { identityKeys: "ausente" } });
+    vi.stubEnv("NODE_ENV", "production");
+    const prod = await checkReadiness({ migrationsDir: dir });
+    expect(prod).toMatchObject({ ready: false, checks: { database: "ok", schema: "ok", identityKeys: "ausente" } });
+    // chave curta nao basta
+    vi.stubEnv("IDENTITY_CODE_PEPPER_V1", "curto");
+    vi.stubEnv("MFA_ENCRYPTION_KEY_V1", Buffer.alloc(32, 7).toString("base64"));
+    expect((await checkReadiness({ migrationsDir: dir })).ready).toBe(false);
+    vi.stubEnv("IDENTITY_CODE_PEPPER_V1", "p".repeat(40));
+    expect(await checkReadiness({ migrationsDir: dir })).toMatchObject({ ready: true, checks: { identityKeys: "ok" } });
+    // o corpo publico nao revela nomes de variaveis nem valores
+    vi.stubEnv("IDENTITY_CODE_PEPPER_V1", "");
+    const res = await fetch(`${base}/_api/__ready`);
+    const text = JSON.stringify(await res.json());
+    expect(text).not.toMatch(/PEPPER|MFA_ENCRYPTION|ppppp/);
   });
 
   it("schema incompativel (migration do codigo nao registrada, ou tabela de controle ausente) NAO e pronto", async () => {

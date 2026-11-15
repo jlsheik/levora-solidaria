@@ -13,6 +13,7 @@ import { db as defaultDb } from "./db.js";
 import type { Kysely } from "kysely";
 import { getSchedulerStatus, isOptInTaskEnabled } from "./schedulerControl.js";
 import { logEvent, safeErrorCode } from "./opLog.js";
+import { identityKeysConfigured } from "./identityKeys.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_TIMEOUT_MS = 2000;
@@ -24,6 +25,8 @@ export interface ReadinessResult {
     schema: "ok" | "desatualizado" | "nao_verificado";
     scheduler: "iniciado" | "nao_iniciado";
     agentEventsScheduler: "desabilitado" | "habilitado";
+    /** Chaves de identidade (pepper e cifra do TOTP) presentes e válidas. Em produção a ausência torna a aplicação NÃO pronta. */
+    identityKeys: "ok" | "ausente";
   };
 }
 
@@ -52,7 +55,10 @@ export async function checkReadiness(options: { migrationsDir?: string | null; d
     schema: "nao_verificado",
     scheduler: getSchedulerStatus().started ? "iniciado" : "nao_iniciado",
     agentEventsScheduler: isOptInTaskEnabled("processAgentEvents") ? "habilitado" : "desabilitado",
+    identityKeys: identityKeysConfigured() ? "ok" : "ausente",
   };
+  const identityBlocks = checks.identityKeys === "ausente" && process.env.NODE_ENV === "production";
+  if (identityBlocks) logEvent({ event: "readiness_check", status: "falha", errorCode: "CHAVES_IDENTIDADE_AUSENTES", context: { check: "identityKeys" } });
 
   try {
     await withTimeout(sql`select 1`.execute(db), CHECK_TIMEOUT_MS);
@@ -82,5 +88,5 @@ export async function checkReadiness(options: { migrationsDir?: string | null; d
     checks.schema = "nao_verificado";
   }
   if (checks.schema !== "ok") logEvent({ event: "readiness_check", status: "falha", errorCode: "SCHEMA_INCOMPATIVEL", context: { check: "schema", schema: checks.schema } });
-  return { ready: checks.schema === "ok", checks };
+  return { ready: checks.schema === "ok" && !identityBlocks, checks };
 }
