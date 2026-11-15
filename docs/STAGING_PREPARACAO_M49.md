@@ -8,7 +8,7 @@
 
 | Item | Requisito | Fonte |
 |---|---|---|
-| Node.js | 22.x (`engines`) | `package.json` |
+| Node.js | **22.x** (`engines`; CI e `Dockerfile` usam 22). **Validado na M50 com Node 22.23.5 (suíte integral, `release:validate` + `db-check`)**; a M49 havia rodado em Node 24 e isso **não** vale como prova. Sem módulos nativos (só o binário do `esbuild` em devDependencies) | `package.json`, `Dockerfile`, `.github/workflows/ci.yml` |
 | PostgreSQL | 16 (versão ensaiada: 16.15); **`lc_messages='C'` recomendado**; `sslmode=require` fora de rede privada | `docs/RELEASE_VALIDACAO_LOCAL.md`, `docs/DEPLOYMENT_RUNBOOK.md` §5 |
 | Proxy/TLS | nginx (`deploy/nginx*.conf`) ou equivalente; `TRUST_PROXY` = nº de saltos; a API escuta em todas as interfaces (`app.listen(PORT)`): **só deve ser alcançável pelo proxy** (firewall/rede privada) | `docs/DEPLOYMENT_RUNBOOK.md` §8 |
 | Armazenamento de arquivos | disco local (`STORAGE_LOCAL_DIR`) ou S3-compatível | `.env.example`, `docs/BACKUP_RESTAURACAO_ARQUIVOS.md` |
@@ -44,8 +44,8 @@
 ## 3. Instalação (resumo; detalhes no runbook de deploy)
 
 1. Provisionar PostgreSQL vazio (`lc_messages='C'`; usuário da aplicação sem privilégio de superusuário em produção — decisão de infraestrutura pendente).
-2. `npm ci` · `npm run build` · `npm run build:server`.
-3. **Banco novo:** `DATABASE_URL=… npm run db:migrate` (aplica `db/schema.sql` + marca as migrations 0001–0040). **Banco existente:** backup **antes**, depois `npm run db:migrate:incremental` (idempotente; use `npm run db:preflight` antes se houver legado). Nunca `psql -f` manual.
+2. Node 22 instalado no servidor/imagem (não substituir o Node de outros projetos). `npm ci` (ou, no artefato de produção, `npm ci --omit=dev`) · `npm run build` · `npm run build:server`.
+3. **Use sempre `npm run db:*` (via `tsx`, que é dependência de produção) — os arquivos `dist-server/db/migrate.js` e `run-migrations.js` NÃO são autônomos** (procuram `schema.sql`/`migrations` ao lado do código compilado e falham; verificado na M50). O artefato de produção precisa conter a pasta `db/` (como o `Dockerfile` faz). **Banco novo:** `DATABASE_URL=… npm run db:migrate` (aplica `db/schema.sql` + marca as migrations 0001–0040). **Banco existente:** backup **antes**, depois `npm run db:migrate:incremental` (idempotente; use `npm run db:preflight` antes se houver legado). Nunca `psql -f` manual.
 4. Definir as variáveis (§2) por mecanismo de segredos do ambiente (nunca no repositório).
 5. Iniciar: `node dist-server/server/index.js` (nunca `npm start` sob systemd — `deploy/levora-api.service`).
 6. Verificar (§5). Só então liberar tráfego pelo proxy.
@@ -99,6 +99,45 @@ A aplicação registra, ao iniciar, as tarefas de `src/static/__dev/scheduled-jo
 - [ ] Smoke (§5) verde; evidência arquivada.
 - [ ] Decisão sobre recuperação de acesso de usuários (ver `docs/LANCAMENTO_MATRIZ_FINAL.md`).
 
-## 9. Evidência do ensaio local (M49)
+## 9. Diagnóstico por sintoma
+
+| Sintoma | Causa provável | Onde confirmar | Ação |
+|---|---|---|---|
+| `__ready` 503, `schema=desatualizado` | migration não aplicada ou `schema_migrations` ausente | `select id from schema_migrations` | `npm run db:migrate:incremental` (após backup) |
+| `__ready` 503, `database=falha` | banco inacessível, TLS/credencial, rede | log `readiness_check` `errorCode` | corrigir conectividade; a app não reinicia sozinha |
+| `__ready` 503, `identityKeys=ausente` (produção) | `IDENTITY_CODE_PEPPER_V*` ou `MFA_ENCRYPTION_KEY_V*` ausente/curta | log `CHAVES_IDENTIDADE_AUSENTES` | definir as chaves (guardar cópia segura) |
+| Login de conta de plataforma/MFA → HTTP 500 | mesmas chaves | log `IdentityKeyConfigError` | idem |
+| Cookie de sessão não persiste | cookie `Secure` em HTTP, ou `TRUST_PROXY`/TLS errados | cabeçalhos da resposta | servir por HTTPS; ajustar `TRUST_PROXY` |
+| Comprovante fica retido | sem `CLAMD_HOST` (falha fechada) ou `clamd` indisponível | auditoria `arquivo.analise_indisponivel`; `GET /_api/v1/destination-proofs-reconciliation` | conectar o ClamAV; `files-rescan` |
+| Limites de taxa "estranhos" | contadores em memória por processo | — | uma instância, ou contadores compartilhados |
+| Testes/`release:validate` com timeout no cleanup de banco | `DROP/CREATE DATABASE` espera um checkpoint forçado do PostgreSQL (lento em disco local sob a carga da suíte) | `log_checkpoints` do PostgreSQL | ver `docs/RELEASE_VALIDACAO_LOCAL.md` |
+
+## 10. Segredos, TLS, isolamento e encerramento
+
+- **Segredos:** nunca no repositório nem na imagem. Entregar como variáveis de ambiente por um mecanismo do ambiente (arquivo `EnvironmentFile` com permissão `0600` e dono `levora` no systemd, secrets do orquestrador ou cofre do provedor — **escolha pendente do fornecedor**). Gerar pepper (≥ 32 bytes) e chave AES (32 bytes base64) **por ambiente** (nunca reutilizar os de produção em staging); guardar cópia fora do servidor; rotação por versão (`_V2` + `_CURRENT`) sem apagar a anterior enquanto houver dado cifrado.
+- **TLS:** terminar no proxy (`deploy/nginx*.conf` + `docs/DEPLOYMENT_RUNBOOK.md` §11); o cookie de sessão é `Secure`, então **o staging precisa de HTTPS** (exceto `localhost`). Conferir após a instalação: `curl -I https://<staging>/_api/__health` com cabeçalhos de segurança, redirecionamento 80→443, certificado válido e API inacessível diretamente na porta 3001.
+- **Isolamento do staging:** banco **dedicado** (nome `*_staging`), segredos próprios, nenhum dado real, e-mails de domínio reservado (`@…invalid`/caixa de captura), `LEVORA_ENVIRONMENT=staging` só neste ambiente (habilita o seed sintético e, opcionalmente, `PLATFORM_MFA_REQUIRED=false` — **não use** em staging que valide MFA), sem credenciais de OAuth/SMTP de produção.
+- **Encerrar com segurança:** (1) parar o tráfego no proxy; (2) `SIGTERM` na API e aguardar o encerramento gracioso; (3) backup final se houver evidência a preservar (`pg_dump -Fc`), guardado fora do host; (4) `drop database` do banco de staging; (5) remover o diretório de uploads sintéticos; (6) revogar/rotacionar os segredos do staging; (7) registrar data, responsável e destino das evidências. Nenhuma etapa toca em produção.
+
+## 11. Requisitos mínimos de infraestrutura de staging (a consultar com o fornecedor)
+
+**Não há preços nem dimensionamento medido em carga.** Os números abaixo são o que está **comprovado** ou **estimado (marcado)**.
+
+| Recurso | Requisito | Base |
+|---|---|---|
+| Node | 22.x LTS (versão exata fixa e registrada) | `engines`; M50 validou 22.23.5 |
+| API | 1 instância; pools de conexão pequenos (`max: 3` por pool; ver `docs/STAGING_OPERATIONS.md` §19) | código |
+| CPU/RAM da API | **estimado** 1 vCPU / 512 MB–1 GB para uso piloto; confirmar medindo | sem teste de carga |
+| PostgreSQL | 16, `lc_messages='C'` recomendado, TLS, rede privada, backup agendado com restauração testada no provedor, extensões: nenhuma além das padrão | ensaios M47–M50 |
+| Banco: papéis | usuário da aplicação **sem** superusuário; usuário separado para migrations (decisão de infraestrutura pendente) | `docs/DEPLOYMENT_RUNBOOK.md` |
+| Armazenamento | disco persistente para `STORAGE_LOCAL_DIR` **ou** S3-compatível; backup dos objetos é separado do `pg_dump` | `docs/BACKUP_RESTAURACAO_ARQUIVOS.md` |
+| Proxy/TLS | nginx (ou equivalente) com certificado válido; API só acessível pelo proxy | `deploy/` |
+| ClamAV (se comprovantes) | serviço `clamd` em rede privada; memória na ordem de alguns GB (a validação local usou limite de 5 GiB / 4 CPUs); `StreamMaxLength` ≥ `CLAMD_MAX_BYTES` | `docs/ANTIMALWARE_ARQUIVOS.md` |
+| Logs | coleta do stdout JSON com retenção definida (política pendente) | `docs/RELEASE_VALIDACAO_LOCAL.md` |
+| Monitoramento | sonda em `/_api/__ready` (200/503) e alerta de reinício | sem alertas externos hoje |
+| Acesso | SSH/painel restrito; apenas pessoas autorizadas; nenhum banco exposto à Internet | — |
+| Custos | **a consultar**: hospedagem, PostgreSQL gerenciado, armazenamento, backup, domínio/TLS, ClamAV, SMTP (se aprovado), GitHub Actions | nenhum autorizado |
+
+## 12. Evidência do ensaio local (M49)
 
 Banco descartável PostgreSQL 16.15 (`lc_messages=C`), build compilado em `NODE_ENV=production`: instalação do zero (`db:migrate`; incremental = "nenhuma pendente"); seed sintético; `__ready` 200 com agendador desligado; produção **sem** chaves de identidade → 503 (novo); smoke 13/13; "release ruim" simulada (migration removida de `schema_migrations` + tabela apagada) → `__ready` 503; `pg_dump`/`pg_restore` para banco novo com contagens idênticas; aplicação apontada para o banco restaurado com smoke 13/13 e escritas posteriores; cadeia de auditoria 93/93 íntegra. Evidências em `C:\Users\JL\levora-ensaio-ciclo1-20261018\m49-evidence\rehearsal\`. **Não** cobre: infraestrutura real, TLS real, ClamAV real nesta rodada, SMTP, carga, Firefox/Safari, leitor de tela.
