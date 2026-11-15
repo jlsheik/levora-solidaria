@@ -1,4 +1,6 @@
-# Matriz final de lançamento, escopo fechado e critérios de homologação (M49)
+# Matriz final de lançamento, escopo fechado e critérios de homologação (M49, atualizada na M50)
+
+> **Atualização M50 (só o que mudou):** (1) **Node 22.23.5 validado**: `release:validate` + `db-check` integrais passaram (3076 testes, 4 ignorados, 0 falhas; interface 230; db-check 24/24) — o item "Node" deixa de ser pendência local; resta a prova no CI e no runtime do staging. (2) Cleanup de migrations: espera legítima por checkpoint forçado do PostgreSQL, sem vazamento (`RELEASE_VALIDACAO_LOCAL.md`). (3) Processo residual da M49: já não existia; nenhum órfão. (4) Recuperação de acesso: especificação implementável em `docs/RECUPERACAO_DE_ACESSO_ESPECIFICACAO.md` (continua **não implementada**; decisão pendente). (5) Runbook de staging completado (Node 22, artefato de produção, diagnóstico, segredos/TLS/isolamento, encerramento, requisitos). (6) Matriz de configuração do primeiro lançamento (§4a) e critério de elegibilidade (§9a).
 
 **Estado:** preparação técnica local concluída; **nada está homologado em staging ou produção**. Evidências locais e sintéticas. Os PRs #30/#31 seguem Draft, sem CI remoto e sem revisão humana. Este documento não aprova merge nem deploy.
 
@@ -15,6 +17,7 @@ Tipos de bloqueador: **A** implementado, falta validação · **B** implementaç
 | Backup/restauração na infraestrutura | A/E | NH | procedimento ensaiado localmente (contagens idênticas, cadeia 93/93, escrita pós-restore); arquivos têm backup separado | Repetir no provedor; RPO/RTO medidos |
 | Rollback | A | NH | migrations sem "down"; rollback = restaurar backup anterior (ensaiado localmente) | Ensaio em staging com artefato anterior |
 | ClamAV | A/E | NH | fail-closed provado por testes (indisponível/timeout/infectado/limpo/reanálise/concorrência); ClamAV real validado só localmente em 15–16/10/2026; reanálise automática existe (`retryFileScans`) | Serviço em rede privada; EICAR e arquivo limpo ponta a ponta no staging; alerta de idade das assinaturas (limiar = decisão) |
+| Node 22 | A | CV (local) | validado na M50 (22.23.5) | CI e staging em Node 22 |
 | Autenticação — cadastro/login/MFA/troca de senha/sessões | A | NH | smoke 13/13 e testes de sessão/MFA; recuperação do owner via CLI | Jornadas no staging com TLS (cookie `Secure`) |
 | **Autenticação — recuperação de senha de usuário comum** | **B/D/E** | **BL** | **não existe** endpoint nem fluxo (especificado em `CONTA_ESPECIFICACAO.md` §3.1); sem SMTP aprovado; perda de MFA de usuário comum não tem recuperação | Resposta objetiva em §2 |
 | Retenção/exclusão de dados | D (+J) | BL | conta: anonimização implementada; comprovantes/organização: sem rotina e sem decisão; ver `RETENCAO_DADOS_MATRIZ.md` | Decisão do proprietário + parecer jurídico antes de produção com dados reais |
@@ -26,7 +29,7 @@ Tipos de bloqueador: **A** implementado, falta validação · **B** implementaç
 
 ## 2. Se um usuário real perder a senha, como recupera o acesso?
 
-**Hoje não há caminho seguro de autoatendimento.** Não existe "esqueci minha senha"; não existe procedimento para MFA perdido de usuário comum; nenhum administrador pode redefinir senha/MFA/sessão de outra conta (verificado no código e na documentação de identidade). O que existe: **troca** de senha autenticada; **recuperação do Platform Owner** por CLI (`npm run platform:owner-recovery`: token de 256 bits, 15 min, uso único); contas só com login Google continuam acessando pelo provedor.
+**Hoje não há caminho seguro de autoatendimento.** (Especificação completa em `docs/RECUPERACAO_DE_ACESSO_ESPECIFICACAO.md`.) Não existe "esqueci minha senha"; não existe procedimento para MFA perdido de usuário comum; nenhum administrador pode redefinir senha/MFA/sessão de outra conta (verificado no código e na documentação de identidade). O que existe: **troca** de senha autenticada; **recuperação do Platform Owner** por CLI (`npm run platform:owner-recovery`: token de 256 bits, 15 min, uso único); contas só com login Google continuam acessando pelo provedor.
 **Classificação:** bloqueador para **usuários comuns com senha** (organizações), **não** para o owner da plataforma. Opções (decisão do proprietário):
 1. **Recuperação por e-mail** (especificada, não implementada): exige SMTP aprovado, texto do e-mail e implementação da especificação (token HMAC de 30 min, uso único, MFA preservado). Recomendação técnica **se houver SMTP**.
 2. **Procedimento administrativo controlado** pelo owner (CLI) com verificação de identidade fora do sistema, para uma versão inicial pequena (poucas organizações). Exige escrever e implementar o CLI (não existe para usuários comuns).
@@ -59,13 +62,35 @@ Não declarar autenticação pronta para produção sem uma dessas opções apro
 **Expansão posterior:** vinculação posterior de oferta, categoria obrigatória, tolerância de quantidade configurável, confirmação de entrega física, reanálise com métricas, exclusão/retenção automática (só após decisão jurídica).
 Nenhuma dessas condições vira política sem sua aprovação; nenhuma função prometida foi removida.
 
+## 4a. Matriz de configuração do primeiro lançamento (proposta conservadora — **não é autorização de produção**)
+
+| Capacidade | Configuração proposta | Motivo / condição para mudar |
+|---|---|---|
+| Agentes | simulação; habilitação por agente só com decisão | política de ativação pendente (decisão 4) |
+| Agendador de eventos (`processAgentEvents`) | **desligado** (variável ausente) | só com decisão expressa; as demais tarefas rotineiras (expirações, matching, verificação da cadeia, reanálise) permanecem ligadas |
+| Microsoft | desligado (novo cadastro desabilitado) | exige verificação própria do e-mail e qualificação real |
+| Google | ligado **somente** se credenciais próprias existirem e o fluxo for homologado em staging | senão desligado |
+| IA (`ANTHROPIC_API_KEY`) | desligada (escore determinístico) | sem dado a terceiros sem decisão |
+| SMTP | desligado até aprovação; convites mostram o link | necessário para recuperação por e-mail (decisão 1) |
+| ClamAV | **ligado** se houver comprovantes; sem ele nada é liberado | requisito de produção (falha fechada) |
+| Recuperação de acesso | conforme decisão 1 (A, B ou piloto administrativo) | bloqueador para usuários com senha |
+| Âncora independente da auditoria | não configurada | decisão do proprietário; a cadeia local continua verificada a cada 6 h |
+| Retenção/exclusão | **nenhuma exclusão automática**; conta com anonimização sob pedido (já existe) | decisão + parecer jurídico (decisão 2) |
+| Documentos | só com ClamAV; sem aprovação automática | idem |
+| Auditoria | integral, imutável | — |
+| Destinação | habilitada com comprovante; **registro ≠ entrega física comprovada** (a interface não deve afirmar o contrário) | confirmação física não existe |
+| Prestação de contas | habilitada como **relatório de registros**, não como homologação de entrega | decisão 4 |
+| Pagamentos reais / movimentação física na homologação | **nenhum** | fora do escopo |
+
+**Decisões indispensáveis para aceitar dados reais (extraídas de `RETENCAO_DADOS_MATRIZ.md`):** quem é o controlador e a base legal; prazo mínimo de guarda dos comprovantes e quando o objeto pode ser eliminado; destino dos dados ao encerrar uma organização; prazo de backups e logs. Sem prazos inventados e sem parecer jurídico.
+
 ## 5. Plano de reativação do CI
 
 - **Workflow existente:** `.github/workflows/ci.yml`, jobs `test` (postgres 16 de serviço: typecheck, `npm test`, build, build:server, `npm audit --audit-level=moderate`) e `qa-browser` (Chrome do runner, `qa:visual` perfil `ci`, `qa:security` com nginx real em Docker). Permissões: `contents: read` apenas; sem segredos; ações fixadas por SHA; imagens Docker fixadas por digest. Não envia nada a serviços externos.
 - **Achado:** o gatilho `pull_request` só cobre bases `master` e `fase-**`. **O PR-2 (base `integracao/m32-m39`) não dispararia CI** antes de ser retargetado para `master`. Opções (decisão sua, não alterei workflow): validar o PR-1; após o merge do PR-1 retargetar o PR-2 para `master` (CI roda); ou, com autorização, incluir `integracao/**` nas bases do gatilho.
 - **Outro risco:** o job `qa-browser` roda `qa:visual` sem baselines aprovadas; não sei como o perfil `ci` se comporta com 0 baselines aprovadas — pode falhar por razões do gate e não do código. Tratar a primeira falha como informação, não como regressão.
 - **Verificação local do `npm audit`** (somente leitura, M49): 0 vulnerabilidades em todas as severidades (`m49-evidence/npm-audit.json`); isso **não** prova segurança.
-- **Versão do Node:** os testes locais rodaram em Node v24.19.0; o projeto declara Node 22.x e o CI exige 22. A primeira execução do CI é a primeira prova em Node 22.
+- **Versão do Node:** os testes da M49 rodaram em Node 24.19.0; **na M50 a suíte integral passou em Node 22.23.5** (versão declarada em `engines`, no CI e no `Dockerfile`). O CI continuará sendo a prova independente.
 - **Como validar/repetir:** ao reativar, abrir/atualizar cada PR → conferir os dois jobs; falha de `test` = defeito do código; falha de `qa-browser` = ler `reports/qa-*.json`; repetir com "Re-run jobs". Nenhum job tem permissão para escrever ou publicar.
 
 ## 6. Matriz de homologação proporcional ao risco (staging)
@@ -99,3 +124,7 @@ Nenhuma dessas condições vira política sem sua aprovação; nenhuma função 
 ## 9. Critério de encerramento do projeto
 
 Todos os itens **BL** resolvidos ou aceitos por escrito; CI verde nos PRs; revisão independente aprovada; staging homologado com os fluxos de §6; backup/restauração e rollback ensaiados no provedor; decisões 1–5 registradas. Antes disso o produto não deve ser chamado de pronto para produção.
+
+## 9a. Elegibilidade do primeiro lançamento (evidências exigidas — nenhuma existe hoje em ambiente real)
+
+Instalação em staging · Node 22 no runtime do staging · CI ou gate independente verde · revisão humana registrada · migrations 0032–0040 aplicadas no provedor · backup e restauração no provedor · autenticação **e recuperação de contas** · MFA · permissões · isolamento entre organizações · cadastro de ofertas e necessidades · matching · atribuições · recebimento · destinação · estoque · segunda aprovação · estornos · prestação de contas (escopo aprovado) · auditoria · ClamAV real (se houver comprovantes) · acessibilidade essencial · testes visuais (baselines aprovadas por humano) · TLS e segredos · monitoramento · rollback. **Testes exclusivamente locais não bastam; revisão feita pelo próprio agente não conta; política jurídica só vale com revisão correspondente.**

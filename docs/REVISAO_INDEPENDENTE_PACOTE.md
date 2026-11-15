@@ -11,6 +11,17 @@
 
 **Dependência:** o PR-2 contém o PR-1 (merge `--no-ff`). Revisar o PR-1 primeiro; no PR-2 revisar só o diff próprio (`integracao/m32-m39...integracao/m40-m42`). Squash do PR-1 exige sincronizar o PR-2 antes do retarget.
 
+## 0. Lista curta prioritária (M50) — o que um profissional técnico deve examinar primeiro
+
+1. **Autenticação/MFA/sessões:** `src/endpoints/auth/*` (login, password-change, mfa-*), `identityKeys.tsx`, `sessionLifecycle.tsx`, `stepUp.tsx`, `platformBootstrap.tsx`; ordem de locks entre login × MFA × exclusão de conta.
+2. **RBAC e isolamento entre organizações:** `permissions.tsx`, `platformAccess.tsx`, e **toda** consulta que recebe `organizationId`.
+3. **Ledger e concorrência:** `needFulfillment*.tsx`, `receiptPosting.tsx`, `stockExit.tsx`, `stockBalance.tsx`, `lockOrder.tsx`.
+4. **Migrations 0032–0040** (sem "down"; restaurar backup é o retorno).
+5. **Agentes e permissões:** `agentRegistry.tsx`, `automationControls.tsx`, `schedulerControl.tsx`, `agent-engine-run`, `background-tasks-retry`.
+6. **Auditoria/integridade:** `auditLog.tsx`, `verifyAuditChain.tsx`, `auditChainReceipt.tsx`.
+7. **Backup/recuperação:** `docs/DATABASE_RECOVERY.md`, `scripts/release-db-check.mjs`, `docs/STAGING_PREPARACAO_M49.md` §7.
+Decisões que o revisor deve cobrar do proprietário: recuperação de acesso, retenção, política de agentes.
+
 ## 1. Riscos principais (por ordem de impacto)
 
 1. **Isolamento entre organizações** (vazamento de ofertas, necessidades, comprovantes, auditoria).
