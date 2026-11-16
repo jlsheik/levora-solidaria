@@ -360,14 +360,23 @@ describe("MFA preservado", () => {
     expect(JSON.stringify(audited)).not.toContain("000000");
   });
 
-  it("TOTP reutilizado (anti-replay) é recusado como no login", async () => {
-    const { u } = await mfaUser();
+  it("senha igual à atual com MFA: 422 e NADA é consumido (o mesmo TOTP e o mesmo código de recuperação continuam valendo); o TOTP depois de CONCLUIR é de uso único (anti-replay)", async () => {
+    const { u, codes } = await mfaUser();
+    const before = await openCodes(u.id);
     const token = await issueFor(u.email);
     await resetReplay(u.id);
     const code = await testTotp();
-    expect((await confirm({ token, newPassword: PASSWORD, totpCode: code })).status).toBe(422); // senha igual: o TOTP foi gasto
-    const res = await confirm({ token, newPassword: NEW_PASSWORD, totpCode: code });
-    expect(res.status).toBe(401);
+    const same = await confirm({ token, newPassword: PASSWORD, totpCode: code });
+    expect(same.status).toBe(422);
+    expect((await parseJson<Json>(same)).code).toBe("senha_igual");
+    expect((await confirm({ token, newPassword: PASSWORD, recoveryCode: codes[0] })).status).toBe(422);
+    expect(await openCodes(u.id)).toBe(before); // o código de recuperação não foi gasto
+    expect((await db.selectFrom("passwordResetTokens").select("attempts").where("userId", "=", u.id).executeTakeFirstOrThrow()).attempts).toBe(0);
+    expect((await confirm({ token, newPassword: NEW_PASSWORD, totpCode: code })).status).toBe(200); // o mesmo TOTP ainda valia
+    await backdate(u.id, 120);
+    const token2 = await issueFor(u.email);
+    const replay = await confirm({ token: token2, newPassword: "senha-depois-do-replay-987", totpCode: code });
+    expect(replay.status).toBe(401); // agora sim: o passo do TOTP foi consumido pela redefinição concluída
   });
 
   it("não é possível informar TOTP e código de recuperação ao mesmo tempo", async () => {

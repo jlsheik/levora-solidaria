@@ -11,7 +11,7 @@ import { MemoryRouter } from "react-router-dom";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import superjson from "superjson";
-import { PasswordResetForm, takeTokenFromLocation } from "../src/components/PasswordResetForm";
+import { PasswordResetForm, readTokenFromLocation, clearTokenFromLocation } from "../src/components/PasswordResetForm";
 import { PasswordResetRequestForm } from "../src/components/PasswordResetRequestForm";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -60,7 +60,7 @@ const flush = async () => {
   });
 };
 const mount = async (node: React.ReactElement) => {
-  await act(async () => root.render(h(MemoryRouter, null, node)));
+  await act(async () => root.render(h(React.StrictMode, null, h(MemoryRouter, null, node)))); // StrictMode como no desenvolvimento: render duplo não pode perder o token
   await flush();
 };
 const text = () => container.textContent ?? "";
@@ -82,7 +82,9 @@ const openWith = (hash: string) => window.history.replaceState(null, "", `/redef
 describe("redefinir-senha: token só no fragmento e removido da URL", () => {
   it("lê #token= e limpa a barra de endereço/histórico; o token nunca vai para a query nem para outro armazenamento", async () => {
     openWith(`#token=${TOKEN}`);
-    expect(takeTokenFromLocation()).toBe(TOKEN);
+    expect(readTokenFromLocation()).toBe(TOKEN);
+    expect(readTokenFromLocation()).toBe(TOKEN); // leitura pura: pode ser repetida (StrictMode renderiza duas vezes)
+    clearTokenFromLocation();
     expect(window.location.hash).toBe("");
     expect(window.location.href).not.toContain(TOKEN);
     expect(window.history.state).toBeNull();
@@ -93,6 +95,39 @@ describe("redefinir-senha: token só no fragmento e removido da URL", () => {
     expect(calls[0]).toEqual({ url: "password-reset-validate", body: { token: TOKEN } }); // no corpo, nunca na URL
     expect(JSON.stringify({ ...window.localStorage })).not.toContain(TOKEN);
     expect(JSON.stringify({ ...window.sessionStorage })).not.toContain(TOKEN);
+  });
+
+  it("abrir OUTRO link na mesma aba (muda só o fragmento) refaz a verificação com o token novo e descarta o estado antigo", async () => {
+    openWith(`#token=${TOKEN}`);
+    replies["password-reset-validate"] = [{ status: 200, body: { state: "expirado" } }, { status: 200, body: { state: "valido", mfaRequired: false } }];
+    await mount(h(PasswordResetForm));
+    expect(q("h1")!.textContent).toBe("Este link expirou");
+    const NEW = "N".repeat(43);
+    await act(async () => {
+      window.history.replaceState(null, "", `/redefinir-senha#token=${NEW}`);
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    await flush();
+    expect(calls.at(-1)).toEqual({ url: "password-reset-validate", body: { token: NEW } });
+    expect(q("h1")!.textContent).toBe("Escolha uma nova senha");
+    expect(window.location.href).not.toContain(NEW);
+  });
+
+  it("reabrir o MESMO link depois de concluir (só muda o fragmento) mostra 'já foi usado', não o estado antigo de conclusão", async () => {
+    openWith(`#token=${TOKEN}`);
+    replies["password-reset-validate"] = [{ status: 200, body: { state: "valido", mfaRequired: false } }, { status: 200, body: { state: "utilizado" } }];
+    replies["password-reset-confirm"] = [{ status: 200, body: { message: "ok" } }];
+    await mount(h(PasswordResetForm));
+    await setValue(q<HTMLInputElement>("#reset-password")!, "uma-senha-nova-segura-456");
+    await setValue(q<HTMLInputElement>("#reset-password-confirm")!, "uma-senha-nova-segura-456");
+    await submit();
+    expect(q("h1")!.textContent).toBe("Senha redefinida");
+    await act(async () => {
+      window.history.replaceState(null, "", `/redefinir-senha#token=${TOKEN}`);
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    await flush();
+    expect(q("h1")!.textContent).toBe("Este link já foi usado");
   });
 
   it("sem token na URL: 'Link inválido' sem chamar a API", async () => {

@@ -7,6 +7,8 @@
 | Base ← head | `master` ← `integracao/m32-m39` | `integracao/m32-m39` ← `integracao/m40-m42` |
 | SHA (M48) | `82d969120c9e20079f8355b9336d691624829de7` | `d6e6c30f18f4322ee06688bd1ac3a8dadc2f58b4` |
 | Migrations | 0032–0038 (+0039–0040 chegam via PR-2) | 0039–0040 |
+
+> **F1 (PR separado, derivado do PR-2):** migration `0041_password_reset_tokens` e a recuperação de senha por e-mail; revisar `src/helpers/passwordReset.tsx`, `src/endpoints/auth/password-reset-*` e `test/passwordReset.test.ts` (ver `RECUPERACAO_DE_ACESSO_ESPECIFICACAO.md` §7).
 | Tema | plataforma, agentes, auditoria, integridade, operação | jornada de necessidades, ofertas, matching, destinação, prestação de contas |
 
 **Dependência:** o PR-2 contém o PR-1 (merge `--no-ff`). Revisar o PR-1 primeiro; no PR-2 revisar só o diff próprio (`integracao/m32-m39...integracao/m40-m42`). Squash do PR-1 exige sincronizar o PR-2 antes do retarget.

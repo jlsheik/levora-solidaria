@@ -256,6 +256,9 @@ export async function inspectResetToken(token: string, now: Date = new Date()): 
   });
 }
 
+/** Sinal interno: desfaz a transação inteira (nada foi consumido) e devolve `senha_igual`. */
+class SamePasswordRollback extends Error {}
+
 export type ConfirmOutcome =
   | { type: "ok"; sessionsRevoked: number; userId: number }
   | { type: "link"; state: Exclude<TokenState, "valido"> }
@@ -281,7 +284,15 @@ export interface ConfirmInput {
  */
 export async function confirmPasswordReset(input: ConfirmInput, now: Date = new Date()): Promise<ConfirmOutcome> {
   const newHash = await generatePasswordHash(input.newPassword);
+  try {
+    return await confirmInTransaction(input, newHash, now);
+  } catch (error) {
+    if (error instanceof SamePasswordRollback) return { type: "senha_igual" };
+    throw error;
+  }
+}
 
+function confirmInTransaction(input: ConfirmInput, newHash: string, now: Date): Promise<ConfirmOutcome> {
   return db.transaction().execute(async (trx): Promise<ConfirmOutcome> => {
     const peek = await findTokenRow(trx, input.token);
     if (!peek) return { type: "link", state: "invalido" };
@@ -325,7 +336,9 @@ export async function confirmPasswordReset(input: ConfirmInput, now: Date = new 
       usedRecovery = usingRecovery;
     }
 
-    if (await compare(input.newPassword, passwordRows[0].passwordHash)) return { type: "senha_igual" };
+    // Depois do MFA (nunca antes: "senha igual à atual" seria um oráculo para quem só tem o link). Se for igual, desfaz TUDO (inclusive o consumo do TOTP/código de
+    // recuperação): a pessoa não perde um código de uso único por ter escolhido a senha atual e pode tentar de novo com o mesmo código.
+    if (await compare(input.newPassword, passwordRows[0].passwordHash)) throw new SamePasswordRollback();
 
     // 5. efeitos, todos na mesma transação.
     await trx.updateTable("userPasswords").set({ passwordHash: newHash }).where("userId", "=", row.userId).execute();

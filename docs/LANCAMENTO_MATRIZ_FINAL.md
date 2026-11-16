@@ -7,6 +7,8 @@
 Estados: **CV** concluído e verificado · **NH** implementado, não homologado · **BL** bloqueado por decisão ou infraestrutura · **DT** defeito técnico pendente (nenhum conhecido ao final da M49).
 Tipos de bloqueador: **A** implementado, falta validação · **B** implementação parcial · **C** capacidade não obrigatória · **D** decisão do proprietário · **E** contratação/configuração/autorização externa.
 
+> **Atualização F1:** a recuperação de senha por e-mail está **implementada localmente** (migration `0041`, endpoints, telas, MFA preservado, testes e Chrome/Edge reais com e-mail SINTÉTICO) e **não homologada**: falta SMTP aprovado, domínio verificado e homologação em staging; a recuperação administrativa de MFA continua não implementada. Detalhes: `docs/RECUPERACAO_DE_ACESSO_ESPECIFICACAO.md` §7.
+
 ## 1. Bloqueadores informados na M48 — classificação objetiva
 
 | Item | Tipo | Estado | Fato verificado | Próxima ação / critério de aceite |

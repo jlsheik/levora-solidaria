@@ -1,6 +1,6 @@
 # Recuperação de acesso — especificação implementável (M50)
 
-**Status: ESPECIFICAÇÃO. Nada deste documento está implementado. Nenhuma decisão do proprietário foi tomada.** Complementa `docs/CONTA_ESPECIFICACAO.md` §3 (que descreve o desenho geral) com o que falta para implementar sem nova rodada de descoberta. Não propõe nova plataforma de identidade: reaproveita `user_passwords`, `sessions`, `mfa_methods`, `mfa_recovery_codes`, `auth_challenges`, `platformBootstrap`, `identityKeys`, `passwordPolicy`, `auditLog`, `emailAdapter`.
+**Status (F1): a opção A (recuperação de senha por e-mail) está IMPLEMENTADA LOCALMENTE e VERIFICADA com transporte de e-mail SINTÉTICO; NÃO está homologada.** Nada foi enviado por SMTP real: o uso real continua bloqueado até haver SMTP aprovado, domínio verificado e homologação do fornecedor. A opção B (recuperação administrativa excepcional, inclusive de MFA perdido) continua apenas especificada, **não implementada**, e depende de política de verificação de identidade aprovada pelo proprietário. Ver §7 (o que a F1 implementou e como difere do plano).
 
 ## 1. Lacuna real (verificada no código)
 
@@ -75,3 +75,22 @@ Todos os testes acima verdes; `release:validate` integral verde em Node 22; revi
 
 ## 6. O que não fazer
 Não redefinir senha de terceiros por administrador; não remover MFA por pedido não verificado; não enviar token por query string; não registrar token/e-mail completo em log; não reaproveitar o login social como substituto sem homologação do provedor.
+
+## 7. Implementação F1 (opção A) — o que existe e onde
+
+| Item | Onde |
+|---|---|
+| Tabela `password_reset_tokens` (migration `0041`, tabela nova e vazia; só `user_id`, HMAC do token, pepper, expiração, uso/invalidação, tentativas) | `db/migrations/0041_password_reset_tokens.sql`, `db/schema.sql`, `db/migrationCompat.ts` |
+| Regras (token, URL, elegibilidade, pedido, inspeção, confirmação, aviso) | `src/helpers/passwordReset.tsx` |
+| Endpoints públicos `POST /_api/v1/auth/password-reset-request`, `-validate`, `-confirm` | `src/endpoints/auth/password-reset-*` |
+| Telas `/recuperar-senha` e `/redefinir-senha`; link "Esqueci minha senha" no login | `src/components/PasswordReset*.tsx`, `src/pages/recuperar-senha.tsx`, `src/pages/redefinir-senha.tsx` |
+| Transporte de e-mail sintético (`EMAIL_TRANSPORT=synthetic`, recusado em produção) | `src/helpers/emailAdapter.tsx` |
+| Testes | `test/passwordReset.test.ts` (backend, 41), `test/uiPasswordReset.test.ts` (interface em runtime, 21) |
+
+**Decisões de implementação (padrões de engenharia, a ratificar pelo proprietário):** token de 256 bits em base64url; **validade 30 min** (`PASSWORD_RESET_TTL_MINUTES`, 10–120); cooldown de 60 s por conta no banco; 5 tentativas de segundo fator por token; limites por IP (10 pedidos/15 min; 20 confirmações; 60 validações) e por e-mail (3/hora) **em memória** (um processo); retenção: tokens usados/invalidados/expirados há mais de 7 dias são removidos pelo próprio fluxo; link montado só com `APP_PUBLIC_URL` (https obrigatório em produção).
+
+**Diferenças em relação ao plano:** (1) a resposta pública do pedido é idêntica e o trabalho (consulta, token, envio) roda **depois** da resposta; (2) sem transporte configurado o pedido **não cria token** e o log operacional traz o código `smtp_nao_configurado`; (3) o aviso "sua senha foi alterada" é enviado depois da troca (melhor esforço); (4) a confirmação cancela também os desafios de login (`auth_challenges`) pendentes; (5) uma nova abertura de link na mesma aba (mudança de fragmento) refaz a verificação.
+
+**MFA:** o link não basta. Conta com TOTP ativo exige TOTP **ou** código de recuperação na confirmação (o código é consumido, uso único, como no login); falhas contam por token (5) e esgotam o link; o MFA **nunca** é desativado e os códigos **não** são regenerados; o login seguinte continua pedindo o segundo fator. Titulares de acesso de plataforma ficam **inelegíveis** (mesma resposta pública) e seguem o procedimento do Platform Owner. O login por e-mail bloqueado (5 falhas/15 min) **não** é zerado por uma redefinição (comportamento preexistente do login, não alterado).
+
+**Limites desta implementação:** não há homologação com SMTP real nem de entregabilidade; limites em memória (um processo); recuperação administrativa de MFA não existe; o e-mail comprometido continua sendo o risco residual (mitigado: MFA exigido, sessões revogadas, aviso ao titular).

@@ -18,12 +18,14 @@ const LINK_COPY: Record<LinkProblem, { title: string; text: string }> = {
   invalido: { title: "Link inválido", text: "Este link não é válido ou foi substituído por um pedido mais recente. Peça um novo para continuar." },
 };
 
-/** Lê o token do FRAGMENTO (`#token=…`) e o remove da barra de endereço e do histórico: o token fica só na memória desta tela. */
-export function takeTokenFromLocation(): string {
-  const raw = window.location.hash.replace(/^#/, "");
-  const token = new URLSearchParams(raw).get("token") ?? "";
+/** Lê o token do FRAGMENTO (`#token=…`). Leitura PURA e idempotente: o React (StrictMode) pode renderizar duas vezes, então nada é removido aqui. */
+export function readTokenFromLocation(): string {
+  return new URLSearchParams(window.location.hash.replace(/^#/, "")).get("token") ?? "";
+}
+
+/** Remove o fragmento da barra de endereço e do histórico (depois de montar): o token fica só na memória desta tela. */
+export function clearTokenFromLocation(): void {
   if (window.location.hash) window.history.replaceState(null, "", window.location.pathname);
-  return token;
 }
 
 /**
@@ -32,9 +34,28 @@ export function takeTokenFromLocation(): string {
  * permite (só se há segundo fator).
  */
 export const PasswordResetForm: React.FC = () => {
-  const tokenRef = useRef<string | null>(null);
-  if (tokenRef.current === null) tokenRef.current = takeTokenFromLocation();
-  const token = tokenRef.current;
+  // useState com inicializador PURO (idempotente sob StrictMode); a limpeza da URL acontece num efeito, depois de o token estar guardado.
+  const [token, setToken] = useState<string>(() => readTokenFromLocation());
+  const [openCount, setOpenCount] = useState(0); // cada abertura de link (inclusive o MESMO link de novo) refaz a verificação
+  useEffect(() => {
+    clearTokenFromLocation();
+    // Abrir OUTRO link do e-mail na mesma aba só muda o fragmento (a página não recarrega): o token novo substitui o antigo e o estado é refeito.
+    const onHashChange = () => {
+      const next = readTokenFromLocation();
+      if (next) {
+        setToken(next);
+        setOpenCount((n) => n + 1);
+        setPassword("");
+        setConfirmation("");
+        setCode("");
+        setError(null);
+        setFieldError(null);
+        clearTokenFromLocation();
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   const [stage, setStage] = useState<Stage>(token ? { kind: "checking" } : { kind: "link", problem: "invalido" });
   const [password, setPassword] = useState("");
@@ -46,20 +67,31 @@ export const PasswordResetForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
 
+  const checkSeq = useRef(0);
   const check = useCallback(async () => {
-    if (!token) return;
+    if (!token) {
+      setStage({ kind: "link", problem: "invalido" });
+      return;
+    }
+    const seq = ++checkSeq.current;
     setStage({ kind: "checking" });
     try {
       const result = await postPasswordResetValidate({ token });
+      if (seq !== checkSeq.current) return; // resposta de um link anterior: ignorada
       setStage(result.state === "valido" ? { kind: "form", mfaRequired: result.mfaRequired } : { kind: "link", problem: result.state });
     } catch {
-      setStage({ kind: "unavailable" });
+      if (seq === checkSeq.current) setStage({ kind: "unavailable" });
     }
   }, [token]);
 
+  // Uma verificação por abertura de link (StrictMode roda o efeito duas vezes em desenvolvimento: a segunda chamada é descartada pela guarda).
+  const checkedKey = useRef<string | null>(null);
   useEffect(() => {
+    const key = `${openCount}:${token}`;
+    if (checkedKey.current === key) return;
+    checkedKey.current = key;
     void check();
-  }, [check]);
+  }, [check, token, openCount]);
 
   // Foco no título a cada mudança de estado: leitores de tela e teclado acompanham a transição.
   useEffect(() => {
