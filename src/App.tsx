@@ -13,6 +13,10 @@ import platformActivatePageLayout from "./pages/plataforma.ativar.pageLayout";
 
 import LoginPage from "./pages/login";
 import loginPageLayout from "./pages/login.pageLayout";
+import RecoverPasswordPage from "./pages/recuperar-senha";
+import recoverPasswordPageLayout from "./pages/recuperar-senha.pageLayout";
+import ResetPasswordPage from "./pages/redefinir-senha";
+import resetPasswordPageLayout from "./pages/redefinir-senha.pageLayout";
 
 import AcceptInvitePage from "./pages/convites.$token";
 import acceptInvitePageLayout from "./pages/convites.$token.pageLayout";
@@ -86,6 +90,14 @@ const router = createBrowserRouter([
       {
         path: "/login",
         element: <>{withPageLayout(loginPageLayout, LoginPage)}</>,
+      },
+      {
+        path: "/recuperar-senha",
+        element: <>{withPageLayout(recoverPasswordPageLayout, RecoverPasswordPage)}</>,
+      },
+      {
+        path: "/redefinir-senha",
+        element: <>{withPageLayout(resetPasswordPageLayout, ResetPasswordPage)}</>,
       },
       {
         path: "/convites/:token",

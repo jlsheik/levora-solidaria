@@ -27,6 +27,8 @@ import { closeDbPool } from "../src/helpers/db.js";
 import { checkWriteRequest } from "../src/helpers/csrfGuard.js";
 import { installSafeConsoleError, logEvent, newOperationId, safeErrorCode } from "../src/helpers/opLog.js";
 import { checkReadiness } from "../src/helpers/readiness.js";
+import { flushPasswordResetWork } from "../src/helpers/passwordReset.js";
+import { checkProxyTrust } from "../src/helpers/proxyTrust.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENDPOINTS_DIR = path.resolve(__dirname, "../src/endpoints");
@@ -270,6 +272,8 @@ async function main() {
   const { startScheduler } = await import("../src/helpers/scheduler.js");
   startScheduler();
   logEvent({ event: "server_start", status: "ok", context: { port: PORT } });
+  const proxyTrust = checkProxyTrust();
+  if (proxyTrust !== "ok") logEvent({ event: "proxy_trust", status: "ignorado", context: { reason: proxyTrust } });
   // Apenas diagnóstico no log (não impede o processo de subir): um schema incompatível aparece aqui e em /_api/__ready.
   void checkReadiness().then((r) => logEvent({ event: "startup_readiness", status: r.ready ? "ok" : "falha", context: { ...r.checks } }));
 
@@ -286,6 +290,9 @@ async function main() {
     forceExit.unref();
 
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    // F2: o envio da recuperação de senha roda DEPOIS da resposta HTTP; termina o que está em andamento (precisa do banco) antes de fechar o pool.
+    // Limitado pelo temporizador de encerramento acima; se o processo cair antes, o token fica ativo sem e-mail e a pessoa pode pedir de novo após o cooldown.
+    await flushPasswordResetWork();
     await closeDbPool();
     clearTimeout(forceExit);
     console.log("Encerrado graciosamente.");

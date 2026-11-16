@@ -13,7 +13,7 @@
 | Proxy/TLS | nginx (`deploy/nginx*.conf`) ou equivalente; `TRUST_PROXY` = nº de saltos; a API escuta em todas as interfaces (`app.listen(PORT)`): **só deve ser alcançável pelo proxy** (firewall/rede privada) | `docs/DEPLOYMENT_RUNBOOK.md` §8 |
 | Armazenamento de arquivos | disco local (`STORAGE_LOCAL_DIR`) ou S3-compatível | `.env.example`, `docs/BACKUP_RESTAURACAO_ARQUIVOS.md` |
 | ClamAV (`clamd`) | **obrigatório em produção**; opcional em staging (`FILE_SCAN_MODE=required` + `CLAMD_HOST`) | `docs/ANTIMALWARE_ARQUIVOS.md`, `docs/PLANO_IMPLANTACAO_SCANNER.md` |
-| SMTP | **opcional hoje** (convites mostram o link; sem recuperação de senha por e-mail) | `docs/CONTA_ESPECIFICACAO.md` |
+| SMTP | convites funcionam sem ele (mostram o link); **a recuperação de senha por e-mail (F1) só funciona com SMTP configurado e `APP_PUBLIC_URL` https** — sem SMTP o pedido não cria token e o log traz `smtp_nao_configurado` | `docs/RECUPERACAO_DE_ACESSO_ESPECIFICACAO.md` §7 |
 | Chaves de identidade | `IDENTITY_CODE_PEPPER_V1` (≥ 32 bytes) e `MFA_ENCRYPTION_KEY_V1` (32 bytes em base64) + `_CURRENT`; **a prontidão passa a falhar em produção se faltarem (M49)** | `src/helpers/identityKeys.tsx` |
 
 ## 2. Matriz de configuração (nomes e comportamento; **sem valores**)
@@ -25,11 +25,13 @@
 | `NODE_ENV` | sim em produção | `production` torna o antimalware **sempre** obrigatório | — |
 | `PORT` | não | 3001 | — |
 | `APP_PUBLIC_URL` | sim | link de convite/OAuth | HTTPS no staging público |
-| `TRUST_PROXY` | sim atrás de proxy | nº de saltos | afeta rate limiting por IP |
+| `TRUST_PROXY` | **sim em produção atrás de proxy** | nº real de proxies | sem ele os limites por IP (login, recuperação de senha) passam a valer para TODOS os usuários juntos (aviso `proxy_trust` no log de inicialização); valor maior que o real permite forjar `X-Forwarded-For`. Implantação aprovada = **uma instância** (limites por IP em memória; com mais de uma, ver `RECUPERACAO_DE_ACESSO_ESPECIFICACAO.md` §8.2) |
 | `IDENTITY_CODE_PEPPER_V<n>`, `IDENTITY_CODE_PEPPER_CURRENT` | sim | — | segredo; ≥ 32 bytes; versionado |
 | `MFA_ENCRYPTION_KEY_V<n>`, `MFA_ENCRYPTION_KEY_CURRENT` | sim | — | segredo; 32 bytes base64; perder a chave invalida os TOTP cadastrados |
 | `PLATFORM_MFA_REQUIRED` | não | `true` | `false` só vale com `LEVORA_ENVIRONMENT=staging` + banco `*_staging/_demo/_qa/_test` em host local |
 | `LEVORA_ENVIRONMENT` | só para o seed | `staging` habilita o seed sintético | **nunca** em produção |
+| `PASSWORD_RESET_TTL_MINUTES` | não | 30 (10–120) | validade do link de redefinição de senha (F1) |
+| `EMAIL_TRANSPORT`, `SYNTHETIC_EMAIL_DIR` | não | só `synthetic` em testes/dev; **recusado em produção** | transporte sintético: nenhuma rede, nenhum e-mail real |
 | `AGENT_EVENTS_SCHEDULER_ENABLED` | não | **ausente = desligado**; só `true` exato liga o processamento automático de eventos de agentes | manter desligado no primeiro deploy |
 | `FILE_SCAN_MODE`, `CLAMD_HOST`, `CLAMD_PORT`, `CLAMD_TIMEOUT_MS`, `CLAMD_MAX_BYTES` | `CLAMD_HOST` obrigatório em produção | sem `CLAMD_HOST` nada é liberado (falha fechada) | `clamd` não autentica: rede privada |
 | `FILE_SCAN_RETRY_*`, `FILE_SCAN_LEASE_SECONDS`, `FILE_SCAN_PENDING_GRACE_SECONDS` | não | padrões de engenharia, não política | — |

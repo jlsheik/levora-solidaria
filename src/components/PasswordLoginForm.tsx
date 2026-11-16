@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { z } from "zod";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Form,
   FormControl,
@@ -13,6 +13,7 @@ import { Input } from "./Input";
 import { Button } from "./Button";
 import { Spinner } from "./Spinner";
 import styles from "./PasswordLoginForm.module.css";
+import resetStyles from "./passwordReset.module.css";
 import {
   schema,
   postLogin,
@@ -137,6 +138,12 @@ export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
           </FormControl>
           <FormMessage />
         </FormItem>
+
+        <div className={resetStyles.linkRow}>
+          <Link to="/recuperar-senha" className={resetStyles.forgot}>
+            Esqueci minha senha
+          </Link>
+        </div>
 
         <Button
           type="submit"

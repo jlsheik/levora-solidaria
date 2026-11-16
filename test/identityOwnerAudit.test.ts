@@ -104,11 +104,17 @@ describe("Platform Owner único — todos os caminhos EXISTENTES que poderiam in
     expect(await owners()).toEqual([owner.userId]);
   });
 
-  it("não existem endpoints de recuperação de senha, logout global, desativação/suspensão de usuário nem alteração de e-mail/role de OUTRA conta — nada mais a auditar (a Conta, sobre o PRÓPRIO usuário, existe desde a integração da página Conta)", async () => {
-    const { readdirSync } = await import("node:fs");
+  it("não existem endpoints de logout global, desativação/suspensão de usuário nem alteração de e-mail/role de OUTRA conta; a ÚNICA recuperação de senha (F1) é a por e-mail, que EXCLUI titulares de plataforma (inclusive o Owner)", async () => {
+    const { readdirSync, readFileSync } = await import("node:fs");
     const files = [...readdirSync("src/endpoints"), ...readdirSync("src/endpoints/auth")].join("\n");
-    // password-change, sessions-revoke* e profile_POST agora EXISTEM (Conta; só atuam no usuário da sessão: ver test/userAccount.test.ts, IDOR e autorização). O que segue proibido:
-    expect(files).not.toMatch(/password-reset|logout-all|users-status|users-suspend|users-role|platform-access(?!-codes)/);
+    // password-change, sessions-revoke* e profile_POST EXISTEM (Conta; só atuam no usuário da sessão: ver test/userAccount.test.ts). O que segue proibido:
+    const withoutReset = files.replace(/^password-reset.*$/gm, "");
+    expect(withoutReset).not.toMatch(/logout-all|users-status|users-suspend|users-role|platform-access(?!-codes)/);
+    // F1: a recuperação de senha existe SÓ nestes três endpoints públicos (token de uso único enviado por e-mail) — nenhum outro nome novo com "password-reset".
+    const resetFiles = files.split("\n").filter((f) => /password-reset/.test(f)).sort();
+    expect(resetFiles).toEqual(["password-reset-confirm_POST.schema.ts", "password-reset-confirm_POST.ts", "password-reset-request_POST.schema.ts", "password-reset-request_POST.ts", "password-reset-validate_POST.schema.ts", "password-reset-validate_POST.ts"]);
+    // ... e a elegibilidade exclui quem tem acesso de plataforma ATIVO (o Owner usa o procedimento próprio `platform:owner-recovery`); comportamento provado em test/passwordReset.test.ts.
+    expect(readFileSync("src/helpers/passwordReset.tsx", "utf-8")).toMatch(/platformAccess[\s\S]{0,260}"platformAccess\.status", "=", "active"/);
   });
 });
 
