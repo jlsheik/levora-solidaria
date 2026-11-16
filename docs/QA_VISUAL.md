@@ -135,12 +135,14 @@ não for 22** e registra `node -v`, `google-chrome --version` e `docker --versio
 | Navegador | Edge e Chrome | **só o Chrome do runner** (`--browser chrome`; nunca Edge); `QA_BROWSER_NO_SANDBOX=1` por opt-in explícito (AppArmor do runner) |
 | `qa:visual` | 80 cenários × 4 viewports × 2 temas | `--profile ci`: **71 cenários** × os mesmos 4 viewports × 2 temas |
 | `qa:security` | 5 partes, 2 navegadores | **as 5 partes** (calibração, CSRF, XSS, uploads, cabeçalhos nginx/Docker), 1 navegador |
-| Duração | ~12 min + ~7 min | alvo ~10 min (limite do job: 40 min) |
+| Duração | ~12 min + ~7 min | medido no runner `ubuntu-24.04` (28/10/2026): `qa:visual` ~14,5 min + `qa:security` ~4 min; limites: script 25 min, passo 28 min, job 40 min |
 
 **Critério do perfil `ci`** (`CI_PROFILE_IDS` em `scenarios.mjs`): uma ou mais variantes de cada família em que já houve regressão real — botões (primary, outline, ghost, destructive,
 secondary, desabilitado), Switch (ligado/desligado/foco/desabilitado), Input/Textarea/Select, texto e borda de erro, FileDropzone (borda, foco, erro) e variação negativa do
 inventário. **Omitidos (9):** `login-password-field`, `needs-edit-dialog-title`, `org-outline-rename`, `matching-ghost-delete-icon`, `inventory-delta-positive`, `inventory-delta-icon-out`,
 `dropzone-title`, `dropzone-subtitle`, `dropzone-error-clear` (variantes redundantes da mesma família). `test/qaCi.test.ts` trava que o perfil só cita cenários existentes e cobre essas famílias.
+
+**Progresso, prazo e diagnóstico (G2).** O `qa:visual` só imprime o resumo no FIM; em condições normais ele fica ~14 min sem nenhuma linha de saída, de modo que "sem saída" não distingue "lento" de "travado" (foi o que a execução remota de 16/11/2026 deixou sem resposta: 39 min de silêncio até o cancelamento do job). Por isso: (1) uma linha `progresso: N/568 células · tempo · s/célula · última: cenário @viewport tema` por minuto (só contagens e nomes); (2) `--max-minutes N` é o prazo do PRÓPRIO script — ao expirar ele diz quantas células terminaram, qual foi a última e a mais lenta, grava o relatório **parcial** (`ENV`, código 3: reprova, nunca aprova) e encerra, em vez de ser cancelado sem diagnóstico; (3) no CI, `--diagnostics reports/qa-visual-diagnostics` grava o tempo de cada célula (`timings.jsonl`), eventos e o log do servidor (campos sensíveis redigidos) e a pasta é publicada com os relatórios. Nada disso muda cenários, esperas, medições nem resultados (`lib/progress.mjs`, `test/qaProgress.test.ts`).
 
 **Docker (cabeçalhos de produção):** o runner `ubuntu-latest` tem Docker. O job faz `docker pull` explícito de `nginx:1.27-alpine` e `alpine/openssl:3.5.9` (versão fixa + digest, `NGINX_IMAGE`/`OPENSSL_IMAGE` em `scripts/qa-visual/security/nginx.mjs`) (a ferramenta não baixa imagens
 sozinha) e a parte `headers` roda o `deploy/nginx.conf` real. No Linux, o contêiner alcança a API do host por `--add-host host.docker.internal:host-gateway` e a API de QA escuta em

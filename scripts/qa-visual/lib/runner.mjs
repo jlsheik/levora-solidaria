@@ -432,7 +432,7 @@ async function runOneCell(ctx, sc) {
 }
 
 /** Roda os cenários (agrupados por usuário) em cada viewport e tema e acumula as linhas em `report`. */
-export async function runScenarios({ cdp, browserName, version, baseUrl, scenarios, viewports, report, filesDir, screenshotsDir, auth = { current: null }, diag }) {
+export async function runScenarios({ cdp, browserName, version, baseUrl, scenarios, viewports, report, filesDir, screenshotsDir, auth = { current: null }, diag, progress }) {
   for (const user of ["guest", "owner", "volunteer"]) {
     const list = scenarios.filter((s) => s.user === user);
     if (!list.length) continue;
@@ -444,8 +444,10 @@ export async function runScenarios({ cdp, browserName, version, baseUrl, scenari
     }
     for (const sc of list) for (const vp of (sc.viewports ?? viewports)) for (const theme of THEMES) {
       const ctx = { cdp, name: browserName, version, baseUrl, report, theme, vp, vpKey: viewportKey(vp), vpInner: "-", filesDir, screenshotsDir, diag };
-      if (!ok) { addUnmeasurable(ctx, sc, "login", `login como ${user} não concluiu`); continue; }
+      const t0 = Date.now();
+      if (!ok) { addUnmeasurable(ctx, sc, "login", `login como ${user} não concluiu`); progress?.cell(`${sc.id} @${ctx.vpKey} ${theme}`, Date.now() - t0); continue; }
       try { await runOne(ctx, sc); } catch (e) { addUnmeasurable(ctx, sc, "execução", `erro inesperado: ${String(e.message).slice(0, 200)}`); }
+      progress?.cell(`${sc.id} @${ctx.vpKey} ${theme}`, Date.now() - t0); // G2: só observa (contagem + nome); não altera a célula
     }
   }
 }

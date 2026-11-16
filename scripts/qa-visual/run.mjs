@@ -10,6 +10,7 @@
 //   npm run qa:visual -- --visual capture   → (M02) capturas REAIS das páginas críticas como baselines CANDIDATAS (nunca aprova); veja docs/QA_VISUAL.md "Regressão visual"
 //   npm run qa:visual -- --visual compare   → (M02) compara pixel a pixel com a baseline APROVADA (--visual-dir, --visual-out, --visual-pages a,b; --visual-only não roda os cenários funcionais)
 //   npm run qa:visual -- --diagnostics DIR  → grava em DIR o tempo de cada célula (timings.jsonl), o log do servidor e, em todo MISSING, estado da página/console/rede/servidor + captura de tela
+//   npm run qa:visual -- --max-minutes N    → (G2) prazo máximo do PRÓPRIO script: ao expirar, grava o relatório parcial (ENV, código 3) com a célula em que estava e encerra; use um valor menor que o limite do job
 //
 // Banco: SÓ um banco local descartável cujo nome termina em `_qa` (QA_DATABASE_URL, --db-url ou derivado de .env.test `_test` → `_qa`).
 // Códigos de saída: 0 tudo passou · 1 violação (FAIL) · 2 não consegui medir (MISSING/UNMEASURABLE) · 3 ambiente indisponível · 4 autoteste falhou
@@ -32,6 +33,7 @@ import { RunState, installSignalHandlers, recoverOrphans } from "./lib/orphans.m
 import { defaultCandidateDir, resolveCandidateDir } from "./lib/visualdirs.mjs";
 import { VIEWPORTS, parseViewportsOption, viewportKey } from "./lib/viewport.mjs";
 import { SCENARIOS, THEMES, QA_PASSWORD, CI_PROFILE_IDS } from "./scenarios.mjs";
+import { Progress, countCells, startDeadline, parseMaxMinutes, fmtDuration } from "./lib/progress.mjs";
 import { MUTATIONS, SENTINELS } from "./selftest.mjs";
 import { execFileSync } from "node:child_process";
 import { runVisualForBrowser, writeVisualReport, summarizeVisual } from "./lib/visualrun.mjs";
@@ -43,7 +45,7 @@ const { values: opt } = parseArgs({
     browser: { type: "string", default: "auto" }, "db-url": { type: "string" }, only: { type: "string" }, out: { type: "string" }, viewports: { type: "string" }, profile: { type: "string", default: "full" },
     verbose: { type: "boolean", default: false }, "keep-db": { type: "boolean", default: false }, "self-test": { type: "boolean", default: false },
     list: { type: "boolean", default: false }, cleanup: { type: "boolean", default: false }, "inject-css": { type: "string" }, screenshots: { type: "string" }, diagnostics: { type: "string" },
-    visual: { type: "string" }, clock: { type: "string" }, "visual-dir": { type: "string" }, "visual-out": { type: "string" }, "visual-pages": { type: "string" }, "visual-matrix": { type: "string" }, "visual-only": { type: "boolean", default: false },
+    visual: { type: "string" }, "max-minutes": { type: "string" }, clock: { type: "string" }, "visual-dir": { type: "string" }, "visual-out": { type: "string" }, "visual-pages": { type: "string" }, "visual-matrix": { type: "string" }, "visual-only": { type: "boolean", default: false },
   },
 });
 
@@ -52,6 +54,7 @@ if (opt["visual-only"] && !opt.visual) { console.error("--visual-only exige --vi
 // M04: relógio congelado — padrão ligado em --visual (capture|compare); `--clock off` desliga; `--clock <ISO>` usa outro instante fixo. Fora do modo visual o executor funcional não muda.
 const testClock = opt.clock === "off" ? null : opt.clock && opt.clock !== "fixed" ? { ...FROZEN_CLOCK, iso: new Date(opt.clock).toISOString() } : opt.visual || opt.clock === "fixed" ? FROZEN_CLOCK : null;
 if (opt.visual && opt["self-test"]) { console.error("--visual e --self-test são excludentes"); process.exit(EXIT.ENV); }
+let maxMs = 0; try { maxMs = parseMaxMinutes(opt["max-minutes"]); } catch (e) { console.error(e.message); process.exit(EXIT.ENV); }
 if (!["full", "ci"].includes(opt.profile)) { console.error("--profile aceita full ou ci"); process.exit(EXIT.ENV); }
 if (opt.profile === "ci" && opt.only) { console.error("--profile ci e --only são excludentes (o perfil já define os cenários)"); process.exit(EXIT.ENV); }
 const only = opt.profile === "ci" ? new Set(CI_PROFILE_IDS) : opt.only ? new Set(opt.only.split(",").map((s) => s.trim())) : null;
@@ -71,6 +74,7 @@ const visualOut = path.resolve(opt["visual-out"] ?? path.join(tmpdir(), "levora-
 let visualPages = []; if (opt.visual) { try { visualPages = selectPages(opt["visual-matrix"] ? (await import(pathToFileURL(path.resolve(opt["visual-matrix"])).href)).VISUAL_PAGES : VISUAL_PAGES, opt["visual-pages"]); /* M08: matriz complementar opcional */ } catch (e) { console.error(e.message); process.exit(EXIT.ENV); } }
 const cleanups = new Cleanups();
 const state = new RunState();
+let progress; let diagRef; const launched = []; // G2: progresso, diagnóstico e navegadores já abertos (para o relatório parcial do prazo máximo)
 installSignalHandlers({ cleanups, state, exitCode: EXIT.ENV });
 
 const actionsFor = (dbUrl) => ({
@@ -111,12 +115,13 @@ async function main() {
     state.setDatabase(target.database);
     await prepareDatabase(dbUrl, root, { clock: testClock, runId: state.runId });
     process.env.QA_PASSWORD = QA_PASSWORD;
-    if (opt.diagnostics) diag = new Diagnostics({ dir: opt.diagnostics });
+    if (opt.diagnostics) { diag = new Diagnostics({ dir: opt.diagnostics }); diagRef = diag; }
     stack = await startStack({ root, databaseUrl: dbUrl, clock: testClock, onSpawn: (pid, kind, extra) => state.addChild(pid, kind, extra), onLog: diag ? (label, text) => diag.serverLog(label, text) : undefined });
     if (diag) diag.stack = stack;
   } catch (e) { report.addEnv(`pilha de verificação não subiu: ${e.message}`); return; }
   cleanups.add("API e Vite", () => stack.stop());
   console.log(`aplicação em ${stack.baseUrl}`);
+  console.log(`qa:visual: node ${process.version} · ${process.platform}/${process.arch} · perfil ${opt.profile} · ${chosen.length} cenários${maxMs ? ` · prazo máximo ${fmtDuration(maxMs)}` : ""}`);
   if (process.env.QA_VISUAL_FAULT === "after-stack") throw new Error("falha simulada (QA_VISUAL_FAULT=after-stack) para verificar a limpeza");
 
   if (opt.screenshots) mkdirSync(path.resolve(opt.screenshots), { recursive: true });
@@ -143,6 +148,8 @@ async function main() {
       }
       if (diag) await session.cdp.send("Log.enable"); // erros do navegador (recursos que falharam, CSP) entram no diagnóstico
       console.log(`${b.name}: ${session.version}`);
+      launched.push({ name: b.name, version: session.version });
+      if (!opt["self-test"] && !opt["visual-only"] && !progress) progress = new Progress({ total: countCells(chosen, viewports, THEMES, browsers.length) });
       if (process.env.QA_VISUAL_FAULT === "after-browser") throw new Error("falha simulada (QA_VISUAL_FAULT=after-browser) para verificar a limpeza");
       if (opt.visual) { // M02: capturas reais + candidatas (capture) ou comparação com a baseline APROVADA (compare); resultado visual separado do funcional
         let sha = "desconhecido"; try { sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(); } catch { /* sem git: fica registrado como desconhecido */ }
@@ -150,7 +157,7 @@ async function main() {
       }
       if (opt["self-test"]) await selfTest(session, b.name, stack.baseUrl, filesDir, auth);
       else if (opt["visual-only"]) ran.push({ name: b.name, version: session.version });
-      else { await runScenarios({ cdp: session.cdp, browserName: b.name, version: session.version, baseUrl: stack.baseUrl, scenarios: chosen, viewports, report, filesDir, auth, diag, screenshotsDir: opt.screenshots ? path.resolve(opt.screenshots) : undefined }); ran.push({ name: b.name, version: session.version }); }
+      else { await runScenarios({ cdp: session.cdp, browserName: b.name, version: session.version, baseUrl: stack.baseUrl, scenarios: chosen, viewports, report, filesDir, auth, diag, progress, screenshotsDir: opt.screenshots ? path.resolve(opt.screenshots) : undefined }); ran.push({ name: b.name, version: session.version }); }
     } finally { await session.close(); }
   }
 
@@ -195,9 +202,32 @@ function finishVisual(code, outcome) {
   return code === EXIT.OK ? exit : code;
 }
 
-let code; let outcome;
+/** Grava o relatório JSON e imprime o resumo. Usado pelo caminho normal e pelo encerramento por prazo máximo (G2), com `outcome` parcial. */
+function emitReport(outcome, code) {
+  const file = opt.out ? path.resolve(opt.out) : path.join(tmpdir(), "levora-qa-visual", `relatorio-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ geradoEm: new Date().toISOString(), node: process.version, so: process.platform, viewports: viewports.map(viewportKey), temas: THEMES, selecao: selection, navegadores: outcome?.ran ?? [], contagem: report.counts(), diagnostico: outcome?.diag ? outcome.diag.finish(report.rows) : { solicitado: !!opt.diagnostics, ligado: false }, env: report.env, linhas: report.rows }, null, 1));
+  for (const line of report.format({ verbose: opt.verbose })) console.log(line);
+  console.log(opt["visual-only"] ? "Cobertura funcional: NÃO executada (--visual-only): só a parte visual rodou; nenhum PASS funcional foi produzido." : selection.completo ? `Cobertura: matriz completa (${selection.total} cenários).` : `Cobertura: SUBCONJUNTO — ${selection.executados} de ${selection.total} cenários (perfil ${selection.perfil}); NÃO executados (não contam como aprovados): ${selection.omitidos.join(", ")}`);
+  console.log(`Relatório JSON: ${file}`);
+  if (opt["self-test"]) console.log(`Código de saída final (autoteste): ${code}`);
+}
+
+let code; let outcome; let expired = false;
+// G2: prazo máximo do próprio script (--max-minutes). Ao expirar: diz onde estava, grava o relatório PARCIAL (ENV → código 3, nunca "aprovado"), tenta limpar por até 60 s e sai.
+const deadline = startDeadline({ maxMs, onExpire: async (reason) => {
+  expired = true;
+  const where = progress ? progress.describe() : "nenhuma célula foi concluída (a pilha ou o navegador não chegaram a medir)";
+  console.log(`TEMPO MÁXIMO: ${reason}. ${where}.`);
+  try { diagRef?.event("tempo-maximo", { reason, ...(progress?.snapshot() ?? {}) }); } catch { /* o diagnóstico nunca impede o encerramento */ }
+  report.addEnv(`${reason}: ${where}`);
+  try { emitReport({ ran: launched, diag: diagRef }, EXIT.ENV); } catch (e) { console.log(`aviso: não consegui gravar o relatório parcial (${e.message})`); }
+  try { const errs = await Promise.race([cleanups.runAll(), new Promise((r) => setTimeout(() => r([{ name: "limpeza", message: "excedeu 60 s; encerrando mesmo assim (o próximo qa:visual recupera órfãos)" }]), 60000))]); for (const er of errs) console.log(`aviso de limpeza (${er.name}): ${er.message}`); } catch { /* sai de qualquer forma */ }
+  process.exit(EXIT.ENV);
+} });
 try {
   outcome = await main();
+  deadline.cancel();
   code = report.exitCode();
   if (opt.visual && !report.env.length) code = finishVisual(code, outcome);
   if (opt["self-test"] && code === EXIT.FAIL) code = EXIT.SELFTEST;
@@ -209,11 +239,5 @@ try {
   for (const er of errs) console.log(`aviso de limpeza (${er.name}): ${er.message}`);
 }
 if (opt.cleanup) process.exit(code);
-const file = opt.out ? path.resolve(opt.out) : path.join(tmpdir(), "levora-qa-visual", `relatorio-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
-mkdirSync(path.dirname(file), { recursive: true });
-writeFileSync(file, JSON.stringify({ geradoEm: new Date().toISOString(), node: process.version, so: process.platform, viewports: viewports.map(viewportKey), temas: THEMES, selecao: selection, navegadores: outcome?.ran ?? [], contagem: report.counts(), diagnostico: outcome?.diag ? outcome.diag.finish(report.rows) : { solicitado: !!opt.diagnostics, ligado: false }, env: report.env, linhas: report.rows }, null, 1));
-for (const line of report.format({ verbose: opt.verbose })) console.log(line);
-console.log(opt["visual-only"] ? "Cobertura funcional: NÃO executada (--visual-only): só a parte visual rodou; nenhum PASS funcional foi produzido." : selection.completo ? `Cobertura: matriz completa (${selection.total} cenários).` : `Cobertura: SUBCONJUNTO — ${selection.executados} de ${selection.total} cenários (perfil ${selection.perfil}); NÃO executados (não contam como aprovados): ${selection.omitidos.join(", ")}`);
-console.log(`Relatório JSON: ${file}`);
-if (opt["self-test"]) console.log(`Código de saída final (autoteste): ${code}`);
+if (!expired) emitReport(outcome, code);
 process.exit(code);
