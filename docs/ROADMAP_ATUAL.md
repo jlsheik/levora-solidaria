@@ -36,6 +36,8 @@ DOCUMENTAÇÃO DESATUALIZADA**.
 | Oportunidades por organização (modelo local) | `opportunities_*`, Fase 3 | — |
 | Prestação de contas | `impact-report_GET` e tela `prestacao-contas`, presentes desde o import inicial; Fase 41 corrigiu o link de navegação; Fase 69 o overflow mobile | — |
 | Auditoria imutável com hash-chain e verificação periódica | `audit_log` + triggers, `verifyAuditChain*`, Fases 1, 53 | — |
+| M39: resultado explícito e correlação persistida na auditoria; comprovante local e comparação (garantia B); protótipo de privilégios mínimos do banco (migration 0038, `db/prototypes/leastPrivilege.ts`) | `docs/AUDITORIA_CENTRAL.md` §7 | Âncora independente (garantia C), papéis em produção, instrumentar o restante dos fluxos com resultado |
+| Central de Auditoria, rastreabilidade de decisões e verificação da cadeia pela interface (M38) | `docs/AUDITORIA_CENTRAL.md`, migration 0037, `/organizacoes/:id/auditoria` | Âncora independente da cadeia, separação de privilégios do banco, campo de resultado na trilha (decisões do proprietário) |
 | Agendador (5 tarefas) com advisory lock e pools separados | `scheduler.tsx`, `scheduled-jobs.json`, Fases 12, 26, 62, 63; execução real do cron observada na Fase 69 | — |
 | Upload/download de arquivos (disco local; S3 pronto, inativo) | `files-*`, `storageAdapter.tsx`, Fase 11 | — |
 | Rate limiting pontual (em memória, processo único) | `rateLimit.tsx`, `docs/RATE_LIMITING.md`, Fases 13, 52 | — |
@@ -43,6 +45,7 @@ DOCUMENTAÇÃO DESATUALIZADA**.
 | Hardening HTTP, headers, erros classificados, timeout de IA | Fases 50, 64, 65 | — |
 | Build de produção, CI com gates, backup/restore testado | Fases 54, 57–59, 66; `.github/workflows/ci.yml` | — |
 | Staging zero-custo, seed sintético e qualificação do túnel | Fases 61, 62, 68–70; `docs/STAGING_*.md` | Teste por segunda rede: seção 6 |
+| Plataforma de agentes (fundação, sem agentes) — Fase 74 | Principal não humano, autor na auditoria, eventos (outbox), limites e regras de política, pausa/emergência, alertas, fila de exceções, camada de ferramentas; `docs/AGENTES_PLATAFORMA.md`; `test/agentPlatform.test.ts`, `agentEndpoints.test.ts` | Camada A de agentes (Fase 2 de `AGENTES_ESPECIFICACAO.md`) |
 | Frontend (11 rotas), responsivo 375/390/768 | `src/pages/*`; Fase 69 | — |
 
 ## 2. PARCIAL
@@ -64,8 +67,10 @@ papel, desativar membro e sair da organização, com a invariante "sempre ao
 menos um proprietário ativo" garantida sob lock da organização, nova
 permissão `propriedade.gerencie` (só proprietário), aceite de convite que não
 sobrescreve membro ativo (A2) e exclusão de conta com a regra de proprietário
-único dentro da transação (A1). **PRÓXIMO**: plataforma de agentes, ver
-`docs/AGENTES_ESPECIFICACAO.md` (Fase 1 daquela especificação).
+único dentro da transação (A1). **Fase 74** entregou a fundação da plataforma de agentes
+(`docs/AGENTES_PLATAFORMA.md`). **PRÓXIMO**: Camada A de agentes
+(Fase 2 de `docs/AGENTES_ESPECIFICACAO.md`); antes dela, decidir D5 (estorno
+do ledger), que define o que a Sentinela de Integridade vigia.
 
 ## 4. DECISÃO DE PRODUTO PENDENTE
 

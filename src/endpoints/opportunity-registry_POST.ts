@@ -2,6 +2,7 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePlatformAdmin } from "../helpers/platformAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { publishDomainEvent } from "../helpers/domainEvents.js";
 import { schema } from "./opportunity-registry_POST.schema.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
@@ -78,6 +79,20 @@ export async function handle(request: Request) {
         },
         trx
       );
+
+      await publishDomainEvent(trx, {
+        eventType: "opportunity_registry.created",
+        organizationId: null,
+        entityType: "opportunity_registry",
+        entityId: String(created.id),
+        payload: {
+          sourceId: input.sourceId,
+          category: input.category || null,
+          quantity: input.quantity ?? null,
+          unit: input.unit || null,
+          urgency: input.urgency,
+        },
+      });
 
       return created;
     });

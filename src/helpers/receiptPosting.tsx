@@ -3,7 +3,8 @@
  * usem exatamente o mesmo código. Nada aqui decide se a unidade é compatível: quem chama já decidiu (compatível, ou conferida fisicamente na unidade do item).
  * O chamador é dono da transação e das travas (atribuição|doação → item → …); a auditoria entra por último.
  */
-import type { Transaction } from "kysely";
+import { publishStockTransactionCreated } from "./domainEventPublishers.js";
+import { sql, type Transaction } from "kysely";
 import type { DB } from "./schema.js";
 import { recordAuditLogEntry } from "./auditLog.js";
 import { getItemStockBalance } from "./stockBalance.js";
@@ -142,7 +143,7 @@ export async function postLocalDonationReceipt(
   // "Reivindica" a oferta ANTES de lançar o estoque: atualização condicional (defesa em profundidade além da trava).
   const [updated] = await trx
     .updateTable("donationOpportunities")
-    .set({ status: "recebida", updatedAt: new Date() })
+    .set({ status: "recebida", updatedAt: new Date(), version: sql`version + 1` }) // M37: toda mudança do registro incrementa a versão
     .where("id", "=", p.opportunity.id)
     .where("organizationId", "=", p.organizationId)
     .where("status", "not in", ["recebida", "cancelada"])
@@ -163,6 +164,8 @@ export async function postLocalDonationReceipt(
     })
     .returning(["id"])
     .execute();
+  // M36: entrada por recebimento de oportunidade LOCAL (fluxo distinto do recebimento de atribuição, que já publica `allocation.received`) → evento v2, mesma transação.
+  await publishStockTransactionCreated(trx, { organizationId: p.organizationId, transactionId: String(tx.id), itemId: p.item.id, type: "entrada", delta: Number(p.quantityReceived), source: "recebimento_oportunidade", actorUserId: p.userId });
 
   await recordAuditLogEntry(
     {

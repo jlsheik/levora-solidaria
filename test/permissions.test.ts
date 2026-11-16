@@ -56,6 +56,15 @@ describe("catálogo de permissões (RBAC granular)", () => {
     expect(roleHasPermission("voluntario", "organizacao.gerencie")).toBe(false);
   });
 
+  it("só proprietário/administrador têm automacao.leia e automacao.gerencie (alertas, exceções, pausa)", () => {
+    for (const permission of ["automacao.leia", "automacao.gerencie"] as const) {
+      expect(roleHasPermission("proprietario", permission)).toBe(true);
+      expect(roleHasPermission("administrador", permission)).toBe(true);
+      expect(roleHasPermission("operador", permission)).toBe(false);
+      expect(roleHasPermission("voluntario", permission)).toBe(false);
+    }
+  });
+
   it("todo papel que tem uma permissão de gerência/ação também tem a leitura correspondente (nenhum papel escreve sem poder ler)", () => {
     const writeToReadPairs: Array<[string, string]> = [
       ["inventario.lance", "inventario.leia"],

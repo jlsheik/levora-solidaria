@@ -16,6 +16,13 @@ const MIGRATION_0016 = readFileSync(path.resolve(__dirname, "../db/migrations/00
 const MIGRATION_0017 = readFileSync(path.resolve(__dirname, "../db/migrations/0028_registration_access_codes.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0018 = readFileSync(path.resolve(__dirname, "../db/migrations/0029_google_identity.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0019 = readFileSync(path.resolve(__dirname, "../db/migrations/0030_social_reauth.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0032_AGENTS = readFileSync(path.resolve(__dirname, "../db/migrations/0032_agent_platform.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0033_ENGINE = readFileSync(path.resolve(__dirname, "../db/migrations/0033_agent_event_engine.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0034_INSUFFICIENT = readFileSync(path.resolve(__dirname, "../db/migrations/0034_agent_event_runs_insufficient_data.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0035_REEVAL = readFileSync(path.resolve(__dirname, "../db/migrations/0035_agent_event_reevaluations.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0038_AUDITOUTCOME = readFileSync(path.resolve(__dirname, "../db/migrations/0038_audit_outcome_correlation_receipts.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0037_AUDITCHAIN = readFileSync(path.resolve(__dirname, "../db/migrations/0037_audit_chain_verifications.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0036_OPPVERSION = readFileSync(path.resolve(__dirname, "../db/migrations/0036_opportunity_version_and_changes.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0020 = readFileSync(path.resolve(__dirname, "../db/migrations/0031_microsoft_identity.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIG_DB = "levora_f89_mig_test";
 
@@ -211,6 +218,14 @@ describe("migração 0015 — sessões, senhas e triggers", () => {
     await sql.begin((trx) => trx.unsafe(MIGRATION_0018));
     await sql.begin((trx) => trx.unsafe(MIGRATION_0019));
     await sql.begin((trx) => trx.unsafe(MIGRATION_0020));
+    // + 0032 (M33, plataforma de agentes): o schema.sql atual também a inclui
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0032_AGENTS));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0033_ENGINE));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0034_INSUFFICIENT));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0035_REEVAL));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0036_OPPVERSION));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0037_AUDITCHAIN));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0038_AUDITOUTCOME));
     const migrated = await sql`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords','registration_access_codes','user_identities','oauth_attempts') ORDER BY 1, 2`;
     // banco novo a partir do schema.sql ATUAL (o mesmo que a suíte usa)
     const admin = postgres(adminUrl().toString(), { max: 1, prepare: false, onnotice: () => {} });
@@ -361,7 +376,7 @@ describe("migração 0017 (códigos de acesso) sobre o estado da Fase 90", () =>
     const second = await addUser("segundo@x.com");
     await sql`UPDATE users SET registered_via_code_id = ${code.id} WHERE id = ${existing}`;
     await expect(sql`UPDATE users SET registered_via_code_id = ${code.id} WHERE id = ${second}`).rejects.toThrow(/registered_via_code/);
-    await expect(sql`INSERT INTO registration_access_codes (code_hash, pepper_version, code_last4, created_by_user_id, expires_at) VALUES (decode(repeat('02', 32), 'hex'), 1, 'ABCD', ${existing}, now() + interval '100 days')`).rejects.toThrow(/check/i);
+    await expect(sql`INSERT INTO registration_access_codes (code_hash, pepper_version, code_last4, created_by_user_id, expires_at) VALUES (decode(repeat('02', 32), 'hex'), 1, 'ABCD', ${existing}, now() + interval '100 days')`).rejects.toMatchObject({ code: "23514" }); // check_violation (SQLSTATE: independe do idioma do servidor)
   });
 
   it("a migração é atômica: falhando no meio (tabela já existente), a coluna de users não fica", async () => {

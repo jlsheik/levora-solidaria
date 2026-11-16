@@ -21,6 +21,7 @@ import { computeAttendanceProgress, getNeedAttendance } from "./needAttendance.j
 import { isAttendanceType, REASON_REQUIRED_TYPES, NOTES_MIN_WHEN_REQUIRED, type DestinationType } from "./destinationRules.js";
 import { classifyUnit } from "./unitVocabulary.js";
 import { serverNow } from "./stockExit.js";
+import { publishStockTransactionCreated } from "./domainEventPublishers.js";
 import { destinationWhere, type DestinationFilter } from "./destinationFilters.js";
 
 export const REVERSAL_KINDS = ["estorno_documental", "devolucao_fisica", "correcao_quantidade"] as const;
@@ -192,6 +193,8 @@ export async function reverseDestination(trx: Transaction<DB>, input: ReversalIn
       .returning(["id"])
       .execute();
     movementId = String(tx.id);
+    // M36: estorno/correção físico da destinação → evento v2 ligado à saída ORIGINAL (nunca uma entrada nova); mesma transação do estorno.
+    await publishStockTransactionCreated(trx, { organizationId: input.organizationId, transactionId: movementId, itemId: target.itemId, type: movementType, delta: input.quantity, source: input.kind === "devolucao_fisica" ? "estorno_destinacao" : "correcao_destinacao", actorUserId, reversesStockTransactionId: target.stockTransactionId });
   }
 
   const attendedBefore = need && target.isCountable ? (await getNeedAttendance(trx, need.id)).appliedNet : 0;

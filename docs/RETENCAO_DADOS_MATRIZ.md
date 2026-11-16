@@ -1,0 +1,30 @@
+# Matriz de dados, retenção e exclusão — insumo para decisão
+
+**Não é parecer jurídico e não define prazos.** Descreve o que o sistema guarda (por inspeção do schema `db/schema.sql` e dos documentos `docs/PRIVACY.md` e `docs/DECISAO_RETENCAO_COMPROVANTES.md`) e o que é **tecnicamente** possível. Nenhuma rotina de exclusão automática existe nem deve ser criada antes da decisão. Nenhum dado real foi acessado.
+
+Legenda de decisão: **T** = técnica (já resolvida ou resolvível pelo desenvolvimento) · **N** = negócio (proprietário) · **J** = exige revisão jurídica.
+
+| Categoria | Tabelas (principais) | Finalidade técnica | Dado pessoal? | Acesso | Proteção | Dependências de integridade | Exclusão/anonimização possível hoje | Auditoria/backup |
+|---|---|---|---|---|---|---|---|---|
+| Contas | `users`, `user_passwords`, `sessions`, `login_attempts`, `user_identities`, `mfa_methods`, `mfa_recovery_codes`, `auth_challenges` | autenticar | sim (e-mail, nome, identidades sociais, segredo TOTP cifrado) | o próprio usuário; plataforma restrita | hash de senha (bcrypt), TOTP AES-256-GCM, HMAC com pepper, cookie HttpOnly | `actor_user_id` em auditoria/ledger | **sim**: `account-delete` anonimiza e-mail/nome, apaga senha e sessões, inativa vínculos; recusa se for único proprietário de organização | linha de `users` nunca é removida; backup retém o estado anterior até expirar |
+| Organizações e membros | `organizations`, `memberships`, `organization_invites`, `organization_capacities`, `organization_service_areas`, `organization_matching_settings` | modelo multi-organização | parcial (contatos de membros; área de atuação) | membros conforme papel (RBAC) | isolamento por organização | referenciadas por todo o domínio | encerramento de organização **não existe** (decisão N/J) | — |
+| Contatos/convites | `organization_invites` | convidar membros | e-mail do convidado | administradores | token só em hash | — | expiração/revogação existe; remoção de convite antigo não automatizada | — |
+| Necessidades | `needs`, `need_resolutions`, `need_fulfillments`, `need_closures` | declarar e atender necessidades | **agregados** (nº de pessoas/famílias), observações livres (podem conter dado pessoal por engano) | membros da organização | RBAC | `need_fulfillments` ligam a ledger | sem exclusão; correção por eventos | cadeia de hash cobre eventos |
+| Ofertas | `donation_opportunities`, `opportunity_registry`, `opportunity_allocations`, `opportunity_changes`, `sources`, `matching_runs`, `match_evaluations` | captar e casar ofertas | pouco (nomes de fontes/contatos de doadores em texto livre) | organizações elegíveis; plataforma | RBAC; privacidade entre organizações | alocações ↔ estoque | sem exclusão; histórico de mudanças imutável | idem |
+| Movimentações/ledger | `inventory_items`, `stock_transactions`, `stock_destinations`, `stock_exit_requests`, `destination_correction_requests`, `unit_regularization_*`, `logistics_events` | saldo e prestação de contas | agregados; `actor_user_id` | membros com permissão; segunda autorização | append-only + gatilhos | cadeia de eventos; saldo derivado | **não**: correção por evento de estorno | cadeia de hash |
+| Documentos | `files` (+ objeto em disco/S3) | comprovantes | **possível** (dado de terceiros enviado por engano; nome do arquivo livre) | autor, proprietário/administrador, membros com `inventario.lance` | análise antimalware obrigatória em produção; armazenamento privado | vínculo em `stock_destinations` | **não implementada**; remover a referência ≠ apagar o objeto (decisão N/J, ver `DECISAO_RETENCAO_COMPROVANTES.md`) | objeto fora do `pg_dump`: backup próprio |
+| Auditoria | `audit_log`, `audit_chain_*` | rastreabilidade e prova | indireta (ator, ação, ids; **sem** segredo/arquivo) | auditoria por organização; plataforma | cadeia de hash + comprovantes | **linhas não podem ser editadas/apagadas** sem quebrar a verificação | só **anonimizar a origem** (conta) — nunca a linha | cadeia sobrevive ao restore (verificado 93/93) |
+| Logs de aplicação | stdout JSON | diagnóstico | **não por desenho** (sem corpo, cabeçalhos, cookies, e-mail, mensagens de erro) | operação | sanitização testada | — | retenção/rotação dependem da plataforma (decisão N + infraestrutura) | — |
+| Backups | dump do banco; backup de arquivos | recuperação | sim (cópia de tudo) | operação | criptografia/guarda: infraestrutura | restaurar traz de volta dados já "excluídos" | prazo de expiração define a eliminação efetiva (decisão N/J) | — |
+| Agentes | `agent_principals`, `domain_events`, `domain_event_consumptions`, `agent_event_runs*`, `agent_event_reevaluations`, `policy_limits`, `automation_controls`, `integrity_alerts`, `exception_queue`, `exception_decisions` | automação em simulação | mínimo (ids, decisões de operadores) | plataforma/organizações | pausa global, habilitação explícita | eventos referenciam ledger/auditoria | sem exclusão; retenção dos eventos de simulação a definir (N) | — |
+
+## Alternativas de política (nenhuma aprovada)
+
+1. **Comprovantes.** (A) guardar enquanto a organização existir; (B) prazo mínimo único da plataforma, depois eliminar o objeto mantendo metadados e hash; (C) prazo configurável por organização dentro de limites. Risco: A acumula dado pessoal de terceiros; B/C exigem rotina de eliminação com simulação, idempotência, falha parcial e evento de auditoria (N + J).
+2. **Contas.** Manter a anonimização atual (T, já implementada) e definir (N) como transferir titularidade quando for o único proprietário (hoje bloqueia a exclusão).
+3. **Encerramento de organização.** Não existe; opções: exportação à organização + retenção mínima pela plataforma (N + J).
+4. **Logs e backups.** Definir prazos de expiração e quem acessa (N + infraestrutura).
+5. **Auditoria.** Manter integralmente; para pedidos de eliminação, anonimizar a conta de origem e registrar a eliminação como **novo** evento (T possível; texto de política N/J).
+
+## Decisão técnica já tomada
+Auditoria imutável; anonimização de conta sem apagar a linha; nenhum segredo/arquivo/corpo em logs e auditoria; objetos de arquivo fora do backup do banco.
