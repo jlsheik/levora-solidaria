@@ -430,6 +430,19 @@ export interface LogisticsEvents {
   scheduledFor: Timestamp | null;
 }
 
+export interface PasswordResetTokens {
+  attempts: Generated<number>;
+  createdAt: Generated<Timestamp>;
+  expiresAt: Timestamp;
+  id: Generated<Int8>;
+  invalidatedAt: Timestamp | null;
+  maxAttempts: Generated<number>;
+  pepperVersion: number;
+  tokenHash: Buffer;
+  usedAt: Timestamp | null;
+  userId: number;
+}
+
 export interface MatchingRuns {
   algorithmVersion: string;
   candidatesConsidered: number | null;
@@ -992,6 +1005,7 @@ export interface DB {
   logisticsEvents: LogisticsEvents;
   matchEvaluations: MatchEvaluations;
   matchingRuns: MatchingRuns;
+  passwordResetTokens: PasswordResetTokens;
   matchingRunNeeds: MatchingRunNeeds;
   memberships: Memberships;
   mfaMethods: MfaMethods;

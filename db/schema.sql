@@ -2113,3 +2113,21 @@ CREATE INDEX idx_matching_run_needs_need ON matching_run_needs (need_id, run_id 
 
 ALTER TABLE match_evaluations ADD COLUMN matching_run_id BIGINT REFERENCES matching_runs(id) ON DELETE SET NULL;
 CREATE INDEX idx_match_evaluations_run ON match_evaluations (matching_run_id) WHERE matching_run_id IS NOT NULL;
+
+-- F1 (0041): recuperação de senha por e-mail — ver db/migrations/0041_password_reset_tokens.sql
+CREATE TABLE password_reset_tokens (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash BYTEA NOT NULL CONSTRAINT password_reset_tokens_hash_uniq UNIQUE,
+  pepper_version SMALLINT NOT NULL CONSTRAINT password_reset_tokens_pepper_chk CHECK (pepper_version > 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  invalidated_at TIMESTAMPTZ,
+  attempts INTEGER NOT NULL DEFAULT 0 CONSTRAINT password_reset_tokens_attempts_chk CHECK (attempts >= 0),
+  max_attempts SMALLINT NOT NULL DEFAULT 5 CONSTRAINT password_reset_tokens_max_attempts_chk CHECK (max_attempts BETWEEN 1 AND 20),
+  CONSTRAINT password_reset_tokens_expiry_chk CHECK (expires_at > created_at),
+  CONSTRAINT password_reset_tokens_final_state_chk CHECK (NOT (used_at IS NOT NULL AND invalidated_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX idx_password_reset_tokens_one_active ON password_reset_tokens (user_id) WHERE used_at IS NULL AND invalidated_at IS NULL;
+CREATE INDEX idx_password_reset_tokens_retention ON password_reset_tokens (created_at);

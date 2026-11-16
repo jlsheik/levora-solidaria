@@ -66,6 +66,7 @@ const TABLES_IN_DEPENDENCY_ORDER = [
   "oauth_attempts",
   "user_identities",
   "registration_access_codes",
+  "password_reset_tokens",
   "user_passwords",
   "users",
 ];
