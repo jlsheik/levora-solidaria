@@ -4,6 +4,7 @@ import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { roleHasPermission } from "../helpers/permissions.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "../helpers/journeyCorrelation.js";
 import { createApprovalRequest } from "../helpers/approvals.js";
 import { RISK_LABELS } from "../helpers/destinationRules.js";
 import { auditExecutedExit, DESTINATION_APPROVAL_ACTION, executeDestinationExit, hashDestinationInput, prepareDestinationExit, type DestinationExitInput } from "../helpers/stockExit.js";
@@ -91,6 +92,8 @@ export async function handle(request: Request) {
             organizationId: input.organizationId,
             actorUserId: user.id,
             action: "destinacao.pendente_aprovacao",
+            outcome: "pendente", // aguarda a segunda aprovação; a execução é outro registro
+            correlationId: await needCorrelation(trx, input.needId ?? null),
             entityType: "inventory_item",
             entityId: String(input.itemId),
             metadata: { approvalRequestId: approval.id, finalidade: input.destinationType, quantidade: input.quantity, saldoAtual: prepared.balanceBefore, riscoAvaliado: prepared.risk, dataEfetiva: input.deliveredOn },

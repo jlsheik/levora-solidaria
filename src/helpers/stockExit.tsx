@@ -13,6 +13,7 @@ import { publishStockTransactionCreated } from "./domainEventPublishers.js";
 import { sql, type Transaction } from "kysely";
 import type { DB } from "./schema.js";
 import { recordAuditLogEntry } from "./auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "./journeyCorrelation.js";
 import { getItemStockBalance } from "./stockBalance.js";
 import { roundQuantity } from "./quantityRules.js";
 import { classifyUnit, unitsEquivalent } from "./unitVocabulary.js";
@@ -281,6 +282,8 @@ export async function auditExecutedExit(
       organizationId: input.organizationId,
       actorUserId: actors.actorUserId,
       action: "inventario.saida_registrada",
+      outcome: "concluida",
+      correlationId: await needCorrelation(trx, input.needId ?? null),
       entityType: "inventory_item",
       entityId: String(input.itemId),
       metadata: { delta: -input.quantity, itemName: prepared.item.name, motivo: "destinacao", destinacaoId: executed.destinationId },
@@ -292,6 +295,8 @@ export async function auditExecutedExit(
       organizationId: input.organizationId,
       actorUserId: actors.actorUserId,
       action: "destinacao.registrada",
+      outcome: "concluida", // saída + destinação + pedido + auditoria na MESMA transação
+      correlationId: await needCorrelation(trx, input.needId ?? null),
       entityType: "stock_destination",
       entityId: executed.destinationId,
       metadata: {

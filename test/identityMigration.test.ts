@@ -20,6 +20,8 @@ const MIGRATION_0032_AGENTS = readFileSync(path.resolve(__dirname, "../db/migrat
 const MIGRATION_0033_ENGINE = readFileSync(path.resolve(__dirname, "../db/migrations/0033_agent_event_engine.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0034_INSUFFICIENT = readFileSync(path.resolve(__dirname, "../db/migrations/0034_agent_event_runs_insufficient_data.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0035_REEVAL = readFileSync(path.resolve(__dirname, "../db/migrations/0035_agent_event_reevaluations.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0039_NEEDCORR = readFileSync(path.resolve(__dirname, "../db/migrations/0039_need_journey_correlation.sql"), "utf-8").replace(/\r\n/g, "\n");
+const MIGRATION_0040_MATCHRUNS = readFileSync(path.resolve(__dirname, "../db/migrations/0040_matching_runs.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0038_AUDITOUTCOME = readFileSync(path.resolve(__dirname, "../db/migrations/0038_audit_outcome_correlation_receipts.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0037_AUDITCHAIN = readFileSync(path.resolve(__dirname, "../db/migrations/0037_audit_chain_verifications.sql"), "utf-8").replace(/\r\n/g, "\n");
 const MIGRATION_0036_OPPVERSION = readFileSync(path.resolve(__dirname, "../db/migrations/0036_opportunity_version_and_changes.sql"), "utf-8").replace(/\r\n/g, "\n");
@@ -226,6 +228,8 @@ describe("migração 0015 — sessões, senhas e triggers", () => {
     await sql.begin((trx) => trx.unsafe(MIGRATION_0036_OPPVERSION));
     await sql.begin((trx) => trx.unsafe(MIGRATION_0037_AUDITCHAIN));
     await sql.begin((trx) => trx.unsafe(MIGRATION_0038_AUDITOUTCOME));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0039_NEEDCORR));
+    await sql.begin((trx) => trx.unsafe(MIGRATION_0040_MATCHRUNS));
     const migrated = await sql`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('platform_access','platform_state','sessions','users','user_passwords','registration_access_codes','user_identities','oauth_attempts') ORDER BY 1, 2`;
     // banco novo a partir do schema.sql ATUAL (o mesmo que a suíte usa)
     const admin = postgres(adminUrl().toString(), { max: 1, prepare: false, onnotice: () => {} });

@@ -2,6 +2,7 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePlatformAdmin } from "../helpers/platformAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "../helpers/journeyCorrelation.js";
 import { getNeedFulfillmentBalance, computeNeedProgress } from "../helpers/needFulfillment.js";
 import { getNeedAttendance, remainingToAttend } from "../helpers/needAttendance.js";
 import { schema } from "./opportunity-allocations_POST.schema.js";
@@ -126,6 +127,8 @@ export async function handle(request: Request) {
           organizationId: input.organizationId,
           actorUserId: user.id,
           action: "atribuicao.proposta",
+          outcome: "pendente", // proposta: o desfecho (aceita/recusada) é outro registro
+          correlationId: await needCorrelation(trx, input.needId ?? null),
           entityType: "opportunity_allocation",
           entityId: String(allocation.id),
           metadata: {
@@ -134,6 +137,7 @@ export async function handle(request: Request) {
             organizationName: org.name,
             quantityAllocated: input.quantityAllocated,
             needId: input.needId ?? null,
+            origem: "manual", // M41: escolhida por pessoa autorizada; nenhuma avaliação de matching foi executada
             ...(priorRefusals.length > 0 ? { reatribuicaoAposRecusaExplicita: true, confirmacaoExplicitaDoAdministrador: true, atribuicoesRecusadasAnteriores: priorRefusals.map((r) => ({ id: r.allocationId, status: r.status })) } : {}),
           },
         },
@@ -144,6 +148,7 @@ export async function handle(request: Request) {
           organizationId: null,
           actorUserId: user.id,
           action: "descoberta_central.atribuida",
+          outcome: "concluida",
           entityType: "opportunity_registry",
           entityId: String(input.opportunityId),
           metadata: { organizationId: input.organizationId, organizationName: org.name, quantityAllocated: input.quantityAllocated },

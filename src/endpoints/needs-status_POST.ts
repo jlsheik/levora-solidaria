@@ -2,6 +2,7 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "../helpers/journeyCorrelation.js";
 import { computeAttendanceProgress, getNeedAttendance } from "../helpers/needAttendance.js";
 import { schema } from "./needs-status_POST.schema.js";
 import superjson from "superjson";
@@ -75,6 +76,8 @@ export async function handle(request: Request) {
           organizationId: input.organizationId,
           actorUserId: user.id,
           action: "necessidade.status_alterado",
+          outcome: "concluida",
+          correlationId: await needCorrelation(trx, input.needId),
           entityType: "need",
           entityId: String(input.needId),
           metadata: { title: existing.title, statusAnterior: existing.status, statusNovo: input.status, baixaEstoqueAutomatica: false, atendidoContabilizavel: progress.attended, solicitado: progress.requested },

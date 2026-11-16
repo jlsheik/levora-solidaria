@@ -13,7 +13,7 @@ export async function handle(request: Request) {
     const json = superjson.parse(await request.text());
     const input = schema.parse(json);
 
-    const result = await runMatchingForOpportunity(input.opportunityId, user.id);
+    const result = await runMatchingForOpportunity(input.opportunityId, user.id, "manual");
 
     return new Response(superjson.stringify(result), {
       headers: { "Content-Type": "application/json" },

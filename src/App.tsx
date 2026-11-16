@@ -45,6 +45,8 @@ import OrganizationRegularizationPage from "./pages/organizacoes.$organizationId
 import organizationRegularizationPageLayout from "./pages/organizacoes.$organizationId.regularizacao.pageLayout";
 import OrganizationAutomationPage from "./pages/organizacoes.$organizationId.automacao";
 import OrganizationAuditPage from "./pages/organizacoes.$organizationId.auditoria";
+import OrganizationJourneyPage from "./pages/organizacoes.$organizationId.jornada";
+import organizationJourneyPageLayout from "./pages/organizacoes.$organizationId.jornada.pageLayout";
 import organizationAuditPageLayout from "./pages/organizacoes.$organizationId.auditoria.pageLayout";
 import organizationAutomationPageLayout from "./pages/organizacoes.$organizationId.automacao.pageLayout";
 
@@ -132,6 +134,10 @@ const router = createBrowserRouter([
       {
         path: "/organizacoes/:organizationId/automacao",
         element: <>{withPageLayout(organizationAutomationPageLayout, OrganizationAutomationPage)}</>,
+      },
+      {
+        path: "/organizacoes/:organizationId/jornada",
+        element: <>{withPageLayout(organizationJourneyPageLayout, OrganizationJourneyPage)}</>,
       },
       {
         path: "/organizacoes/:organizationId/auditoria",

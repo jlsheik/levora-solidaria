@@ -2,6 +2,7 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "../helpers/journeyCorrelation.js";
 import { runMatchingForOpportunity } from "../helpers/opportunityMatching.js";
 import { reopenOpportunityIfNoActiveAllocations } from "../helpers/reopenOpportunity.js";
 import { concludeOpportunityIfAllTerminalAndReceived } from "../helpers/concludeOpportunity.js";
@@ -82,6 +83,8 @@ export async function handle(request: Request) {
           organizationId: input.organizationId,
           actorUserId: user.id,
           action: input.decision === "aceita" ? "atribuicao.aceita" : "atribuicao.recusada",
+          outcome: "concluida", // a DECISÃO foi registrada (aceita/recusada está na ação); não é falha nem pendência
+          correlationId: await allocationCorrelation(trx, input.allocationId),
           entityType: "opportunity_allocation",
           entityId: String(input.allocationId),
           metadata: { opportunityRegistryId: allocation.opportunityRegistryId },
@@ -95,6 +98,7 @@ export async function handle(request: Request) {
             organizationId: null,
             actorUserId: user.id,
             action: "descoberta_central.concluida",
+            outcome: "concluida",
             entityType: "opportunity_registry",
             entityId: String(allocation.opportunityRegistryId),
             metadata: {},
@@ -126,7 +130,7 @@ export async function handle(request: Request) {
     }
 
     if (result.reopenedForRematch) {
-      await runMatchingForOpportunity(result.opportunityRegistryId, user.id);
+      await runMatchingForOpportunity(result.opportunityRegistryId, user.id, "reabertura");
     }
 
     return new Response(superjson.stringify({ allocation: result.allocation }), {

@@ -197,6 +197,7 @@ export default function OpportunitiesPage() {
         <Link to={`/organizacoes/${organizationId}`} className={styles.tabNavItem}>
           Visão geral
         </Link>
+        <Link to={`/organizacoes/${organizationId}/jornada`} className={styles.tabNavItem}>Jornada</Link>
         <Link to={`/organizacoes/${organizationId}/inventario`} className={styles.tabNavItem}>
           Inventário
         </Link>
@@ -416,7 +417,7 @@ export default function OpportunitiesPage() {
                   />
                 )}
                 {opp.linkedNeedTitle && (
-                  <p className={styles.linkedNeed}>Vinculada à necessidade: {opp.linkedNeedTitle}</p>
+                  <p className={styles.linkedNeed}>Vinculada à necessidade: {opp.linkedNeedTitle}{opp.linkedNeedId ? <> · <Link to={`/organizacoes/${organizationId}/jornada?necessidade=${opp.linkedNeedId}`}>Ver a jornada</Link></> : null}</p>
                 )}
 
                 {!isFinal && suggestions.length > 0 && (

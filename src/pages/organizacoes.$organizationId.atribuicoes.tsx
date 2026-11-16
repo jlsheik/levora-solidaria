@@ -161,6 +161,7 @@ export default function OrganizationAllocationsPage() {
 
       <nav className={styles.tabNav}>
         <Link to={`/organizacoes/${organizationId}`} className={styles.tabNavItem}>Visão geral</Link>
+        <Link to={`/organizacoes/${organizationId}/jornada`} className={styles.tabNavItem}>Jornada</Link>
         <Link to={`/organizacoes/${organizationId}/inventario`} className={styles.tabNavItem}>Inventário</Link>
         <Link to={`/organizacoes/${organizationId}/destinacoes`} className={styles.tabNavItem}>Destinação</Link>
         <Link to={`/organizacoes/${organizationId}/necessidades`} className={styles.tabNavItem}>Necessidades</Link>
@@ -243,6 +244,7 @@ export default function OrganizationAllocationsPage() {
             <li key={a.id} id={`atribuicao-${a.id}`} className={styles.card}>
               <div className={styles.headerRow}>
                 <h3 className={styles.cardTitle}>{a.opportunityTitle}</h3>
+                {a.needId !== null && <Link to={`/organizacoes/${organizationId}/jornada?necessidade=${a.needId}`} style={{ fontSize: "0.8125rem" }} aria-label={`Ver a jornada da necessidade desta atribuição: ${a.opportunityTitle}`}>Ver a jornada da necessidade</Link>}
                 <Badge variant={a.status === "recebida" ? "success" : a.status === "recusada" || a.status === "cancelada" ? "destructive" : "outline"}>
                   {a.closedReason ? "Encerrada pelo sistema" : statusLabels[a.status]}
                 </Badge>

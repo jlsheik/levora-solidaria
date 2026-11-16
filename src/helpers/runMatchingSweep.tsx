@@ -106,7 +106,7 @@ async function runMatchingSweepBody() {
     let unchanged = 0;
     for (const id of [...fresh, ...rotation]) {
       try {
-        const result = await runMatchingForOpportunity(id, null);
+        const result = await runMatchingForOpportunity(id, null, "varredura");
         processed += 1;
         if (!result.skipped && result.allocationsCreated.length > 0) matched += 1;
         if (result.unchanged) unchanged += 1;

@@ -13,6 +13,7 @@ import { Checkbox } from "../components/Checkbox";
 import { getNeeds } from "../endpoints/needs_GET.schema";
 import { postOpportunityRegistryMatch } from "../endpoints/opportunity-registry-match_POST.schema";
 import { getMatchEvaluations } from "../endpoints/match-evaluations_GET.schema";
+import { getMatchingRuns } from "../endpoints/matching-runs_GET.schema";
 import { getBackgroundTasks } from "../endpoints/background-tasks_GET.schema";
 import { postBackgroundTasksRetry } from "../endpoints/background-tasks-retry_POST.schema";
 import { getPlatformOrganizations } from "../endpoints/platform-organizations_GET.schema";
@@ -85,6 +86,11 @@ export default function PlatformPage() {
   const registryQuery = useQuery({ queryKey: ["opportunity-registry"], queryFn: () => getOpportunityRegistry({}) });
   const orgsQuery = useQuery({ queryKey: ["platform-organizations"], queryFn: () => getPlatformOrganizations() });
 
+  const runsQuery = useQuery({
+    queryKey: ["matching-runs", expandedEvalId],
+    queryFn: () => getMatchingRuns({ opportunityId: expandedEvalId! }),
+    enabled: expandedEvalId !== null,
+  });
   const evalQuery = useQuery({
     queryKey: ["match-evaluations", expandedEvalId],
     queryFn: () => getMatchEvaluations({ opportunityId: expandedEvalId! }),
@@ -456,6 +462,27 @@ export default function PlatformPage() {
                     )}
                     {expandedEvalId === o.id && (
                       <div className={styles.evalBox}>
+                        <strong style={{ display: "block", marginBottom: "0.5rem" }}>Execuções do matching desta oferta</strong>
+                        {runsQuery.isError ? <p className={styles.emptyText} role="alert">Não foi possível carregar as execuções.</p>
+                          : (runsQuery.data?.runs ?? []).length === 0 ? <p className={styles.emptyText}>{runsQuery.isFetching ? "Carregando…" : "Nenhuma execução do matching registrada para esta oferta (execuções anteriores ao histórico não deixaram registro)."}</p> : (
+                            <ul className={styles.evalList} aria-label="Execuções do matching">
+                              {runsQuery.data!.runs.map((r) => (
+                                <li key={r.id} className={styles.evalRow}>
+                                  <div className={styles.evalHeaderRow} style={{ flexWrap: "wrap", gap: "0.25rem 0.75rem", minWidth: 0 }}>
+                                    <Badge variant={r.status === "falhou" ? "destructive" : r.status === "concluida_com_correspondencia" ? "success" : "secondary"}>
+                                      {r.status === "falhou" ? "Falhou" : r.status === "concluida_com_correspondencia" ? "Concluída, com correspondência" : r.status === "concluida_sem_correspondencia" ? "Concluída, sem correspondência" : "Em andamento"}
+                                    </Badge>
+                                    <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{r.finishedAt ? new Date(r.finishedAt).toLocaleString("pt-BR") : "—"} · origem: {r.origin.replace(/_/g, " ")}</span>
+                                  </div>
+                                  <div className={styles.evalMeta} style={{ overflowWrap: "anywhere" }}>
+                                    {r.status === "falhou" ? `código da falha: ${r.errorCode}` : `${r.candidatesConsidered} necessidade(s) considerada(s) · ${r.candidatesRelated} relacionada(s) · ${r.validMatches} atribuição(ões) criada(s)`}
+                                    {r.repeatCount > 0 ? ` · reconfirmada ${r.repeatCount} vez(es) pela varredura` : ""} · algoritmo v{r.algorithmVersion}{r.triggeredByName ? ` · por ${r.triggeredByName}` : ""}
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        <strong style={{ display: "block", margin: "1rem 0 0.5rem 0" }}>Avaliações por necessidade</strong>
                         {evalQuery.isFetching && !evalQuery.data ? <Skeleton className={styles.listSkeleton} /> : (
                           (evalQuery.data?.evaluations ?? []).length === 0 ? (
                             <p className={styles.emptyText}>Nenhuma avaliação de matching ainda para esta descoberta.</p>

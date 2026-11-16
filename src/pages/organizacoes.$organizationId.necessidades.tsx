@@ -148,6 +148,7 @@ export default function NeedsPage() {
         <Link to={`/organizacoes/${organizationId}`} className={styles.tabNavItem}>
           Visão geral
         </Link>
+        <Link to={`/organizacoes/${organizationId}/jornada`} className={styles.tabNavItem}>Jornada</Link>
         <Link to={`/organizacoes/${organizationId}/inventario`} className={styles.tabNavItem}>
           Inventário
         </Link>
@@ -323,6 +324,7 @@ export default function NeedsPage() {
                   <Badge variant={priorityVariant[need.priority]}>{priorityLabels[need.priority]}</Badge>
                 </div>
                 {need.description && <p className={styles.needDescription}>{need.description}</p>}
+                <p className={styles.needMeta}><Link to={`/organizacoes/${organizationId}/jornada?necessidade=${need.id}`} aria-label={`Acompanhar a jornada da necessidade ${need.title}`}>Acompanhar a jornada</Link></p>
                 <p className={styles.needMeta}>
                   {need.itemName ? `vinculado a "${need.itemName}" · ` : ""}cadastrada por{" "}
                   {need.createdByDisplayName} em {new Date(need.createdAt).toLocaleDateString("pt-BR")}
