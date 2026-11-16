@@ -33,6 +33,8 @@ export const RESET_MAX_TTL_MINUTES = 120;
 export const RESET_COOLDOWN_SECONDS = 60;
 export const RESET_MAX_ATTEMPTS = 5;
 export const RESET_RETENTION_DAYS = 7;
+/** Teto de tokens emitidos por CONTA na última hora, contado no BANCO (vale entre reinícios e entre instâncias; o limite em memória sozinho não vale). */
+export const RESET_MAX_PER_HOUR = 3;
 /** 32 bytes em base64url = 43 caracteres. */
 export const RESET_TOKEN_REGEX = /^[A-Za-z0-9_-]{43}$/;
 
@@ -109,7 +111,17 @@ export async function flushPasswordResetWork(): Promise<void> {
 
 // ---- pedido ----------------------------------------------------------------------------------------------------------
 
-export type ResetRequestOutcome = "enviado" | "inelegivel" | "cooldown" | "smtp_nao_configurado" | "url_invalida" | "falha_envio" | "erro";
+export type ResetRequestOutcome = "enviado" | "inelegivel" | "cooldown" | "limite_horario" | "smtp_nao_configurado" | "url_invalida" | "falha_envio" | "erro";
+
+/** Um transporte que LANÇA exceção (em vez de devolver falha) também não pode deixar um token ativo sem mensagem: vira falha de envio, só com código seguro no log. */
+async function safeSend(adapter: EmailAdapter, input: Parameters<EmailAdapter["send"]>[0]): ReturnType<EmailAdapter["send"]> {
+  try {
+    return await adapter.send(input);
+  } catch (error) {
+    logEvent({ event: "password_reset_request", status: "falha", errorCode: safeErrorCode(error) });
+    return { sent: false, reason: "provider_error", error: "excecao" };
+  }
+}
 
 export interface ResetRequestDeps {
   emailAdapter?: EmailAdapter;
@@ -150,6 +162,14 @@ export async function processResetRequest(rawEmail: string, deps: ResetRequestDe
         .where("createdAt", ">", new Date(now.getTime() - RESET_COOLDOWN_SECONDS * 1000))
         .executeTakeFirst();
       if (recent) return { type: "cooldown" as const };
+      // Teto por conta na última hora, no BANCO: os tokens ficam retidos por 7 dias, então a contagem sobrevive a reinícios e vale entre instâncias.
+      const lastHour = await trx
+        .selectFrom("passwordResetTokens")
+        .select((eb) => eb.fn.countAll<string>().as("n"))
+        .where("userId", "=", user.id)
+        .where("createdAt", ">", new Date(now.getTime() - 3_600_000))
+        .executeTakeFirstOrThrow();
+      if (Number(lastHour.n) >= RESET_MAX_PER_HOUR) return { type: "limite_horario" as const };
 
       // Validar a URL antes de gravar qualquer token.
       const token = generateResetToken();
@@ -184,9 +204,13 @@ export async function processResetRequest(rawEmail: string, deps: ResetRequestDe
       logEvent({ event: "password_reset_request", status: "ignorado", context: { reason: "cooldown" } });
       return "cooldown";
     }
+    if (issued.type === "limite_horario") {
+      logEvent({ event: "password_reset_request", status: "ignorado", context: { reason: "limite_horario" } });
+      return "limite_horario";
+    }
     if (issued.type === "url_invalida") return "url_invalida";
 
-    const result = await adapter.send({
+    const result = await safeSend(adapter, {
       to: issued.to,
       subject: "Redefinição de senha — Levora Solidária",
       text: [

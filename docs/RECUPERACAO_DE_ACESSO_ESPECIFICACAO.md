@@ -87,10 +87,57 @@ Não redefinir senha de terceiros por administrador; não remover MFA por pedido
 | Transporte de e-mail sintético (`EMAIL_TRANSPORT=synthetic`, recusado em produção) | `src/helpers/emailAdapter.tsx` |
 | Testes | `test/passwordReset.test.ts` (backend, 41), `test/uiPasswordReset.test.ts` (interface em runtime, 21) |
 
-**Decisões de implementação (padrões de engenharia, a ratificar pelo proprietário):** token de 256 bits em base64url; **validade 30 min** (`PASSWORD_RESET_TTL_MINUTES`, 10–120); cooldown de 60 s por conta no banco; 5 tentativas de segundo fator por token; limites por IP (10 pedidos/15 min; 20 confirmações; 60 validações) e por e-mail (3/hora) **em memória** (um processo); retenção: tokens usados/invalidados/expirados há mais de 7 dias são removidos pelo próprio fluxo; link montado só com `APP_PUBLIC_URL` (https obrigatório em produção).
+**Decisões de implementação (padrões de engenharia, a ratificar pelo proprietário):** token de 256 bits em base64url; **validade 30 min** (`PASSWORD_RESET_TTL_MINUTES`, 10–120); cooldown de 60 s por conta no banco; 5 tentativas de segundo fator por token; limites por IP (10 pedidos/15 min; 20 confirmações; 60 validações) **em memória** (um processo; IPv6 por /64) e, **no banco**, cooldown de 60 s e teto de 3 tokens por conta por hora (ver §8.2); retenção: tokens usados/invalidados/expirados há mais de 7 dias são removidos pelo próprio fluxo; link montado só com `APP_PUBLIC_URL` (https obrigatório em produção).
 
 **Diferenças em relação ao plano:** (1) a resposta pública do pedido é idêntica e o trabalho (consulta, token, envio) roda **depois** da resposta; (2) sem transporte configurado o pedido **não cria token** e o log operacional traz o código `smtp_nao_configurado`; (3) o aviso "sua senha foi alterada" é enviado depois da troca (melhor esforço); (4) a confirmação cancela também os desafios de login (`auth_challenges`) pendentes; (5) uma nova abertura de link na mesma aba (mudança de fragmento) refaz a verificação.
 
 **MFA:** o link não basta. Conta com TOTP ativo exige TOTP **ou** código de recuperação na confirmação (o código é consumido, uso único, como no login); falhas contam por token (5) e esgotam o link; o MFA **nunca** é desativado e os códigos **não** são regenerados; o login seguinte continua pedindo o segundo fator. Titulares de acesso de plataforma ficam **inelegíveis** (mesma resposta pública) e seguem o procedimento do Platform Owner. O login por e-mail bloqueado (5 falhas/15 min) **não** é zerado por uma redefinição (comportamento preexistente do login, não alterado).
 
 **Limites desta implementação:** não há homologação com SMTP real nem de entregabilidade; limites em memória (um processo); recuperação administrativa de MFA não existe; o e-mail comprometido continua sendo o risco residual (mitigado: MFA exigido, sessões revogadas, aviso ao titular).
+
+## 8. Endurecimento F2 (análise e correções)
+
+### 8.1 Envio DEPOIS da resposta HTTP
+- **Onde termina a resposta:** `password-reset-request_POST.ts` devolve o 202 genérico logo após validar o formato do e-mail e passar pelo limite por IP. **Onde começa o trabalho:** `scheduleResetWork(processResetRequest(...))` é chamado *antes* de retornar; a promessa é guardada num conjunto e **independe da conexão** (o cliente que fecha a conexão não cancela nada — testado).
+- **Reinício do processo:** o trabalho em andamento termina no encerramento gracioso (`SIGTERM`/`SIGINT`: o servidor para de aceitar conexões, espera as requisições, **aguarda o envio pendente** e só então fecha o pool; limitado a 10 s). Queda abrupta entre a gravação do token e o envio deixa um **token ativo sem e-mail**: dentro do cooldown (60 s) não sai outro e-mail; passado o cooldown um novo pedido **substitui** o token e envia (testado). Não existe fila persistente nem retry automático **por decisão**: o próprio usuário reenvia (a tela tem reenvio controlado).
+- **SMTP falha:** o token é invalidado (nunca fica válido sem mensagem), seja o transporte a devolver falha **ou a lançar exceção** (defeito encontrado na F2: a exceção deixava o token ativo; corrigido e testado). Sem transporte configurado, o pedido nem cria token.
+- **Silêncio:** nenhuma exceção é engolida sem registro: `processResetRequest` nunca lança e devolve um desfecho; cada desfecho tem **um evento de log** `password_reset_request` com código seguro (`ok`, `ignorado: inelegivel|cooldown|limite_horario|smtp_nao_configurado`, `falha: ENVIO_FALHOU|APP_URL_INVALIDA|<código do erro>`), sem e-mail, token ou corpo da mensagem. Esses eventos permitem ao administrador diagnosticar (contagem por código) sem ver dados pessoais.
+- **Duplicidade:** pedidos simultâneos para a mesma conta serializam no lock do usuário e o cooldown no banco deixa passar **um** e-mail e **um** token ativo (testado com 6 pedidos paralelos de IPs diferentes).
+- **Conclusão:** adequado para o ambiente previsto (uma instância, volume baixo, o usuário pode reenviar). **Não** é entrega garantida: se for exigida, a evolução é uma caixa de saída (outbox) em tabela própria com reprocessamento — não implementada por não haver necessidade demonstrada.
+
+### 8.2 Limites (rate limiting)
+- **Em memória (por processo):** só o limite por **IP** (10 pedidos/15 min; 20 confirmações; 60 validações). Zera a cada reinício e, com N instâncias, vale por instância (N× o limite) — **não é global**.
+- **No BANCO (vale entre reinícios e instâncias):** cooldown de 60 s por conta, **teto de 3 tokens por conta por hora** (os tokens ficam retidos 7 dias), 5 tentativas de segundo fator por token e bloqueio progressivo do método de MFA.
+- **Medição (F2):** o limitador em memória custa ≈ 0,47 KB por identificador (1 M identificadores distintos ≈ 474 MB). Por isso o limite **por e-mail em memória foi removido** (um atacante que girasse e-mails inexistentes criaria um contador por e-mail) e o IPv6 passou a usar o prefixo **/64** como identificador (sem isso, girar endereços dentro de um /64 criaria um contador por requisição). IPv4 continua exato (agrupar em /24 puniria usuários atrás do mesmo NAT).
+- **IP atrás de proxy:** o IP vem de `req.ip` (Express); **`TRUST_PROXY` precisa refletir o número real de proxies**. Sem ele, todos os usuários dividem o IP do proxy (um abusador esgotaria o limite de todos); valor maior que o real permite forjar `X-Forwarded-For`. Em produção, a ausência de `TRUST_PROXY` agora gera o aviso `proxy_trust: ausente_em_producao` no log de inicialização.
+- **Implantação aprovada = uma instância** (o agendador também é de processo único): os controles acima são os compensatórios. **Se houver mais de uma instância:** os limites por IP precisam de um contador compartilhado — recomendação: tabela PostgreSQL de janela fixa com `INSERT … ON CONFLICT DO UPDATE` (sem Redis); **não implementado** (não há necessidade demonstrada no modo atual).
+- **Limites conhecidos:** um atacante com muitos IPs distintos ainda pode pedir e-mails (cada conta recebe no máximo 3 por hora, 1 por minuto); a resposta é idêntica, então nada é enumerado; o 429 por IP independe de a conta existir. Um terceiro que peça 3 vezes por hora impede novos pedidos da própria vítima por até 1 hora (a vítima já recebeu os links; o último vale 30 min).
+
+### 8.3 Parâmetros candidatos (continuam NÃO aprovados como política)
+| Parâmetro | Valor | Avaliação | Alternativa |
+|---|---|---|---|
+| Validade do link | 30 min | coerente com o ciclo "pedir → abrir o e-mail → trocar" e com o teto de 3 tokens/hora; curto o bastante para limitar uso de link vazado | 15 min (mais seguro, mais reenvios) até 60 min (menos reenvios, mais janela) |
+| Tentativas de 2º fator por token | 5 | com TOTP de 6 dígitos a chance de acerto por link é ≈ 5×10⁻⁶; o método ainda bloqueia após 10 falhas; código de recuperação (80 bits) é inviável de adivinhar | 3 (mais rígido; mais links perdidos por erro de digitação) |
+| Cooldown | 60 s | igual à contagem da tela; evita inundação de e-mails | 30–120 s |
+| Teto por conta | 3 tokens/hora | permite ~2 erros de reenvio sem abrir espaço para inundação | 5/hora |
+| Retenção do token | 7 dias | tempo curto para diagnóstico; a auditoria já registra o evento | 1–30 dias |
+Nenhum foi alterado; a aprovação é do proprietário.
+
+### 8.4 Exposição do token pela interface
+O token vai no **fragmento** da URL, que o navegador **nunca** envia ao servidor, a proxies nem no cabeçalho `Referer` (inclusive para a folha de fontes do Google Fonts, que é a única requisição a terceiro; a CSP é `script-src 'self'`). Não há scripts de terceiros, analytics ou telemetria na aplicação, e nenhum código lê `location.href`/`document.referrer` para enviá-lo. Depois de montar, a tela substitui a URL (`history.replaceState`), removendo o fragmento da barra de endereço e da entrada atual do histórico. **Isto não elimina todos os riscos:** o navegador pode ter registrado a URL original no histórico/sincronização antes do script rodar; extensões do navegador e o cliente de e-mail (inclusive scanners de links, que só fazem GET e não executam o script) enxergam o link; o e-mail em si é o ponto fraco. Mitigações: uso único, validade curta, MFA exigido, aviso ao titular e revogação de sessões.
+
+### 8.5 Invariantes e onde são provados
+| Invariante | Teste |
+|---|---|
+| fonte criptográfica, 256 bits, imprevisível | `passwordReset.test.ts`: "só o HMAC…256 bits…" e "dois pedidos produzem tokens diferentes" |
+| persistência segura (só HMAC, pepper versionado) | idem; restrições do banco |
+| uso único; reutilização rejeitada | "uso único: reutilizar o link…" |
+| expiração | "token expirado…" |
+| invalidação atômica e duas confirmações simultâneas | "concorrência: duas confirmações simultâneas…" |
+| conta privilegiada não recupera | "titular de acesso de plataforma…", "o Platform Owner também é inelegível" |
+| sem enumeração | "responde de forma idêntica…", "a resposta NÃO espera o envio", pedidos de e-mails inexistentes |
+| sessões revogadas; desafios pendentes cancelados | "revoga TODAS as sessões…" |
+| MFA continua exigido; código de recuperação uso único/não regenerado; anti-replay | grupo "MFA preservado" |
+| sem token em logs; URL protegida | "logs de todo o fluxo…", "URL do link: validação de origem" |
+| nenhuma alteração de senha em falha parcial | F2: "falha na auditoria no meio da confirmação…" |
+| regressões F1: StrictMode; estado antigo ao abrir outro link; TOTP/código consumido com senha igual | `uiPasswordReset.test.ts` (renderiza em StrictMode; "abrir OUTRO link…"; "reabrir o MESMO link…") e "senha igual à atual com MFA: 422 e NADA é consumido" |

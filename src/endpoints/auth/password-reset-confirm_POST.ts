@@ -1,6 +1,7 @@
 import { buildErrorResponse } from "../../helpers/errorResponse.js";
 import { checkRateLimit, getClientIp, rateLimitResponse } from "../../helpers/rateLimit.js";
 import { jsonResponse } from "../../helpers/authResponses.js";
+import { limiterKeyForIp } from "../../helpers/limiterKey.js";
 import { confirmPasswordReset, notifyPasswordChanged } from "../../helpers/passwordReset.js";
 import { schema } from "./password-reset-confirm_POST.schema.js";
 import superjson from "superjson";
@@ -20,7 +21,7 @@ const LINK_MESSAGES = {
  */
 export async function handle(request: Request) {
   try {
-    const limit = checkRateLimit({ bucket: "password-reset-confirm", identifier: getClientIp(request), ...IP_LIMIT });
+    const limit = checkRateLimit({ bucket: "password-reset-confirm", identifier: limiterKeyForIp(getClientIp(request)), ...IP_LIMIT });
     if (!limit.allowed) return rateLimitResponse(limit.retryAfterSeconds, "Muitas tentativas em pouco tempo. Aguarde antes de tentar de novo.");
     const input = schema.parse(superjson.parse(await request.text()));
     const outcome = await confirmPasswordReset(input);

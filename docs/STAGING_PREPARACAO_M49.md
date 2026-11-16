@@ -25,7 +25,7 @@
 | `NODE_ENV` | sim em produção | `production` torna o antimalware **sempre** obrigatório | — |
 | `PORT` | não | 3001 | — |
 | `APP_PUBLIC_URL` | sim | link de convite/OAuth | HTTPS no staging público |
-| `TRUST_PROXY` | sim atrás de proxy | nº de saltos | afeta rate limiting por IP |
+| `TRUST_PROXY` | **sim em produção atrás de proxy** | nº real de proxies | sem ele os limites por IP (login, recuperação de senha) passam a valer para TODOS os usuários juntos (aviso `proxy_trust` no log de inicialização); valor maior que o real permite forjar `X-Forwarded-For`. Implantação aprovada = **uma instância** (limites por IP em memória; com mais de uma, ver `RECUPERACAO_DE_ACESSO_ESPECIFICACAO.md` §8.2) |
 | `IDENTITY_CODE_PEPPER_V<n>`, `IDENTITY_CODE_PEPPER_CURRENT` | sim | — | segredo; ≥ 32 bytes; versionado |
 | `MFA_ENCRYPTION_KEY_V<n>`, `MFA_ENCRYPTION_KEY_CURRENT` | sim | — | segredo; 32 bytes base64; perder a chave invalida os TOTP cadastrados |
 | `PLATFORM_MFA_REQUIRED` | não | `true` | `false` só vale com `LEVORA_ENVIRONMENT=staging` + banco `*_staging/_demo/_qa/_test` em host local |
