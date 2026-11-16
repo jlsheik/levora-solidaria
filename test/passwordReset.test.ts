@@ -37,7 +37,7 @@ import { buildResetUrl, flushPasswordResetWork, processResetRequest, resetTtlMin
 import { issueRecoveryCodes } from "../src/helpers/mfa";
 import { currentPepperVersion } from "../src/helpers/identityKeys";
 import { verifyAuditLogChain } from "../src/helpers/verifyAuditChain";
-import { createPlatformAdmin, createSessionCookie, createTestUser, enrollTestMfa, buildRequest, parseJson, testTotp, TEST_TOTP_SECRET } from "./helpers";
+import { createPlatformAdmin, createPlatformOwner, createSessionCookie, createTestUser, enrollTestMfa, buildRequest, parseJson, testTotp, TEST_TOTP_SECRET } from "./helpers";
 import { cookieFrom, CHALLENGE, login, PASSWORD, resetReplay } from "./mfaHarness";
 
 const NEW_PASSWORD = "uma-senha-nova-segura-456";
@@ -410,6 +410,14 @@ describe("contas privilegiadas e elegibilidade", () => {
     const res = await confirm({ token, newPassword: NEW_PASSWORD });
     expect(res.status).toBe(400);
     expect((await login(u.email, PASSWORD)).status).toBe(200); // senha antiga intacta
+  });
+
+  it("o Platform Owner também é inelegível (nenhum token, nenhum e-mail): ele usa platform:owner-recovery", async () => {
+    const owner = await createPlatformOwner();
+    expect((await requestReset(owner.email)).status).toBe(202);
+    await flushPasswordResetWork();
+    expect(mail.sent).toHaveLength(0);
+    expect(await db.selectFrom("passwordResetTokens").select("id").execute()).toHaveLength(0);
   });
 
   it("conta anonimizada depois do pedido: o link deixa de valer", async () => {
