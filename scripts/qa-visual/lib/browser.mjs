@@ -59,7 +59,12 @@ export class Cdp {
         this.lastOkAt = this.now(); this.consecutiveTimeouts = 0; this.responses++; // qualquer resposta (inclusive erro do CDP) prova que a sessão está viva
         if (this.pending.has(d.id)) { const { res, rej, method } = this.pending.get(d.id); this.pending.delete(d.id); d.error ? rej(new Error(`${method}: ${d.error.message}`)) : res(d.result); }
       } else if (d.method) {
-        if (d.method === "Inspector.targetCrashed" || d.method === "Inspector.detached") this.crashed = { evento: d.method, motivo: String(d.params?.reason ?? "").slice(0, 80), at: new Date(this.now()).toISOString() };
+        if (d.method === "Inspector.targetCrashed" || d.method === "Inspector.detached") {
+          // G4 (causa observada na execução remota 44004874634): o processo de renderização da aba MORREU ("Inspector.detached: Render process gone."). Depois disso o Chrome não responde mais a
+          // NENHUM comando desta sessão, em silêncio — era o que a G3 viu como "30 s por comando". Agora o evento encerra a sessão NA HORA, com a causa nomeada, sem esperar timeout.
+          this.crashed = { evento: d.method, motivo: String(d.params?.reason ?? "").slice(0, 80), at: new Date(this.now()).toISOString() };
+          this._lose("renderizador-encerrado", `o processo de renderização da aba terminou (${d.method}${this.crashed.motivo ? `: ${this.crashed.motivo}` : ""}); o CDP não responde mais neste alvo`);
+        }
         this.events.push(d);
       }
     };
@@ -139,8 +144,9 @@ export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone, ex
   onProfile?.(profile);
   // `QA_BROWSER_NO_SANDBOX=1`: SÓ para runners descartáveis cujo kernel proíbe o sandbox de usuário (ex.: AppArmor no Ubuntu). Nunca é o padrão.
   const noSandbox = process.env.QA_BROWSER_NO_SANDBOX === "1" ? ["--no-sandbox"] : [];
-  const args = [...noSandbox, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-extensions", "--disable-background-networking", "--window-size=1280,900", "--enable-logging=stderr", "--log-level=2", ...extraArgs, ...RENDER_FLAGS, "about:blank"];
-  const child = spawn(exe, args, { stdio: ["ignore", "ignore", "pipe"], windowsHide: true, detached: process.platform !== "win32" }); // G4: stderr em cauda limitada (era "ignore"); sempre drenado
+  const crashDir = process.platform === "linux" ? [`--crash-dumps-dir=${path.join(profile, "g4-crashes")}`] : []; // G4: um despejo de falha (crashpad) distingue "o renderizador falhou" de "foi morto de fora" (SIGKILL/OOM não deixa despejo)
+  const args = [...noSandbox, ...crashDir, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-extensions", "--disable-background-networking", "--window-size=1280,900", "--enable-logging=stderr", "--log-level=2", ...extraArgs, ...RENDER_FLAGS, "about:blank"];
+  const child = spawn(exe, args, { stdio: ["ignore", "ignore", "pipe"], windowsHide: true, detached: process.platform !== "win32", env: process.platform === "linux" ? { ...process.env, CHROME_HEADLESS: "1" } : process.env }); // G4: stderr em cauda limitada (era "ignore"); sempre drenado
   const stderr = new TailBuffer(8192); child.stderr.on("data", (b) => stderr.push(b)); child.stderr.on("error", () => {});
   let exitInfo = null; child.on("exit", (code, signal) => { exitInfo = { code, signal, at: new Date().toISOString() }; });
   onSpawn?.(child.pid, "browser", { profile }); // perfil EXCLUSIVO desta execução: é parte da identidade do processo
@@ -163,14 +169,15 @@ export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone, ex
     const cdp = new Cdp(ws);
     cdp.stallProbe = async (info) => { // diagnóstico independente do 1º timeout (ver lib/chromeprobe.mjs); contexto (célula, pilha) é preenchido pelo runner/run.mjs
       let eventsSummary; try { const s = summarizeEvents(cdp.events); eventsSummary = { requisicoes: s.requests, falhas: s.failed, pendentes: s.pending.slice(0, 8), errosConsole: s.consoleErrors.slice(0, 5), excecoes: s.exceptions.slice(0, 3) }; } catch { /* opcional */ }
-      const v = await diagnoseChrome({ child, port, stderr, baseline: procBaseline, stackUrls: cdp.context.stackUrls, cdpHealth: { ...info.health, comando: info.method, prazoMs: info.timeoutMs }, cell: cdp.context.cell, eventsSummary, makeCdp: (w) => new Cdp(w, { maxConsecutiveTimeouts: Infinity }) });
+      const v = await diagnoseChrome({ child, port, stderr, baseline: procBaseline, stackUrls: cdp.context.stackUrls, cdpHealth: { ...info.health, comando: info.method, prazoMs: info.timeoutMs }, cell: cdp.context.cell, eventsSummary, makeCdp: (w) => new Cdp(w, { maxConsecutiveTimeouts: Infinity }), crashDir: process.platform === "linux" ? path.join(profile, "g4-crashes") : undefined });
       if (exitInfo) v.evidence.process = { ...v.evidence.process, saiu: exitInfo };
       return v;
     };
+    const diagnose = (info) => cdp.stallProbe(info); // também usado DEPOIS de uma perda comprovada pelo evento (sem esperar timeout)
     await cdp.send("Page.enable"); await cdp.send("Runtime.enable"); await cdp.send("Network.enable"); await cdp.send("Inspector.enable"); // G4: Inspector.targetCrashed/detached entram na saúde da sessão
     let procBaseline = null; if (process.platform === "linux") { try { procBaseline = procSnapshot(child.pid); } catch { /* sem /proc */ } }
     return {
-      cdp, version: info.Browser, child, stderr, port, baseline: procBaseline,
+      cdp, version: info.Browser, child, stderr, port, baseline: procBaseline, profile, diagnose,
       async close() { try { await cdp.send("Browser.close", {}, 3000, { probe: false }); } catch { /* o kill abaixo garante */ } try { ws.close(); } catch { /* ok */ } await sleep(200); await cleanup(); },
     };
   } catch (e) {

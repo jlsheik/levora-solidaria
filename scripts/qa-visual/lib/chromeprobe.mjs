@@ -6,6 +6,7 @@
 // cada passo com prazo próprio e o conjunto com um teto — o diagnóstico nunca vira outro travamento. Nada aqui grava cookie, token, URL com query nem dado real:
 // só estados, contagens, nomes de processo e um trecho curto e higienizado do stderr.
 import { readdirSync, readFileSync } from "node:fs";
+import { execFile } from "node:child_process";
 import os from "node:os";
 import { cleanUrl, redact } from "./redact.mjs";
 
@@ -80,6 +81,15 @@ export function cpuBetween(a, b, dtMs, hz = 100) {
   return b.map((p) => { const o = before.get(p.pid); return { pid: p.pid, type: p.type, state: p.state, rssMb: p.rssKb == null ? null : Math.round(p.rssKb / 1024), cpuPct: o ? Math.round(((p.ticks - o.ticks) / hz / (dtMs / 1000)) * 100) : null }; });
 }
 
+/** Linhas do kernel que explicam o fim de um processo (OOM, falha de segmentação). Sem sudo: se o kernel restringe o dmesg, devolve só o motivo. */
+export function dmesgTail(run = (cb) => execFile("dmesg", ["-T"], { timeout: 2500, maxBuffer: 4 << 20 }, cb)) {
+  return new Promise((res) => run((err, out) => {
+    if (err) return res({ indisponivel: String(err.message).slice(0, 100) });
+    const lines = String(out).split(/\r?\n/).filter((l) => /out of memory|oom|killed process|segfault|general protection|chrome|renderer/i.test(l)).slice(-20).map((l) => redact(l).slice(0, 220));
+    res({ linhas: lines });
+  }));
+}
+
 // ---------- CDP de uma conversa curta ----------
 /** Abre um WebSocket com prazo. `WS` é injetável. */
 export function openWs(WS, url, ms) {
@@ -113,6 +123,7 @@ export function classifyStall(ev) {
   const stackTxt = stackDown ? "a API/Vite não responde" : stackKnown ? "a pilha responde" : "a pilha não foi consultada";
   if (ev.process?.alive === false) return { ...base, lost: true, kind: "chrome-encerrado", causa: "infraestrutura (o processo do Chrome não existe mais)" };
   if (ev.browserHttp?.ok === false && ev.browserWs?.ok === false) return { ...base, lost: true, kind: "chrome-sem-resposta", causa: "infraestrutura ou Chrome (processo vivo, mas nem o endpoint de depuração nem o alvo browser respondem)" };
+  if (ev.cdp?.alvoCaiu) return { ...base, lost: true, kind: "renderizador-encerrado", causa: `o processo de renderização da aba terminou (${ev.cdp.alvoCaiu.evento}: ${ev.cdp.alvoCaiu.motivo || "sem motivo"}); ${ev.crashDumps?.length ? `${ev.crashDumps.length} despejo(s) de falha encontrado(s): o processo FALHOU` : ev.crashDumps ? "nenhum despejo de falha registrado (consistente com término por sinal externo, p.ex. SIGKILL/OOM, mas não prova)" : "despejos de falha não consultados"}; ${stackTxt}` };
   if (ev.pageSecondConn?.ok === true) return { ...base, lost: false, kind: "timeout-isolado", causa: "a página responde numa conexão nova: só o comando (ou a conexão da harness) estagnou" };
   if (ev.pageSecondConn?.ok === false) {
     const cpu = busy > 0 ? `, com ${busy} renderizador(es) consumindo CPU (laço ocupado)` : ", sem renderizador consumindo CPU (preso sem ocupar CPU: espera/bloqueio)";
@@ -126,13 +137,15 @@ export function classifyStall(ev) {
  * Coleta as evidências (cada passo com prazo próprio; teto `budgetMs` no conjunto). Nunca lança.
  * Entradas: child (processo do Chrome), port (depuração), stderr (TailBuffer), stackUrls {web, api}, cdpHealth (snapshot do cliente), cell (última célula).
  */
-export async function diagnoseChrome({ child, port, stderr, stackUrls, cdpHealth, cell, eventsSummary, baseline, fetchImpl = fetch, WS = WebSocket, makeCdp, platform = process.platform, snapshotFn = procSnapshot, stepMs = 3000, budgetMs = 12000 }) {
+export async function diagnoseChrome({ child, port, stderr, stackUrls, cdpHealth, cell, eventsSummary, baseline, crashDir, fetchImpl = fetch, WS = WebSocket, makeCdp, platform = process.platform, snapshotFn = procSnapshot, stepMs = 3000, budgetMs = 12000 }) {
   const t0 = Date.now(); const ev = { quando: new Date().toISOString(), plataforma: `${platform}/${process.arch}`, celula: cell ?? null, cdp: cdpHealth ?? null };
   const body = async () => {
     const pid = child?.pid;
     let alive = null; if (pid) { try { process.kill(pid, 0); alive = true; } catch (e) { alive = e.code === "EPERM"; } }
     ev.process = { pid: pid ?? null, alive, exitCode: child?.exitCode ?? null, signalCode: child?.signalCode ?? null };
     ev.host = { loadavg: os.loadavg().map((n) => Math.round(n * 100) / 100), freeMemMb: Math.round(os.freemem() / 1048576), totalMemMb: Math.round(os.totalmem() / 1048576), uptimeS: Math.round(os.uptime()), harnessRssMb: Math.round(process.memoryUsage().rss / 1048576) };
+    if (crashDir) { try { ev.crashDumps = readdirSync(crashDir, { recursive: true }).map(String).slice(0, 20); } catch (e) { ev.crashDumps = e.code === "ENOENT" ? [] : undefined; } } // só nomes
+    if (platform === "linux") { const k = await step(stepMs, () => dmesgTail()); ev.kernel = k.ok ? k.value : { indisponivel: k.error }; }
     ev.stderr = stderr ? { ...stderr.info(), cauda: stderr.text() } : null;
     if (eventsSummary) ev.celulaAtual = eventsSummary;
     const get = (p) => fetchImpl(`http://127.0.0.1:${port}${p}`, { signal: AbortSignal.timeout(stepMs) }).then((r) => r.json());
@@ -200,11 +213,12 @@ export async function quickHealth({ child, stackUrls, baseline, platform = proce
   if (web) out.web = web; if (api) out.api = api;
   if (procs.ok && procs.value) {
     const l = procs.value; out.processos = l.length; out.renderizadores = l.filter((p) => p.type === "renderer").length; out.chromeRssMb = Math.round(l.reduce((a, p) => a + (p.rssKb ?? 0), 0) / 1024);
+    out.renderizadoresMb = l.filter((p) => p.type === "renderer").map((p) => ({ pid: p.pid, mb: Math.round((p.rssKb ?? 0) / 1024) })); // tendência POR renderizador: mostra se o que morre vinha crescendo
     if (baseline) out.mudancaDeProcessos = processChanges(baseline, l);
   }
   return out;
 }
-export const healthLine = (h) => `saúde: chrome ${h.chromeVivo === false ? "MORTO" : "vivo"}${h.processos !== undefined ? ` · ${h.processos} proc (${h.renderizadores} renderizadores) · ${h.chromeRssMb} MB` : ""}${h.mudancaDeProcessos && (h.mudancaDeProcessos.surgiram.length || h.mudancaDeProcessos.sumiram.length) ? ` · SERVIÇOS ALTERADOS +${h.mudancaDeProcessos.surgiram.map((p) => p.type).join(",")} −${h.mudancaDeProcessos.sumiram.map((p) => p.type).join(",")}` : ""} · web ${h.web ? (h.web.status ?? `ERRO ${h.web.erro}`) : "-"}${h.web?.ms !== undefined ? ` ${h.web.ms}ms` : ""} · api ${h.api ? (h.api.status ?? `ERRO ${h.api.erro}`) : "-"}${h.api?.ms !== undefined ? ` ${h.api.ms}ms` : ""} · carga ${h.carga[0]} · livre ${h.livreMb} MB · harness ${h.harnessRssMb} MB`;
+export const healthLine = (h) => `saúde: chrome ${h.chromeVivo === false ? "MORTO" : "vivo"}${h.processos !== undefined ? ` · ${h.processos} proc (${h.renderizadores} renderizadores${h.renderizadoresMb?.length ? `: ${h.renderizadoresMb.map((r) => `${r.pid}=${r.mb}MB`).join(" ")}` : ""}) · ${h.chromeRssMb} MB` : ""}${h.mudancaDeProcessos && (h.mudancaDeProcessos.surgiram.length || h.mudancaDeProcessos.sumiram.length) ? ` · SERVIÇOS ALTERADOS +${h.mudancaDeProcessos.surgiram.map((p) => p.type).join(",")} −${h.mudancaDeProcessos.sumiram.map((p) => p.type).join(",")}` : ""} · web ${h.web ? (h.web.status ?? `ERRO ${h.web.erro}`) : "-"}${h.web?.ms !== undefined ? ` ${h.web.ms}ms` : ""} · api ${h.api ? (h.api.status ?? `ERRO ${h.api.erro}`) : "-"}${h.api?.ms !== undefined ? ` ${h.api.ms}ms` : ""} · carga ${h.carga[0]} · livre ${h.livreMb} MB · harness ${h.harnessRssMb} MB`;
 
 /** Liga o batimento a cada `everyMs` (sem sobreposição; o temporizador não segura o processo). `onBeat(health)` recebe cada leitura. */
 export function startHeartbeat({ everyMs = 60000, collect, onBeat, setTimer = setInterval, clearTimer = clearInterval }) {
