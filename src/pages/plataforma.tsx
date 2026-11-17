@@ -29,6 +29,9 @@ import { Form, FormControl, FormItem, FormLabel, FormMessage, useForm } from "..
 import { Input } from "../components/Input";
 import { UnitSelect } from "../components/UnitSelect";
 import { PlatformUnitRegularizationSection } from "../components/PlatformUnitRegularization";
+import { FileScanOperationsPanel } from "../components/FileScanOperationsPanel";
+import { AutomationControlsPanel } from "../components/AutomationControlsPanel";
+import { PlatformLimitsPanel } from "../components/PlatformLimitsPanel";
 import { Textarea } from "../components/Textarea";
 import { Button } from "../components/Button";
 import { Badge } from "../components/Badge";
@@ -431,7 +434,7 @@ export default function PlatformPage() {
                     {!isFinal && (
                       <div className={styles.registryActions}>
                         <Select value={o.status} onValueChange={(v) => statusMutation.mutate({ opportunityId: o.id, status: v as (typeof curatableStatuses)[number] })}>
-                          <SelectTrigger className={styles.statusSelect}><SelectValue /></SelectTrigger>
+                          <SelectTrigger className={styles.statusSelect}><SelectValue>{registryStatusLabels[o.status] ?? o.status}</SelectValue></SelectTrigger>
                           <SelectContent>
                             {curatableStatuses.map((s) => <SelectItem key={s} value={s}>{registryStatusLabels[s]}</SelectItem>)}
                           </SelectContent>
@@ -520,14 +523,22 @@ export default function PlatformPage() {
 
         <PlatformUnitRegularizationSection />
 
+        <FileScanOperationsPanel />
+
+        <AutomationControlsPanel scope="plataforma" canManage />
+
+        <PlatformLimitsPanel />
+
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}><RefreshCw size={18} /> Tarefas de fundo</h2>
           <p className={styles.emptyText} style={{ marginBottom: "0.75rem" }}>
             Histórico real de execução (expirar oportunidades vencidas, expirar
             reservas de matching automático, varredura periódica de matching).
-            Agendamento fixo só roda em produção, com o projeto publicado e o
-            plano pago ativo — aqui embaixo é o histórico de execuções
-            manuais/já ocorridas.
+            O agendamento automático depende da configuração do servidor: tarefas
+            opcionais, como o processamento de eventos dos agentes, ficam
+            desligadas até a plataforma habilitá-las explicitamente, e o
+            reprocessamento de uma delas é recusado enquanto estiver desligada.
+            Aqui embaixo está o histórico de execuções já ocorridas.
           </p>
           {tasksQuery.isFetching && !tasksQuery.data ? <Skeleton className={styles.listSkeleton} /> : (
             <ul className={styles.sourceList}>

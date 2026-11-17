@@ -5,6 +5,7 @@ import { schema } from "./background-tasks-retry_POST.schema.js";
 import { TASK_HANDLERS } from "../helpers/taskHandlers.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
+import { isOptInTaskEnabled } from "../helpers/schedulerControl.js";
 
 // Reprocessamento manual real: reexecuta a mesma função da tarefa (não
 // apenas marca a linha como "reprocessada"). Cada execução gera sua
@@ -42,6 +43,14 @@ export async function handle(request: Request) {
     if (!handler) {
       return new Response(superjson.stringify({ message: `Nenhum handler conhecido para a tarefa "${run.taskName}"` }), {
         status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // M46: o reprocessamento manual não pode contornar a habilitação explícita da tarefa.
+    if (!isOptInTaskEnabled(run.taskName)) {
+      return new Response(superjson.stringify({ message: `A tarefa "${run.taskName}" está desabilitada neste ambiente (habilitação explícita ausente); nada foi executado.` }), {
+        status: 409,
         headers: { "Content-Type": "application/json" },
       });
     }

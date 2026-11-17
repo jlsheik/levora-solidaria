@@ -9,6 +9,7 @@
  * O saldo é recalculado SOB a trava do item (nunca o saldo da tela); o limite de risco usa o saldo imediatamente anterior, na unidade canônica do item. Nada aqui converte unidade.
  */
 import { createHash } from "node:crypto";
+import { publishStockTransactionCreated } from "./domainEventPublishers.js";
 import { sql, type Transaction } from "kysely";
 import type { DB } from "./schema.js";
 import { recordAuditLogEntry } from "./auditLog.js";
@@ -228,6 +229,9 @@ export async function executeDestinationExit(trx: Transaction<DB>, input: Destin
     })
     .returning(["id"])
     .execute();
+
+  // M35: a saída física também é um lançamento do ledger e precisa chegar à Sentinela (contrato v2; mesma transação; qualquer falha adiante reverte o evento junto).
+  await publishStockTransactionCreated(trx, { organizationId: input.organizationId, transactionId: String(tx.id), itemId: input.itemId, type: "saida", delta: -input.quantity, source: "destinacao_saida", actorUserId: actors.creatorUserId });
 
   const [destination] = await trx
     .insertInto("stockDestinations")

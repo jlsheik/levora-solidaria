@@ -34,6 +34,16 @@ autônoma. Fluxo real:
    rastreável, nunca "a IA decidiu" sem registro do que exatamente foi
    perguntado e respondido.
 
+## Plataforma de agentes (Fase 74)
+
+Existe a **fundação** para agentes (principal não humano, camada de
+ferramentas com matriz de permissões, eventos, limites e regras de política,
+pausa/emergência, alertas e fila de exceções), descrita em
+`docs/AGENTES_PLATAFORMA.md`. **Nenhum agente foi criado e nenhuma chamada
+de IA foi adicionada**: o único uso de IA do sistema continua sendo o apoio
+opcional ao matching descrito abaixo. A lista de agentes "que não existem"
+mais adiante neste documento segue verdadeira.
+
 ## Regra de versionamento (`ALGORITHM_VERSION`)
 
 `ALGORITHM_VERSION` (`src/helpers/opportunityMatching.tsx`, única fonte de

@@ -1,3 +1,4 @@
+import { sql } from "kysely";
 import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
@@ -50,7 +51,7 @@ export async function handle(request: Request) {
         throw new ConflictError("Esta oportunidade já foi recebida e não pode ter o status alterado por aqui");
       }
 
-      const updates: Record<string, unknown> = { updatedAt: new Date() };
+      const updates: Record<string, unknown> = { updatedAt: new Date(), version: sql`version + 1` }; // M37: toda mudança do registro incrementa a versão
       if (input.status) updates.status = input.status;
       if (input.linkedNeedId !== undefined) updates.linkedNeedId = input.linkedNeedId;
 
