@@ -8,9 +8,10 @@ import { STATUS, evaluateContrast, round2 } from "./contrast.mjs";
 import { emulationParams, viewportKey, viewportMatches } from "./viewport.mjs";
 import { THEMES, USERS, QA_PASSWORD } from "../scenarios.mjs";
 import { waitUntil as waitFor, FreezeClock } from "./wait.mjs";
-import { netBrief } from "./diagnostics.mjs";
+import { netBrief, summarizeEvents } from "./diagnostics.mjs";
 import { classifyLoginRedirect } from "./authcheck.mjs";
 import { assessLoad, LOAD } from "./loadhealth.mjs";
+import { CdpSessionLost } from "./browser.mjs";
 
 const SESSION_COOKIE = "floot_built_app_session"; // nome do cookie de sessão do produto (src/helpers/getSetServerSession.tsx)
 
@@ -135,6 +136,7 @@ function addInfo(ctx, sc, d, state, label, fg, bg) {
 function addMissing(ctx, sc, state, why) { ctx.report.add(rowBase(ctx, sc, state, "presença", { status: STATUS.MISSING, detail: why })); }
 /** MISSING de passo/presença: registra a linha e, com --diagnostics, o estado da página/console/rede/servidor naquele instante. */
 async function missing(ctx, sc, state, why) {
+  if (ctx.cdp.lost) throw ctx.cdp.lost; // G4: sem sessão não há evidência: nada de MISSING/FAIL classificado a partir de uma página que não pode ser consultada
   // MISSING = o elemento não existe na página SOB TESTE. Um usuário autenticado que terminou em /login NÃO chegou a avaliar a rota: o que a consulta de sessão
   // respondeu (lib/authcheck.mjs) decide se é regressão de autenticação do produto (FAIL), falha do ambiente de QA ou falta de evidência (UNMEASURABLE com a causa).
   // Nenhum dos três é "elemento ausente" e nenhum conta como aprovação.
@@ -389,7 +391,18 @@ function viewportProblem(ctx, sc, m, when) {
   else addUnmeasurable(ctx, sc, "viewport", `a página enxerga ${seen}, esperado ${ctx.vpKey} (${when})`);
 }
 
+/** G4: amostra (≤ 5) das requisições que falharam e dos erros de página da célula, só caminho sem query. Na G3 só havia a CONTAGEM (15 falhas na célula 241), sem dizer quais. */
+function cellSamples(events) {
+  try {
+    const s = summarizeEvents(events); const out = {};
+    if (s.failed.length) out.failedSample = s.failed.slice(0, 5).map((f) => ({ url: String(f.url).replace(/^https?:[/][/][^/]+/, "").slice(0, 90), error: f.error, canceled: f.canceled }));
+    if (s.consoleErrors.length || s.exceptions.length) out.pageErrors = [...s.exceptions.slice(0, 2), ...s.consoleErrors.slice(0, 3)];
+    return out;
+  } catch { return {}; }
+}
+
 async function runOne(ctx, sc) {
+  ctx.cdp.context.cell = `${sc.id} @${ctx.vpKey} ${ctx.theme}`; // G4: a última célula entra no diagnóstico do travamento
   ctx.cdp.events.length = 0; // os eventos do CDP (rede, console, navegação) são só da célula corrente: sem isso a lista crescia sem limite (≈1,1 GB e 1,1 milhão de eventos ao fim de uma matriz de Edge)
   ctx.cell = { startedAt: Date.now(), eventsFrom: 0, frozen0: freezeClock.total };
   try { await runOneCell(ctx, sc); }
@@ -398,7 +411,7 @@ async function runOne(ctx, sc) {
     const frozenMs = freezeClock.total - ctx.cell.frozen0;
     if (ctx.diag) {
       if (frozenMs > 0) ctx.diag.event("executor-congelado", { browser: ctx.name, scenario: sc.id, viewport: ctx.vpKey, theme: ctx.theme, frozenMs });
-      ctx.diag.cell({ browser: ctx.name, scenario: sc.id, viewport: ctx.vpKey, theme: ctx.theme, ...ctx.cell, frozenMs, net: netBrief(ctx.cdp.events), eventsHeld: ctx.cdp.events.length, totalMs: Date.now() - ctx.cell.startedAt });
+      ctx.diag.cell({ browser: ctx.name, scenario: sc.id, viewport: ctx.vpKey, theme: ctx.theme, ...ctx.cell, frozenMs, net: netBrief(ctx.cdp.events), eventsHeld: ctx.cdp.events.length, ...cellSamples(ctx.cdp.events), totalMs: Date.now() - ctx.cell.startedAt });
     }
   }
 }
@@ -446,7 +459,14 @@ export async function runScenarios({ cdp, browserName, version, baseUrl, scenari
       const ctx = { cdp, name: browserName, version, baseUrl, report, theme, vp, vpKey: viewportKey(vp), vpInner: "-", filesDir, screenshotsDir, diag };
       const t0 = Date.now();
       if (!ok) { addUnmeasurable(ctx, sc, "login", `login como ${user} não concluiu`); progress?.cell(`${sc.id} @${ctx.vpKey} ${theme}`, Date.now() - t0); continue; }
-      try { await runOne(ctx, sc); } catch (e) { addUnmeasurable(ctx, sc, "execução", `erro inesperado: ${String(e.message).slice(0, 200)}`); }
+      try { await runOne(ctx, sc); } catch (e) {
+        if (e instanceof CdpSessionLost) { // G4: sessão comprovadamente perdida: registra a célula, encerra a matriz (as restantes viram "não executadas" na cobertura) e propaga
+          addUnmeasurable(ctx, sc, "sessão CDP", `sessão CDP perdida (${e.reason}): ${String(e.detail).slice(0, 200)}`);
+          progress?.cell(`${sc.id} @${ctx.vpKey} ${theme}`, Date.now() - t0);
+          throw e;
+        }
+        addUnmeasurable(ctx, sc, "execução", `erro inesperado: ${String(e.message).slice(0, 200)}`);
+      }
       progress?.cell(`${sc.id} @${ctx.vpKey} ${theme}`, Date.now() - t0); // G2: só observa (contagem + nome); não altera a célula
     }
   }

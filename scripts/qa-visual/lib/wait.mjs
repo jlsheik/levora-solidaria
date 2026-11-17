@@ -29,7 +29,7 @@ export async function waitUntil(fn, ms, { every = 120, now = Date.now, sleep = d
   const start = now(); const frozen0 = clock?.total ?? 0; let compensated = 0;
   const deadline = () => start + ms + compensated;
   for (;;) {
-    try { const v = await fn(); if (v) return v; } catch { /* a página pode estar navegando */ }
+    try { const v = await fn(); if (v) return v; } catch (e) { if (e?.fatal) throw e; /* G4: sessão CDP perdida não é "a página está navegando": propaga */ /* a página pode estar navegando */ }
     clock?.tick(); // contabiliza o congelamento agora, sem depender da ordem em que os temporizadores acordam
     const frozen = Math.min((clock?.total ?? 0) - frozen0, MAX_COMPENSATION_MS);
     if (frozen > compensated) { compensated = frozen; onCompensate?.(compensated); continue; } // houve congelamento desde a última verificação: confere de novo antes de contar o prazo
