@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 // @ts-expect-error módulos .mjs sem tipos
 import { Cdp, CdpSessionLost, CdpTimeoutError, findBrowser } from "../scripts/qa-visual/lib/browser.mjs";
 // @ts-expect-error módulos .mjs sem tipos
-import { TailBuffer, step, parseStat, descendants, cpuBetween, procSnapshot, classifyStall, diagnoseChrome, processChanges, quickHealth, healthLine, startHeartbeat, dmesgTail } from "../scripts/qa-visual/lib/chromeprobe.mjs";
+import { TailBuffer, step, parseStat, descendants, cpuBetween, procSnapshot, classifyStall, diagnoseChrome, processChanges, quickHealth, healthLine, startHeartbeat, dmesgTail, parseKeyedKb, parseKeyed, parsePsi, linuxMemory, listCrashDumps } from "../scripts/qa-visual/lib/chromeprobe.mjs";
 // @ts-expect-error módulos .mjs sem tipos
 import { waitUntil } from "../scripts/qa-visual/lib/wait.mjs";
 // @ts-expect-error módulos .mjs sem tipos
@@ -221,13 +221,57 @@ describe("término do renderizador (causa observada na execução remota 4400487
     expect(cdp.lost?.reason).toBe("renderizador-encerrado");
     const base = { process: { alive: true }, browserHttp: { ok: true }, browserWs: { ok: true }, pageSecondConn: { ok: false }, freshTarget: { ok: true }, cdp: { alvoCaiu: { evento: "Inspector.detached", motivo: "Render process gone." } }, stack: { web: { ok: true }, api: { ok: true } } };
     const semDump = classifyStall({ ...base, crashDumps: [] }); expect(semDump).toMatchObject({ lost: true, kind: "renderizador-encerrado" }); expect(semDump.causa).toContain("nenhum despejo"); expect(semDump.causa).toContain("não prova");
-    const comDump = classifyStall({ ...base, crashDumps: ["abc.dmp"] }); expect(comDump.causa).toContain("FALHOU");
+    const comDump = classifyStall({ ...base, crashDumps: [{ nome: "reports/a.dmp", bytes: 10 }] }); expect(comDump.causa).toContain("falha INTERNA do processo"); expect(comDump.causa).toContain("não diz de quem é a causa");
+    expect(classifyStall({ ...base, crashDumps: null }).causa).toContain("despejos não consultados"); // ilegível ≠ "sem despejo"
     expect(classifyStall({ ...base, process: { alive: false } }).kind).toBe("chrome-encerrado"); // processo do navegador morto continua tendo prioridade
   });
   it("dmesgTail devolve só linhas relevantes e higienizadas; sem permissão, só o motivo (nunca lança)", async () => {
     const ok = await dmesgTail((cb: any) => cb(null, "[x] foo\n[y] Out of memory: Killed process 4559 (chrome) total-vm:1kB token=abc\n[z] bar\n"));
     expect(ok.linhas).toHaveLength(1); expect(ok.linhas[0]).toContain("Killed process 4559"); expect(ok.linhas[0]).not.toContain("abc");
     expect(await dmesgTail((cb: any) => cb(new Error("dmesg: read kernel buffer failed: Operation not permitted")))).toEqual({ indisponivel: expect.stringContaining("not permitted") });
+  });
+});
+
+describe("G5 — memória (cgroup/PSI/PSS), despejos de falha e privacidade", () => {
+  it("parsers: smaps_rollup/meminfo (kB), memory.events (contadores) e PSI", () => {
+    expect(parseKeyedKb("Rss:   2048 kB\nPss:    512 kB\nPss_Anon:   300 kB\nlixo sem numero: abc\n")).toEqual({ Rss: 2048, Pss: 512, Pss_Anon: 300 });
+    expect(parseKeyed("low 0\nhigh 0\nmax 3\noom 2\noom_kill 1\n")).toMatchObject({ oom: 2, oom_kill: 1, max: 3 });
+    expect(parsePsi("some avg10=1.50 avg60=0.20 avg300=0.00 total=12345\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=9\n")).toEqual({ some: { avg10: 1.5, avg60: 0.2, avg300: 0, total: 12345 }, full: { avg10: 0, avg60: 0, avg300: 0, total: 9 } });
+  });
+  it("linuxMemory lê o cgroup v2 do próprio processo, PSI, meminfo e /dev/shm; cada fonte ausente vira null, nunca erro", () => {
+    const base = "/sys/fs/cgroup/system.slice/runner.service";
+    const files: Record<string, string> = { "/proc/self/cgroup": "0::/system.slice/runner.service\n", [`${base}/memory.current`]: "2147483648\n", [`${base}/memory.peak`]: "3221225472\n", [`${base}/memory.max`]: "max\n", [`${base}/memory.events`]: "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\n", "/proc/pressure/memory": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\n", "/proc/meminfo": "MemTotal: 7962624 kB\nMemAvailable: 5242880 kB\nShmem: 1024 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n" };
+    const fsx = { readFileSync: (p: string) => { if (!(p in files)) throw new Error("ENOENT"); return files[p]; }, statfsSync: () => ({ blocks: 1000, bsize: 1048576, bavail: 900 }) };
+    const m = linuxMemory(fsx);
+    expect(m.cgroup).toMatchObject({ atualMb: 2048, picoMb: 3072, maxMb: "max", eventos: { oom: 0, oom_kill: 0 } }); expect(m.cgroup.pressao).toBeNull();
+    expect(m.meminfo).toMatchObject({ totalMb: 7776, disponivelMb: 5120 }); expect(m.devShm).toEqual({ totalMb: 1000, livreMb: 900 }); expect(m.psi.some.avg10).toBe(0);
+    const vazio = linuxMemory({ readFileSync: () => { throw new Error("x"); }, statfsSync: () => { throw new Error("y"); } });
+    expect(vazio).toEqual({ cgroup: null, psi: null, meminfo: null, devShm: null });
+  });
+  it("PSS entra no snapshot de processos; sem smaps_rollup o campo é null (não zero)", () => {
+    const files: Record<string, string> = { "/proc/10/stat": "10 (chrome) S 1 1 1 0 -1 0 0 0 0 0 10 5 0 0 20 0 1 0 1 1 1", "/proc/10/statm": "1 2560 0", "/proc/10/cmdline": "chrome\0", "/proc/10/smaps_rollup": "Rss: 10240 kB\nPss: 4096 kB\nPss_Anon: 3000 kB\n", "/proc/11/stat": "11 (chrome) S 10 1 1 0 -1 0 0 0 0 0 1 1 0 0 20 0 1 0 1 1 1", "/proc/11/statm": "1 100 0", "/proc/11/cmdline": "chrome\0--type=renderer\0" };
+    const snap = procSnapshot(10, { readdirSync: () => ["10", "11"], readFileSync: (p: string) => { if (!(p in files)) throw new Error("ENOENT"); return files[p]; } });
+    expect(snap.find((p: any) => p.pid === 10)).toMatchObject({ pssKb: 4096, pssAnonKb: 3000 }); expect(snap.find((p: any) => p.pid === 11).pssKb).toBeNull();
+  });
+  it("listCrashDumps devolve só metadados (nome, tamanho, data, SHA-256), nunca conteúdo; ausente = [], ilegível = null; respeita o limite e o teto de hash", () => {
+    const content = Buffer.from("conteudo secreto do despejo");
+    const fsx = { readdirSync: () => ["reports/a.dmp", "settings.dat", "reports"], statSync: (p: string) => ({ isFile: () => !p.endsWith("reports"), size: p.endsWith("a.dmp") ? content.length : 40, mtimeMs: 1794883755000 }), readFileSync: () => content };
+    const r = listCrashDumps("/x", fsx); expect(r).toHaveLength(2);
+    expect(r[0]).toMatchObject({ nome: "reports/a.dmp", bytes: content.length }); expect(r[0].sha256).toMatch(/^[0-9a-f]{64}$/); expect(JSON.stringify(r)).not.toContain("secreto");
+    expect(listCrashDumps("/x", { ...fsx, readdirSync: () => { const e: any = new Error("nao existe"); e.code = "ENOENT"; throw e; } })).toEqual([]);
+    expect(listCrashDumps("/x", { ...fsx, readdirSync: () => { const e: any = new Error("negado"); e.code = "EACCES"; throw e; } })).toBeNull();
+    expect(listCrashDumps("/x", { ...fsx, readdirSync: () => Array.from({ length: 50 }, (_, i) => `d${i}.dmp`) }, { max: 5 })).toHaveLength(5);
+    const grande = listCrashDumps("/x", { ...fsx, statSync: () => ({ isFile: () => true, size: 200 << 20, mtimeMs: 0 }) }, { max: 1 }); expect(grande[0].sha256).toBeUndefined();
+  });
+  it("o navegador usa BREAKPAD_DUMP_LOCATION (o Chrome não lê --crash-dumps-dir), cria o diretório antes de subir e nenhum despejo vai para artefato", async () => {
+    const { readFileSync } = await import("node:fs");
+    const b = readFileSync("scripts/qa-visual/lib/browser.mjs", "utf8"); const wf = readFileSync(".github/workflows/ci.yml", "utf8");
+    expect(b).toContain("BREAKPAD_DUMP_LOCATION: crashDir"); expect(b).toContain("mkdirSync(crashDir"); expect(b).not.toContain("--crash-dumps-dir=");
+    const upload = /name: Upload reports[\s\S]*$/.exec(wf)?.[0] ?? ""; expect(upload).toContain("reports/"); expect(upload).not.toMatch(/g5-crashes|\.dmp|levora-qa-profile/);
+  });
+  it("healthLine mostra PSS e cgroup e NÃO apresenta a soma de RSS como memória do Chrome", () => {
+    const h = { chromeVivo: true, processos: 3, renderizadores: 1, chromePssMb: 640, chromeRssMb: 2300, renderizadoresMb: [{ pid: 7, pssMb: 300, rssMb: 900, anonMb: 250 }], web: { status: 200, ms: 5 }, api: { status: 200, ms: 5 }, carga: [1, 1, 1], harnessRssMb: 120, memoria: { cgroup: { atualMb: 2000, maxMb: "max", picoMb: 2500, eventos: { oom_kill: 0 } }, psi: { some: { avg10: 0.5 } }, meminfo: { disponivelMb: 5000 }, devShm: { livreMb: 3900 } } };
+    const l = healthLine(h); expect(l).toContain("PSS total 640 MB"); expect(l).toContain("7=pss 300/rss 900MB"); expect(l).toContain("oom_kill=0"); expect(l).toContain("shm livre 3900 MB"); expect(l).not.toContain("2300");
   });
 });
 
@@ -241,7 +285,7 @@ describe("batimento de saúde e mudança de serviços do Chrome", () => {
   it("quickHealth nunca lança (pilha fora do ar, /proc ilegível), traz só números e a linha impressa avisa serviços alterados", async () => {
     const fetchImpl = async (url: string) => { if (url.includes("api")) throw new Error("ECONNREFUSED"); return { status: 200 }; };
     const h = await quickHealth({ child: { pid: process.pid }, stackUrls: { web: "http://w/login", api: "http://a/_api/__health" }, baseline: [{ pid: 3, type: "utility:network.mojom.NetworkService" }], platform: "linux", fetchImpl, snapshotFn: () => [{ pid: 9, type: "browser", rssKb: 2048 }, { pid: 30, type: "utility:network.mojom.NetworkService", rssKb: 1024 }, { pid: 31, type: "renderer", rssKb: 1024 }] });
-    expect(h).toMatchObject({ chromeVivo: true, web: { status: 200 }, processos: 3, renderizadores: 1, chromeRssMb: 4 }); expect(h.api.erro).toContain("ECONNREFUSED");
+    expect(h).toMatchObject({ chromeVivo: true, web: { status: 200 }, processos: 3, renderizadores: 1, chromeRssMb: 4 }); expect(h.chromePssMb).toBeUndefined(); // sem PSS legível: ausente, não zero expect(h.api.erro).toContain("ECONNREFUSED");
     const line = healthLine(h); expect(line).toContain("SERVIÇOS ALTERADOS"); expect(line).toContain("api ERRO"); expect(line).not.toMatch(/token|senha|cookie/i);
     const bad = await quickHealth({ child: { pid: process.pid }, platform: "linux", snapshotFn: () => { throw new Error("sem /proc"); } });
     expect(bad.chromeVivo).toBe(true); expect(bad.processos).toBeUndefined();

@@ -5,7 +5,9 @@
 // por um canal que NÃO depende da sessão presa (HTTP do endpoint de depuração, WebSocket do alvo "browser", segunda conexão à página, aba nova, /proc, pilha),
 // cada passo com prazo próprio e o conjunto com um teto — o diagnóstico nunca vira outro travamento. Nada aqui grava cookie, token, URL com query nem dado real:
 // só estados, contagens, nomes de processo e um trecho curto e higienizado do stderr.
-import { readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync, statSync, statfsSync } from "node:fs";
+import path from "node:path";
 import { execFile } from "node:child_process";
 import os from "node:os";
 import { cleanUrl, redact } from "./redact.mjs";
@@ -47,6 +49,66 @@ export function parseStat(text) {
   return { pid: Number(text.slice(0, open).trim()), comm: text.slice(open + 1, close), state: rest[0], ppid: Number(rest[1]), ticks: utime + stime };
 }
 
+/** "Chave:   valor kB" por linha (smaps_rollup, meminfo) → { chave: número }. Linhas sem número são ignoradas. */
+export function parseKeyedKb(text) {
+  const out = {};
+  for (const line of String(text).split("\n")) { const i = line.indexOf(":"); if (i < 0) continue; const n = Number(line.slice(i + 1).trim().split(" ")[0]); if (Number.isFinite(n)) out[line.slice(0, i).trim()] = n; }
+  return out;
+}
+/** "chave valor" por linha (memory.events, memory.stat) → { chave: número }. */
+export function parseKeyed(text) {
+  const out = {};
+  for (const line of String(text).split("\n")) { const [k, v] = line.trim().split(" "); const n = Number(v); if (k && Number.isFinite(n)) out[k] = n; }
+  return out;
+}
+/** /proc/pressure/memory ou memory.pressure: "some avg10=0.00 avg60=... total=123" → { some: {avg10,avg60,avg300,total}, full: {...} } */
+export function parsePsi(text) {
+  const out = {};
+  for (const line of String(text).split("\n")) { const parts = line.trim().split(" "); if (parts.length < 2) continue; const o = {}; for (const kv of parts.slice(1)) { const [k, v] = kv.split("="); if (Number.isFinite(Number(v))) o[k] = Number(v); } out[parts[0]] = o; }
+  return out;
+}
+
+/**
+ * Memória do runner vista pelo Linux: cgroup v2 do próprio processo (current, peak, max, high, events com oom/oom_kill, pressure), PSI global, meminfo e /dev/shm.
+ * Cada leitura é opcional (cgroup v1, sem permissão, sem arquivo): o que faltar vem como ausente, nunca como erro. `fsx` é injetável.
+ */
+export function linuxMemory(fsx = { readFileSync, statfsSync }) {
+  const rd = (p) => { try { return String(fsx.readFileSync(p, "utf8")); } catch { return null; } };
+  const mb = (n) => (n == null ? null : Math.round(n / 1048576));
+  const out = {};
+  const cg = rd("/proc/self/cgroup"); const line = cg && cg.split("\n").find((l) => l.startsWith("0::"));
+  if (line) {
+    const base = `/sys/fs/cgroup${line.slice(3).trim()}`.replace(/[/]$/, "");
+    const num = (f) => { const t = rd(`${base}/${f}`); if (t == null) return null; const v = t.trim(); return v === "max" ? "max" : Number.isFinite(Number(v)) ? Number(v) : null; };
+    const cur = num("memory.current"); const peak = num("memory.peak"); const max = num("memory.max"); const high = num("memory.high");
+    const ev = rd(`${base}/memory.events`); const pr = rd(`${base}/memory.pressure`);
+    out.cgroup = { caminho: line.slice(3).trim().slice(0, 120), atualMb: mb(cur), picoMb: mb(peak), maxMb: max === "max" ? "max" : mb(max), altoMb: high === "max" ? "max" : mb(high), eventos: ev ? parseKeyed(ev) : null, pressao: pr ? parsePsi(pr) : null };
+  } else out.cgroup = null;
+  const psi = rd("/proc/pressure/memory"); out.psi = psi ? parsePsi(psi) : null;
+  const mi = rd("/proc/meminfo"); if (mi) { const m = parseKeyedKb(mi); out.meminfo = { totalMb: Math.round((m.MemTotal ?? 0) / 1024), disponivelMb: Math.round((m.MemAvailable ?? 0) / 1024), shmemMb: Math.round((m.Shmem ?? 0) / 1024), swapTotalMb: Math.round((m.SwapTotal ?? 0) / 1024), swapLivreMb: Math.round((m.SwapFree ?? 0) / 1024) }; } else out.meminfo = null;
+  try { const s = fsx.statfsSync("/dev/shm"); out.devShm = { totalMb: Math.round((s.blocks * s.bsize) / 1048576), livreMb: Math.round((s.bavail * s.bsize) / 1048576) }; } catch { out.devShm = null; }
+  return out;
+}
+
+/**
+ * Metadados dos despejos de falha do Chrome (crashpad): nome relativo, tamanho, data e SHA-256 (só até 64 MB). NUNCA copia nem imprime conteúdo: um despejo pode conter memória da página.
+ * Devolve [] se o diretório existe e está vazio, null se não pôde ser lido (≠ "sem despejo").
+ */
+export function listCrashDumps(dir, fsx = { readdirSync, statSync, readFileSync }, { max = 20, hashMaxBytes = 64 << 20 } = {}) {
+  let names; try { names = fsx.readdirSync(dir, { recursive: true }).map(String); } catch (e) { return e.code === "ENOENT" ? [] : null; }
+  const out = [];
+  for (const n of names.sort()) {
+    if (out.length >= max) break;
+    try {
+      const st = fsx.statSync(path.join(dir, n)); if (!st.isFile()) continue;
+      const e = { nome: n.slice(0, 120), bytes: st.size, modificado: new Date(st.mtimeMs).toISOString() };
+      if (st.size <= hashMaxBytes) e.sha256 = createHash("sha256").update(fsx.readFileSync(path.join(dir, n))).digest("hex");
+      out.push(e);
+    } catch { /* arquivo sumiu */ }
+  }
+  return out;
+}
+
 /** Descendentes (incluindo a raiz) de `rootPid` num mapa pid → processo. */
 export function descendants(procs, rootPid) {
   const out = []; const stack = [rootPid]; const seen = new Set();
@@ -64,7 +126,9 @@ export function procSnapshot(rootPid, fsx = { readdirSync, readFileSync }) {
   return descendants(procs, rootPid).map((p) => {
     let rssKb = null; try { rssKb = Number(fsx.readFileSync(`/proc/${p.pid}/statm`, "utf8").split(" ")[1]) * 4; } catch { /* ok */ }
     let type = null; try { const cl = fsx.readFileSync(`/proc/${p.pid}/cmdline`, "utf8").replace(/\0/g, " "); const m = /--type=([a-z-]+)/.exec(cl); const sub = /--utility-sub-type=([A-Za-z.]+)/.exec(cl); type = m ? (sub ? `${m[1]}:${sub[1]}` : m[1]) : "browser"; } catch { /* ok */ }
-    return { pid: p.pid, type, state: p.state, ticks: p.ticks, rssKb };
+    // PSS (memória proporcional: páginas compartilhadas divididas entre quem as usa) é o número que se pode somar; RSS soma páginas compartilhadas várias vezes.
+    let pssKb = null; let pssAnonKb = null; try { const m = parseKeyedKb(fsx.readFileSync(`/proc/${p.pid}/smaps_rollup`, "utf8")); pssKb = m.Pss ?? null; pssAnonKb = m.Pss_Anon ?? null; } catch { /* sem permissão ou sem smaps_rollup */ }
+    return { pid: p.pid, type, state: p.state, ticks: p.ticks, rssKb, pssKb, pssAnonKb };
   });
 }
 
@@ -123,7 +187,7 @@ export function classifyStall(ev) {
   const stackTxt = stackDown ? "a API/Vite não responde" : stackKnown ? "a pilha responde" : "a pilha não foi consultada";
   if (ev.process?.alive === false) return { ...base, lost: true, kind: "chrome-encerrado", causa: "infraestrutura (o processo do Chrome não existe mais)" };
   if (ev.browserHttp?.ok === false && ev.browserWs?.ok === false) return { ...base, lost: true, kind: "chrome-sem-resposta", causa: "infraestrutura ou Chrome (processo vivo, mas nem o endpoint de depuração nem o alvo browser respondem)" };
-  if (ev.cdp?.alvoCaiu) return { ...base, lost: true, kind: "renderizador-encerrado", causa: `o processo de renderização da aba terminou (${ev.cdp.alvoCaiu.evento}: ${ev.cdp.alvoCaiu.motivo || "sem motivo"}); ${ev.crashDumps?.length ? `${ev.crashDumps.length} despejo(s) de falha encontrado(s): o processo FALHOU` : ev.crashDumps ? "nenhum despejo de falha registrado (consistente com término por sinal externo, p.ex. SIGKILL/OOM, mas não prova)" : "despejos de falha não consultados"}; ${stackTxt}` };
+  if (ev.cdp?.alvoCaiu) return { ...base, lost: true, kind: "renderizador-encerrado", causa: `o processo de renderização da aba terminou (${ev.cdp.alvoCaiu.evento}: ${ev.cdp.alvoCaiu.motivo || "sem motivo"}); ${ev.crashDumps?.length ? `${ev.crashDumps.length} arquivo(s) no diretório de despejos (existência de despejo indica falha INTERNA do processo, mas não diz de quem é a causa)` : Array.isArray(ev.crashDumps) ? "nenhum despejo registrado (consistente com término por sinal externo, p.ex. SIGKILL/OOM, mas também com despejo desativado ou falha de coleta: não prova)" : "despejos não consultados"}; ${stackTxt}` };
   if (ev.pageSecondConn?.ok === true) return { ...base, lost: false, kind: "timeout-isolado", causa: "a página responde numa conexão nova: só o comando (ou a conexão da harness) estagnou" };
   if (ev.pageSecondConn?.ok === false) {
     const cpu = busy > 0 ? `, com ${busy} renderizador(es) consumindo CPU (laço ocupado)` : ", sem renderizador consumindo CPU (preso sem ocupar CPU: espera/bloqueio)";
@@ -144,7 +208,8 @@ export async function diagnoseChrome({ child, port, stderr, stackUrls, cdpHealth
     let alive = null; if (pid) { try { process.kill(pid, 0); alive = true; } catch (e) { alive = e.code === "EPERM"; } }
     ev.process = { pid: pid ?? null, alive, exitCode: child?.exitCode ?? null, signalCode: child?.signalCode ?? null };
     ev.host = { loadavg: os.loadavg().map((n) => Math.round(n * 100) / 100), freeMemMb: Math.round(os.freemem() / 1048576), totalMemMb: Math.round(os.totalmem() / 1048576), uptimeS: Math.round(os.uptime()), harnessRssMb: Math.round(process.memoryUsage().rss / 1048576) };
-    if (crashDir) { try { ev.crashDumps = readdirSync(crashDir, { recursive: true }).map(String).slice(0, 20); } catch (e) { ev.crashDumps = e.code === "ENOENT" ? [] : undefined; } } // só nomes
+    if (crashDir) ev.crashDumps = listCrashDumps(crashDir); // metadados apenas (nome, tamanho, data, SHA-256); null = diretório ilegível
+    if (platform === "linux") ev.memoria = linuxMemory();
     if (platform === "linux") { const k = await step(stepMs, () => dmesgTail()); ev.kernel = k.ok ? k.value : { indisponivel: k.error }; }
     ev.stderr = stderr ? { ...stderr.info(), cauda: stderr.text() } : null;
     if (eventsSummary) ev.celulaAtual = eventsSummary;
@@ -212,13 +277,22 @@ export async function quickHealth({ child, stackUrls, baseline, platform = proce
   const [web, api, procs] = await Promise.all([stackUrls?.web ? ping(stackUrls.web) : null, stackUrls?.api ? ping(stackUrls.api) : null, step(stepMs, async () => (platform === "linux" && child?.pid ? snapshotFn(child.pid) : null))]);
   if (web) out.web = web; if (api) out.api = api;
   if (procs.ok && procs.value) {
-    const l = procs.value; out.processos = l.length; out.renderizadores = l.filter((p) => p.type === "renderer").length; out.chromeRssMb = Math.round(l.reduce((a, p) => a + (p.rssKb ?? 0), 0) / 1024);
-    out.renderizadoresMb = l.filter((p) => p.type === "renderer").map((p) => ({ pid: p.pid, mb: Math.round((p.rssKb ?? 0) / 1024) })); // tendência POR renderizador: mostra se o que morre vinha crescendo
+    const l = procs.value; out.processos = l.length; out.renderizadores = l.filter((p) => p.type === "renderer").length;
+    out.chromeRssMb = Math.round(l.reduce((a, p) => a + (p.rssKb ?? 0), 0) / 1024); // CUIDADO: soma de RSS conta páginas compartilhadas várias vezes; não é a memória física do Chrome
+    if (l.some((p) => p.pssKb != null)) out.chromePssMb = Math.round(l.reduce((a, p) => a + (p.pssKb ?? 0), 0) / 1024); // PSS soma sem dupla contagem
+    out.renderizadoresMb = l.filter((p) => p.type === "renderer").map((p) => ({ pid: p.pid, rssMb: Math.round((p.rssKb ?? 0) / 1024), pssMb: p.pssKb == null ? null : Math.round(p.pssKb / 1024), anonMb: p.pssAnonKb == null ? null : Math.round(p.pssAnonKb / 1024) })); // tendência POR renderizador: mostra se o que morre vinha crescendo
     if (baseline) out.mudancaDeProcessos = processChanges(baseline, l);
   }
+  if (platform === "linux") { try { out.memoria = linuxMemory(); } catch { /* opcional */ } }
   return out;
 }
-export const healthLine = (h) => `saúde: chrome ${h.chromeVivo === false ? "MORTO" : "vivo"}${h.processos !== undefined ? ` · ${h.processos} proc (${h.renderizadores} renderizadores${h.renderizadoresMb?.length ? `: ${h.renderizadoresMb.map((r) => `${r.pid}=${r.mb}MB`).join(" ")}` : ""}) · ${h.chromeRssMb} MB` : ""}${h.mudancaDeProcessos && (h.mudancaDeProcessos.surgiram.length || h.mudancaDeProcessos.sumiram.length) ? ` · SERVIÇOS ALTERADOS +${h.mudancaDeProcessos.surgiram.map((p) => p.type).join(",")} −${h.mudancaDeProcessos.sumiram.map((p) => p.type).join(",")}` : ""} · web ${h.web ? (h.web.status ?? `ERRO ${h.web.erro}`) : "-"}${h.web?.ms !== undefined ? ` ${h.web.ms}ms` : ""} · api ${h.api ? (h.api.status ?? `ERRO ${h.api.erro}`) : "-"}${h.api?.ms !== undefined ? ` ${h.api.ms}ms` : ""} · carga ${h.carga[0]} · livre ${h.livreMb} MB · harness ${h.harnessRssMb} MB`;
+export const healthLine = (h) => {
+  const m = h.memoria; const cg = m?.cgroup;
+  const mem = m ? ` · cgroup ${cg ? `${cg.atualMb}/${cg.maxMb} MB (pico ${cg.picoMb}) oom_kill=${cg.eventos?.oom_kill ?? "?"}` : "n/d"} · psi ${m.psi?.some?.avg10 ?? "n/d"} · disp ${m.meminfo?.disponivelMb ?? "n/d"} MB · shm livre ${m.devShm?.livreMb ?? "n/d"} MB` : "";
+  const rend = h.renderizadoresMb?.length ? `: ${h.renderizadoresMb.map((r) => `${r.pid}=pss ${r.pssMb ?? "?"}/rss ${r.rssMb}MB`).join(" ")}` : "";
+  const chg = h.mudancaDeProcessos && (h.mudancaDeProcessos.surgiram.length || h.mudancaDeProcessos.sumiram.length) ? ` · SERVIÇOS ALTERADOS +${h.mudancaDeProcessos.surgiram.map((p) => p.type).join(",")} -${h.mudancaDeProcessos.sumiram.map((p) => p.type).join(",")}` : "";
+  return `saúde: chrome ${h.chromeVivo === false ? "MORTO" : "vivo"}${h.processos !== undefined ? ` · ${h.processos} proc (${h.renderizadores} renderizadores${rend}) · PSS total ${h.chromePssMb ?? "n/d"} MB` : ""}${chg} · web ${h.web ? (h.web.status ?? `ERRO ${h.web.erro}`) : "-"}${h.web?.ms !== undefined ? ` ${h.web.ms}ms` : ""} · api ${h.api ? (h.api.status ?? `ERRO ${h.api.erro}`) : "-"}${h.api?.ms !== undefined ? ` ${h.api.ms}ms` : ""} · carga ${h.carga[0]} · harness ${h.harnessRssMb} MB${mem}`;
+};
 
 /** Liga o batimento a cada `everyMs` (sem sobreposição; o temporizador não segura o processo). `onBeat(health)` recebe cada leitura. */
 export function startHeartbeat({ everyMs = 60000, collect, onBeat, setTimer = setInterval, clearTimer = clearInterval }) {
