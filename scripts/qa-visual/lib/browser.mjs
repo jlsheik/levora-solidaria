@@ -139,7 +139,7 @@ export class Cdp {
 export const RENDER_FLAGS = Object.freeze(["--disable-lcd-text", "--font-render-hinting=none", "--force-color-profile=srgb"]);
 
 /** Abre o navegador e devolve { cdp, version, close }. Lança se não conseguir (o chamador classifica como ENV). */
-export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone, extraArgs = [] } = {}) {
+async function launchOnce(exe, { onSpawn, onProfile, onProfileGone, extraArgs = [] } = {}) {
   const profile = mkdtempSync(path.join(tmpdir(), "levora-qa-profile-"));
   onProfile?.(profile);
   // `QA_BROWSER_NO_SANDBOX=1`: SÓ para runners descartáveis cujo kernel proíbe o sandbox de usuário (ex.: AppArmor no Ubuntu). Nunca é o padrão.
@@ -160,13 +160,13 @@ export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone, ex
   try {
     let port; let tries = 0;
     while (!port) {
-      if (child.exitCode !== null) throw new Error(`o navegador encerrou ao iniciar (código ${child.exitCode})`);
+      if (child.exitCode !== null) throw startupError(`o navegador encerrou ao iniciar (código ${child.exitCode})`);
       try { port = Number(readFileSync(path.join(profile, "DevToolsActivePort"), "utf8").split(/\r?\n/)[0]); } catch { /* ainda não escreveu */ }
-      if (!port) { if (++tries > 100) throw new Error("o navegador não abriu a porta de depuração a tempo"); await sleep(150); }
+      if (!port) { if (++tries > 100) throw startupError("o navegador não abriu a porta de depuração a tempo"); await sleep(150); }
     }
     const info = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
     let page; for (let i = 0; i < 40 && !page; i++) { const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); page = list.find((t) => t.type === "page"); if (!page) await sleep(150); }
-    if (!page) throw new Error("o navegador não expôs uma aba");
+    if (!page) throw startupError("o navegador não expôs uma aba");
     const ws = new WebSocket(page.webSocketDebuggerUrl);
     await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error("falha ao conectar no CDP")); });
     const cdp = new Cdp(ws);
@@ -184,7 +184,21 @@ export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone, ex
       async close() { try { await cdp.send("Browser.close", {}, 3000, { probe: false }); } catch { /* o kill abaixo garante */ } try { ws.close(); } catch { /* ok */ } await sleep(200); await cleanup(); },
     };
   } catch (e) {
+    // G6: a falha de ARRANQUE passava sem nenhuma pista (run 44181731270: "não abriu a porta" e nada mais). Anexa o estado do processo e a cauda higienizada do stderr do Chrome.
+    if (e.startup) { const t = (() => { try { return stderr.text(12); } catch { return []; } })(); e.message += ` [pid ${child.pid}; ${child.exitCode === null ? "ainda vivo" : `saiu com ${child.exitCode}${child.signalCode ? `/${child.signalCode}` : ""}`}; stderr ${stderr.total} bytes${t.length ? `: ${t.join(" | ")}` : ""}]`; }
     await cleanup();
     throw e;
+  }
+}
+
+const startupError = (msg) => Object.assign(new Error(msg), { startup: true });
+
+/** Abre o navegador. Falha de ARRANQUE (antes de existir sessão CDP: sem porta, saída precoce, sem aba) tem UMA nova tentativa com perfil novo: ainda não há célula, teste nem
+ *  estado a perder, e nada é reduzido ou aprovado por isso. Qualquer outra falha (incluindo perda de sessão depois) NÃO é repetida. */
+export async function launchBrowser(exe, opts = {}) {
+  try { return await launchOnce(exe, opts); } catch (e) {
+    if (!e.startup) throw e;
+    console.log(`qa:visual: falha de arranque do navegador (tentativa 1 de 2): ${e.message}`);
+    try { return await launchOnce(exe, opts); } catch (e2) { e2.message = `${e2.message} (após 1 nova tentativa; 1ª falha: ${e.message.slice(0, 400)})`; throw e2; }
   }
 }
