@@ -146,6 +146,8 @@ async function main() {
       heartbeat = startHeartbeat({ everyMs: 60000, collect: () => quickHealth({ child: session.child, stackUrls: session.cdp.context.stackUrls, baseline: session.baseline }), onBeat: (h) => { console.log(healthLine(h)); diag?.event("saude-periodica", h); } });
       await installProbe(session.cdp, { injectCss });
       // G4: gancho de TESTE (mesmo padrão do QA_VISUAL_FAULT): prende o laço de eventos da página quando a rota de regularização carrega, para provar de ponta a ponta o fail-fast da sessão CDP. Nunca ligado por padrão.
+      // G4: gancho de TESTE: derruba o renderizador (comando Page.crash do próprio CDP, sem matar processo) quando a rota de regularização carrega, para provar a perda por EVENTO de ponta a ponta.
+      if (process.env.QA_VISUAL_FAULT === "crash-page-regularization") { const prev = session.cdp.ws.onmessage; session.cdp.ws.onmessage = (m) => { prev(m); try { const d = JSON.parse(m.data); if (d.method === "Page.frameNavigated" && !d.params?.frame?.parentId && String(d.params?.frame?.url).includes("regulariz")) session.cdp.send("Page.crash", {}, 5000, { probe: false }).catch(() => {}); } catch { /* ok */ } }; }
       if (process.env.QA_VISUAL_FAULT === "hang-page-regularization") await session.cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: "if (location.pathname.indexOf('regulariz') >= 0) { while (true) {} }" });
       if (testClock) { // M04: relógio congelado também no navegador (Date) + fuso/idioma fixos; o relógio real do Windows não é tocado
         await session.cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: browserClockScript(testClock) });
@@ -166,7 +168,7 @@ async function main() {
       else if (opt["visual-only"]) ran.push({ name: b.name, version: session.version });
       else {
         try { await runScenarios({ cdp: session.cdp, browserName: b.name, version: session.version, baseUrl: stack.baseUrl, scenarios: chosen, viewports, report, filesDir, auth, diag, progress, screenshotsDir: opt.screenshots ? path.resolve(opt.screenshots) : undefined }); }
-        catch (e) { if (!(e instanceof CdpSessionLost)) throw e; reportSessionLost(e, b.name, session, diag); } // G4: fail-fast: a matriz deste navegador para; o que já foi medido fica; o resto vira "não executado" na cobertura
+        catch (e) { if (!(e instanceof CdpSessionLost)) throw e; await reportSessionLost(e, b.name, session, diag); } // G4: fail-fast: a matriz deste navegador para; o que já foi medido fica; o resto vira "não executado" na cobertura
         ran.push({ name: b.name, version: session.version });
       }
     } finally { heartbeat?.stop(); await session.close(); }
@@ -186,7 +188,8 @@ async function main() {
  * G4: a sessão CDP do navegador foi comprovadamente perdida. Não é aprovação nem "ambiente" por decreto: registra a causa operacional com as evidências (processo, endpoint, aba nova,
  * pilha, cauda do stderr higienizada), grava o diagnóstico, marca a execução como ENV (código 3) e deixa a cobertura apontar cada célula que não foi executada.
  */
-function reportSessionLost(e, browserName, session, diag) {
+async function reportSessionLost(e, browserName, session, diag) {
+  if (!e.evidence && session.diagnose) { try { e.evidence = await session.diagnose({ method: "(perda por evento)", timeoutMs: 0, health: session.cdp.health() }); } catch { /* o diagnóstico nunca impede o relato */ } } // perda por evento: coleta a evidência agora (cada passo tem prazo)
   const where = progress ? progress.describe() : "nenhuma célula concluída";
   const v = e.evidence ?? {}; const ev = v.evidence ?? {};
   console.log(`SESSÃO CDP PERDIDA [${browserName}]: ${e.reason} — ${e.detail}`);

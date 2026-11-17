@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 // @ts-expect-error módulos .mjs sem tipos
 import { Cdp, CdpSessionLost, CdpTimeoutError, findBrowser } from "../scripts/qa-visual/lib/browser.mjs";
 // @ts-expect-error módulos .mjs sem tipos
-import { TailBuffer, step, parseStat, descendants, cpuBetween, procSnapshot, classifyStall, diagnoseChrome, processChanges, quickHealth, healthLine, startHeartbeat } from "../scripts/qa-visual/lib/chromeprobe.mjs";
+import { TailBuffer, step, parseStat, descendants, cpuBetween, procSnapshot, classifyStall, diagnoseChrome, processChanges, quickHealth, healthLine, startHeartbeat, dmesgTail } from "../scripts/qa-visual/lib/chromeprobe.mjs";
 // @ts-expect-error módulos .mjs sem tipos
 import { waitUntil } from "../scripts/qa-visual/lib/wait.mjs";
 // @ts-expect-error módulos .mjs sem tipos
@@ -206,6 +206,31 @@ describe("chromeprobe — stderr limitado e higienizado, /proc, veredito e diagn
   });
 });
 
+describe("término do renderizador (causa observada na execução remota 44004874634)", () => {
+  it("Inspector.detached ('Render process gone.') encerra a sessão NA HORA, rejeita os pendentes com a causa nomeada e recusa os próximos sem esperar timeout", async () => {
+    const ws = new FakeWs(); const cdp = new Cdp(ws);
+    const p = cdp.send("Runtime.evaluate", {}, 30000).catch((e: any) => e);
+    const t0 = Date.now(); ws.event("Inspector.detached", { reason: "Render process gone." });
+    const e = await p;
+    expect(e).toBeInstanceOf(CdpSessionLost); expect(e.reason).toBe("renderizador-encerrado"); expect(e.detail).toContain("Render process gone."); expect(Date.now() - t0).toBeLessThan(100);
+    expect(cdp.health().alvoCaiu).toMatchObject({ evento: "Inspector.detached", motivo: "Render process gone." });
+    expect(await cdp.send("Network.enable").catch((x: any) => x)).toBe(e);
+  });
+  it("Inspector.targetCrashed também; o veredito nomeia o término do renderizador e diferencia com/sem despejo de falha", () => {
+    const ws = new FakeWs(); const cdp = new Cdp(ws); ws.event("Inspector.targetCrashed", {});
+    expect(cdp.lost?.reason).toBe("renderizador-encerrado");
+    const base = { process: { alive: true }, browserHttp: { ok: true }, browserWs: { ok: true }, pageSecondConn: { ok: false }, freshTarget: { ok: true }, cdp: { alvoCaiu: { evento: "Inspector.detached", motivo: "Render process gone." } }, stack: { web: { ok: true }, api: { ok: true } } };
+    const semDump = classifyStall({ ...base, crashDumps: [] }); expect(semDump).toMatchObject({ lost: true, kind: "renderizador-encerrado" }); expect(semDump.causa).toContain("nenhum despejo"); expect(semDump.causa).toContain("não prova");
+    const comDump = classifyStall({ ...base, crashDumps: ["abc.dmp"] }); expect(comDump.causa).toContain("FALHOU");
+    expect(classifyStall({ ...base, process: { alive: false } }).kind).toBe("chrome-encerrado"); // processo do navegador morto continua tendo prioridade
+  });
+  it("dmesgTail devolve só linhas relevantes e higienizadas; sem permissão, só o motivo (nunca lança)", async () => {
+    const ok = await dmesgTail((cb: any) => cb(null, "[x] foo\n[y] Out of memory: Killed process 4559 (chrome) total-vm:1kB token=abc\n[z] bar\n"));
+    expect(ok.linhas).toHaveLength(1); expect(ok.linhas[0]).toContain("Killed process 4559"); expect(ok.linhas[0]).not.toContain("abc");
+    expect(await dmesgTail((cb: any) => cb(new Error("dmesg: read kernel buffer failed: Operation not permitted")))).toEqual({ indisponivel: expect.stringContaining("not permitted") });
+  });
+});
+
 describe("batimento de saúde e mudança de serviços do Chrome", () => {
   it("processChanges ignora renderizadores (nascem e morrem) e acusa serviço de rede/GPU que sumiu ou foi recriado", () => {
     const base = [{ pid: 1, type: "browser" }, { pid: 2, type: "gpu-process" }, { pid: 3, type: "utility:network.mojom.NetworkService" }, { pid: 4, type: "renderer" }];
@@ -244,7 +269,7 @@ describe("limpeza e integração do arquivo (estático)", () => {
     const r = readFileSync("scripts/qa-visual/run.mjs", "utf8");
     expect(r).toContain('process.env.QA_VISUAL_FAULT === "hang-page-regularization"');
     expect(r).toContain("report.addEnv(`sessão CDP do ${browserName} perdida"); // ENV → código 3 (Report.exitCode)
-    expect(r).toContain("catch (e) { if (!(e instanceof CdpSessionLost)) throw e; reportSessionLost(");
+    expect(r).toContain("catch (e) { if (!(e instanceof CdpSessionLost)) throw e; await reportSessionLost(");
     const wf = readFileSync(".github/workflows/ci.yml", "utf8"); expect(wf).not.toContain("QA_VISUAL_FAULT"); // o CI nunca liga ganchos de falha
   });
   it("a matriz continua com 568 células no perfil ci, e o relatório não inventa aprovação (contagem a partir das linhas reais)", async () => {
@@ -269,5 +294,12 @@ describe.skipIf(!REAL)("experimento real: aba presa por laço infinito (QA_CDP_R
     expect(out.primeiroErro.reason).toBe("pagina-travada"); expect(out.primeiroErro.msAteErro).toBeLessThan(15000);
     expect(out.segundoComando.msParaRecusar).toBeLessThan(100); expect(out.veredito.lost).toBe(true);
     expect(out.processoEncerradoAposClose).toBe(true);
+  }, 100000);
+  it("Page.crash (renderizador derrubado pelo próprio CDP): a perda sai em < 5 s, pelo evento, com a causa nomeada", () => {
+    const r = spawnSync(process.execPath, ["scripts/qa-visual/experiments/crashed-page.mjs"], { encoding: "utf8", timeout: 90000 });
+    expect(r.status).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.pendente.reason).toBe("renderizador-encerrado"); expect(out.pendente.msAteErro).toBeLessThan(5000); expect(out.seguinte.msParaRecusar).toBeLessThan(100);
+    expect(out.veredito.kind).toBe("renderizador-encerrado"); expect(out.processoEncerradoAposClose).toBe(true);
   }, 100000);
 });
