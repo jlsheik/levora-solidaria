@@ -145,6 +145,8 @@ async function main() {
       // G4: batimento a cada 60 s (Chrome, serviços auxiliares, memória, carga, API e Vite): mostra a TENDÊNCIA antes de uma perda, que a G3 não teve
       heartbeat = startHeartbeat({ everyMs: 60000, collect: () => quickHealth({ child: session.child, stackUrls: session.cdp.context.stackUrls, baseline: session.baseline }), onBeat: (h) => { console.log(healthLine(h)); diag?.event("saude-periodica", h); } });
       await installProbe(session.cdp, { injectCss });
+      // G4: gancho de TESTE (mesmo padrão do QA_VISUAL_FAULT): prende o laço de eventos da página quando a rota de regularização carrega, para provar de ponta a ponta o fail-fast da sessão CDP. Nunca ligado por padrão.
+      if (process.env.QA_VISUAL_FAULT === "hang-page-regularization") await session.cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: "if (location.pathname.indexOf('regulariz') >= 0) { while (true) {} }" });
       if (testClock) { // M04: relógio congelado também no navegador (Date) + fuso/idioma fixos; o relógio real do Windows não é tocado
         await session.cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: browserClockScript(testClock) });
         await session.cdp.send("Emulation.setTimezoneOverride", { timezoneId: testClock.timezone });
