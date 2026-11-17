@@ -138,12 +138,12 @@ async function main() {
     const auth = { current: null }; // sessão do navegador compartilhada entre as chamadas deste navegador
     let session;
     try { session = await launchBrowser(b.exe, { onSpawn: (pid, kind, extra) => state.addChild(pid, kind, extra), onProfile: (d) => state.addProfile(d), onProfileGone: (d) => state.dropProfile(d) }); } catch (e) { report.addEnv(`${b.name}: não abriu (${e.message})`); continue; }
-    let heartbeat;
+    let heartbeat; let lastHealth = null; let beats = 0;
     cleanups.add(`navegador ${b.name}`, async () => { heartbeat?.stop(); await session.close(); });
     try {
       session.cdp.context.stackUrls = { web: `${stack.baseUrl}/login`, api: `http://127.0.0.1:${stack.apiPort}/_api/__health` }; // G4: o diagnóstico de travamento também consulta a pilha
       // G4: batimento a cada 60 s (Chrome, serviços auxiliares, memória, carga, API e Vite): mostra a TENDÊNCIA antes de uma perda, que a G3 não teve
-      heartbeat = startHeartbeat({ everyMs: 60000, collect: () => quickHealth({ child: session.child, stackUrls: session.cdp.context.stackUrls, baseline: session.baseline }), onBeat: (h) => { console.log(healthLine(h)); diag?.event("saude-periodica", h); } });
+      heartbeat = startHeartbeat({ everyMs: 20000, collect: () => quickHealth({ child: session.child, stackUrls: session.cdp.context.stackUrls, baseline: session.baseline }), onBeat: (h) => { lastHealth = h; if (++beats % 3 === 1) console.log(healthLine(h)); diag?.event("saude-periodica", h); } }); // 20 s no arquivo de diagnóstico; 1 linha por minuto no console
       await installProbe(session.cdp, { injectCss });
       // G4: gancho de TESTE (mesmo padrão do QA_VISUAL_FAULT): prende o laço de eventos da página quando a rota de regularização carrega, para provar de ponta a ponta o fail-fast da sessão CDP. Nunca ligado por padrão.
       // G4: gancho de TESTE: derruba o renderizador (comando Page.crash do próprio CDP, sem matar processo) quando a rota de regularização carrega, para provar a perda por EVENTO de ponta a ponta.
@@ -168,7 +168,7 @@ async function main() {
       else if (opt["visual-only"]) ran.push({ name: b.name, version: session.version });
       else {
         try { await runScenarios({ cdp: session.cdp, browserName: b.name, version: session.version, baseUrl: stack.baseUrl, scenarios: chosen, viewports, report, filesDir, auth, diag, progress, screenshotsDir: opt.screenshots ? path.resolve(opt.screenshots) : undefined }); }
-        catch (e) { if (!(e instanceof CdpSessionLost)) throw e; await reportSessionLost(e, b.name, session, diag); } // G4: fail-fast: a matriz deste navegador para; o que já foi medido fica; o resto vira "não executado" na cobertura
+        catch (e) { if (!(e instanceof CdpSessionLost)) throw e; await reportSessionLost(e, b.name, session, diag, lastHealth); } // G4: fail-fast: a matriz deste navegador para; o que já foi medido fica; o resto vira "não executado" na cobertura
         ran.push({ name: b.name, version: session.version });
       }
     } finally { heartbeat?.stop(); await session.close(); }
@@ -188,7 +188,7 @@ async function main() {
  * G4: a sessão CDP do navegador foi comprovadamente perdida. Não é aprovação nem "ambiente" por decreto: registra a causa operacional com as evidências (processo, endpoint, aba nova,
  * pilha, cauda do stderr higienizada), grava o diagnóstico, marca a execução como ENV (código 3) e deixa a cobertura apontar cada célula que não foi executada.
  */
-async function reportSessionLost(e, browserName, session, diag) {
+async function reportSessionLost(e, browserName, session, diag, lastHealth = null) {
   if (!e.evidence && session.diagnose) { try { e.evidence = await session.diagnose({ method: "(perda por evento)", timeoutMs: 0, health: session.cdp.health() }); } catch { /* o diagnóstico nunca impede o relato */ } } // perda por evento: coleta a evidência agora (cada passo tem prazo)
   const where = progress ? progress.describe() : "nenhuma célula concluída";
   const v = e.evidence ?? {}; const ev = v.evidence ?? {};
@@ -201,7 +201,14 @@ async function reportSessionLost(e, browserName, session, diag) {
   if (Array.isArray(ev.processosOs)) console.log(`  processos do Chrome (CPU/estado): ${ev.processosOs.map((p) => `${p.type}:${p.state}:${p.cpuPct}%`).join(" ")}`);
   const tail = ev.stderr?.cauda ?? session.stderr?.text(); if (tail?.length) console.log(`  stderr do Chrome (últimas ${Math.min(tail.length, 15)} linhas, higienizado):\n${tail.slice(-15).map((l) => `    ${l}`).join("\n")}`);
   const snap = progress?.snapshot();
-  const payload = { quando: new Date().toISOString(), navegador: browserName, versao: session.version, motivo: e.reason, detalhe: e.detail, progresso: snap ?? null, saudeCdp: session.cdp.health(), veredito: v.kind ?? null, causa: v.causa ?? null, evidencia: ev, stderrCauda: session.stderr?.text() ?? null };
+  // G5: qual renderizador sumiu? Compara os pids do ÚLTIMO batimento (com PSS/RSS de cada um) com os que existem agora.
+  const nowPids = new Set((Array.isArray(ev.processosOs) ? ev.processosOs : []).filter((p) => p.type === "renderer").map((p) => p.pid));
+  const renderizadoresQueSumiram = (lastHealth?.renderizadoresMb ?? []).filter((r) => !nowPids.has(r.pid));
+  if (renderizadoresQueSumiram.length) console.log(`  renderizador(es) que sumiram desde o último batimento: ${renderizadoresQueSumiram.map((r) => `${r.pid} (pss ${r.pssMb ?? "?"} MB, rss ${r.rssMb} MB, anon ${r.anonMb ?? "?"} MB)`).join("; ")}`);
+  if (Array.isArray(ev.crashDumps)) console.log(`  despejos de falha: ${ev.crashDumps.length ? ev.crashDumps.map((d) => `${d.nome} ${d.bytes} B sha256=${String(d.sha256).slice(0, 12)}`).join("; ") : "nenhum no diretório do crashpad"}`);
+  if (ev.memoria) console.log(`  memória (Linux): ${JSON.stringify({ cgroup: ev.memoria.cgroup, psi: ev.memoria.psi?.some, disponivelMb: ev.memoria.meminfo?.disponivelMb, shmLivreMb: ev.memoria.devShm?.livreMb })}`);
+  if (ev.kernel?.linhas?.length) console.log(`  kernel (dmesg filtrado): ${ev.kernel.linhas.slice(-5).join(" | ")}`);
+  const payload = { ultimoBatimento: lastHealth, renderizadoresQueSumiram, quando: new Date().toISOString(), navegador: browserName, versao: session.version, motivo: e.reason, detalhe: e.detail, progresso: snap ?? null, saudeCdp: session.cdp.health(), veredito: v.kind ?? null, causa: v.causa ?? null, evidencia: ev, stderrCauda: session.stderr?.text() ?? null };
   diag?.event("sessao-cdp-perdida", { navegador: browserName, motivo: e.reason, veredito: v.kind ?? null, celulasConcluidas: snap?.done ?? null, ultima: snap?.last ?? null });
   diag?.json("cdp-session-lost.json", payload);
   report.addEnv(`sessão CDP do ${browserName} perdida (${e.reason}${v.kind && v.kind !== e.reason ? `; diagnóstico: ${v.kind}` : ""}) após ${where}. A cobertura ficou INCOMPLETA: cada célula não executada consta como UNMEASURABLE; nada foi aprovado por reinício.`);

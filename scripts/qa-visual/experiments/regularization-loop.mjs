@@ -16,7 +16,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-const { values: o } = parseArgs({ options: { laps: { type: "string", default: "10" }, out: { type: "string" } } });
+const { values: o } = parseArgs({ options: { laps: { type: "string", default: "10" }, out: { type: "string" }, isolated: { type: "boolean", default: false } } });
 const laps = Number(o.laps); const ids = ["regularization-error", "regularization-filter-select", "regularization-filter-no-results"];
 const scenarios = SCENARIOS.filter((s) => ids.includes(s.id));
 const dbUrl = resolveDatabaseUrl({ root }); if (!dbUrl) { console.error("defina QA_DATABASE_URL (banco *_qa descartável)"); process.exit(3); }
@@ -29,8 +29,9 @@ try {
   stack = await startStack({ root, databaseUrl: dbUrl });
   session = await launchBrowser(exe);
   await installProbe(session.cdp);
-  const auth = { current: null }; out.versao = session.version;
+  let auth = { current: null }; out.versao = session.version; out.modo = o.isolated ? "navegador novo a cada volta (só diagnóstico)" : "um único navegador reutilizado";
   for (let lap = 1; lap <= laps; lap++) {
+    if (o.isolated && lap > 1) { await session.close(); session = await launchBrowser(exe); await installProbe(session.cdp); auth = { current: null }; }
     const report = new Report(); const t0 = Date.now();
     await runScenarios({ cdp: session.cdp, browserName: "chrome", version: session.version, baseUrl: stack.baseUrl, scenarios, viewports: VIEWPORTS, report, filesDir, auth });
     const c = report.counts(); out.voltas.push({ lap, ms: Date.now() - t0, ...c, falhasCdp: session.cdp.timeouts, saude: { pendentes: session.cdp.pending.size } });

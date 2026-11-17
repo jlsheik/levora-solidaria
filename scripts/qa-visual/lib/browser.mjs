@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { killTree } from "./procowner.mjs";
 import { TailBuffer, diagnoseChrome, procSnapshot } from "./chromeprobe.mjs";
 import { summarizeEvents } from "./diagnostics.mjs";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -144,9 +144,12 @@ export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone, ex
   onProfile?.(profile);
   // `QA_BROWSER_NO_SANDBOX=1`: SÓ para runners descartáveis cujo kernel proíbe o sandbox de usuário (ex.: AppArmor no Ubuntu). Nunca é o padrão.
   const noSandbox = process.env.QA_BROWSER_NO_SANDBOX === "1" ? ["--no-sandbox"] : [];
-  const crashDir = process.platform === "linux" ? [`--crash-dumps-dir=${path.join(profile, "g4-crashes")}`] : []; // G4: um despejo de falha (crashpad) distingue "o renderizador falhou" de "foi morto de fora" (SIGKILL/OOM não deixa despejo)
-  const args = [...noSandbox, ...crashDir, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-extensions", "--disable-background-networking", "--window-size=1280,900", "--enable-logging=stderr", "--log-level=2", ...extraArgs, ...RENDER_FLAGS, "about:blank"];
-  const child = spawn(exe, args, { stdio: ["ignore", "ignore", "pipe"], windowsHide: true, detached: process.platform !== "win32", env: process.platform === "linux" ? { ...process.env, CHROME_HEADLESS: "1" } : process.env }); // G4: stderr em cauda limitada (era "ignore"); sempre drenado
+  // G5: o Chrome NÃO lê `--crash-dumps-dir` (verificado no código do Chromium: o diretório do crashpad é fixo no perfil PADRÃO e só se desvia por BREAKPAD_DUMP_LOCATION ou --breakpad-dump-location).
+  // Diretório exclusivo, criado aqui (permissão do próprio usuário) dentro do perfil descartável: some junto com ele. O crashpad GRAVA despejos sempre; CHROME_HEADLESS=1 NÃO é necessário para isso,
+  // só impede o ENVIO (uploads exigem consentimento e ficam desligados em modo "unattended"): é uma garantia extra de que nada sai da máquina.
+  const crashDir = path.join(profile, "g5-crashes"); try { mkdirSync(crashDir, { recursive: true }); } catch { /* sem diretório: o diagnóstico acusa "ilegível", o navegador sobe igual */ }
+  const args = [...noSandbox, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-extensions", "--disable-background-networking", "--window-size=1280,900", "--enable-logging=stderr", "--log-level=2", ...extraArgs, ...RENDER_FLAGS, "about:blank"];
+  const child = spawn(exe, args, { stdio: ["ignore", "ignore", "pipe"], windowsHide: true, detached: process.platform !== "win32", env: { ...process.env, BREAKPAD_DUMP_LOCATION: crashDir, CHROME_HEADLESS: "1" } }); // G4: stderr em cauda limitada (era "ignore"); sempre drenado
   const stderr = new TailBuffer(8192); child.stderr.on("data", (b) => stderr.push(b)); child.stderr.on("error", () => {});
   let exitInfo = null; child.on("exit", (code, signal) => { exitInfo = { code, signal, at: new Date().toISOString() }; });
   onSpawn?.(child.pid, "browser", { profile }); // perfil EXCLUSIVO desta execução: é parte da identidade do processo
@@ -169,7 +172,7 @@ export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone, ex
     const cdp = new Cdp(ws);
     cdp.stallProbe = async (info) => { // diagnóstico independente do 1º timeout (ver lib/chromeprobe.mjs); contexto (célula, pilha) é preenchido pelo runner/run.mjs
       let eventsSummary; try { const s = summarizeEvents(cdp.events); eventsSummary = { requisicoes: s.requests, falhas: s.failed, pendentes: s.pending.slice(0, 8), errosConsole: s.consoleErrors.slice(0, 5), excecoes: s.exceptions.slice(0, 3) }; } catch { /* opcional */ }
-      const v = await diagnoseChrome({ child, port, stderr, baseline: procBaseline, stackUrls: cdp.context.stackUrls, cdpHealth: { ...info.health, comando: info.method, prazoMs: info.timeoutMs }, cell: cdp.context.cell, eventsSummary, makeCdp: (w) => new Cdp(w, { maxConsecutiveTimeouts: Infinity }), crashDir: process.platform === "linux" ? path.join(profile, "g4-crashes") : undefined });
+      const v = await diagnoseChrome({ child, port, stderr, baseline: procBaseline, stackUrls: cdp.context.stackUrls, cdpHealth: { ...info.health, comando: info.method, prazoMs: info.timeoutMs }, cell: cdp.context.cell, eventsSummary, makeCdp: (w) => new Cdp(w, { maxConsecutiveTimeouts: Infinity }), crashDir });
       if (exitInfo) v.evidence.process = { ...v.evidence.process, saiu: exitInfo };
       return v;
     };
@@ -177,7 +180,7 @@ export async function launchBrowser(exe, { onSpawn, onProfile, onProfileGone, ex
     await cdp.send("Page.enable"); await cdp.send("Runtime.enable"); await cdp.send("Network.enable"); await cdp.send("Inspector.enable"); // G4: Inspector.targetCrashed/detached entram na saúde da sessão
     let procBaseline = null; if (process.platform === "linux") { try { procBaseline = procSnapshot(child.pid); } catch { /* sem /proc */ } }
     return {
-      cdp, version: info.Browser, child, stderr, port, baseline: procBaseline, profile, diagnose,
+      cdp, version: info.Browser, child, stderr, port, baseline: procBaseline, profile, diagnose, crashDir,
       async close() { try { await cdp.send("Browser.close", {}, 3000, { probe: false }); } catch { /* o kill abaixo garante */ } try { ws.close(); } catch { /* ok */ } await sleep(200); await cleanup(); },
     };
   } catch (e) {
