@@ -239,6 +239,14 @@ describe("limpeza e integração do arquivo (estático)", () => {
     expect(b).not.toMatch(/(spawn|exec)\w*\(["'`](taskkill|pkill|killall)/); expect(p).not.toMatch(/(spawn|exec)\w*\(["'`](taskkill|pkill|killall)|process\.kill\([^,)]+,\s*["']SIG/); // process.kill(pid, 0) é só sondagem de existência
     expect(p).toContain("process.kill(pid, 0)");
   });
+  it("o gancho de falha simulada (aba presa) só liga por variável de ambiente explícita e o relatório da perda de sessão sai com código ENV", async () => {
+    const { readFileSync } = await import("node:fs");
+    const r = readFileSync("scripts/qa-visual/run.mjs", "utf8");
+    expect(r).toContain('process.env.QA_VISUAL_FAULT === "hang-page-regularization"');
+    expect(r).toContain("report.addEnv(`sessão CDP do ${browserName} perdida"); // ENV → código 3 (Report.exitCode)
+    expect(r).toContain("catch (e) { if (!(e instanceof CdpSessionLost)) throw e; reportSessionLost(");
+    const wf = readFileSync(".github/workflows/ci.yml", "utf8"); expect(wf).not.toContain("QA_VISUAL_FAULT"); // o CI nunca liga ganchos de falha
+  });
   it("a matriz continua com 568 células no perfil ci, e o relatório não inventa aprovação (contagem a partir das linhas reais)", async () => {
     // @ts-expect-error mjs
     const { CI_PROFILE_IDS, THEMES } = await import("../scripts/qa-visual/scenarios.mjs");
