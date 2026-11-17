@@ -21,7 +21,8 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { assertDisposableDatabase } from "./lib/guard.mjs";
-import { findBrowser, launchBrowser } from "./lib/browser.mjs";
+import { findBrowser, launchBrowser, CdpSessionLost } from "./lib/browser.mjs";
+import { quickHealth, healthLine, startHeartbeat } from "./lib/chromeprobe.mjs";
 import { startStack, prepareDatabase, dropDatabase, resolveDatabaseUrl } from "./lib/stack.mjs";
 import { FROZEN_CLOCK, browserClockScript } from "./lib/clock.mjs";
 import { Report, EXIT, expectedCombos, coverageGaps, selectionSummary } from "./lib/report.mjs";
@@ -137,8 +138,12 @@ async function main() {
     const auth = { current: null }; // sessão do navegador compartilhada entre as chamadas deste navegador
     let session;
     try { session = await launchBrowser(b.exe, { onSpawn: (pid, kind, extra) => state.addChild(pid, kind, extra), onProfile: (d) => state.addProfile(d), onProfileGone: (d) => state.dropProfile(d) }); } catch (e) { report.addEnv(`${b.name}: não abriu (${e.message})`); continue; }
-    cleanups.add(`navegador ${b.name}`, async () => session.close());
+    let heartbeat;
+    cleanups.add(`navegador ${b.name}`, async () => { heartbeat?.stop(); await session.close(); });
     try {
+      session.cdp.context.stackUrls = { web: `${stack.baseUrl}/login`, api: `http://127.0.0.1:${stack.apiPort}/_api/__health` }; // G4: o diagnóstico de travamento também consulta a pilha
+      // G4: batimento a cada 60 s (Chrome, serviços auxiliares, memória, carga, API e Vite): mostra a TENDÊNCIA antes de uma perda, que a G3 não teve
+      heartbeat = startHeartbeat({ everyMs: 60000, collect: () => quickHealth({ child: session.child, stackUrls: session.cdp.context.stackUrls, baseline: session.baseline }), onBeat: (h) => { console.log(healthLine(h)); diag?.event("saude-periodica", h); } });
       await installProbe(session.cdp, { injectCss });
       if (testClock) { // M04: relógio congelado também no navegador (Date) + fuso/idioma fixos; o relógio real do Windows não é tocado
         await session.cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: browserClockScript(testClock) });
@@ -157,8 +162,12 @@ async function main() {
       }
       if (opt["self-test"]) await selfTest(session, b.name, stack.baseUrl, filesDir, auth);
       else if (opt["visual-only"]) ran.push({ name: b.name, version: session.version });
-      else { await runScenarios({ cdp: session.cdp, browserName: b.name, version: session.version, baseUrl: stack.baseUrl, scenarios: chosen, viewports, report, filesDir, auth, diag, progress, screenshotsDir: opt.screenshots ? path.resolve(opt.screenshots) : undefined }); ran.push({ name: b.name, version: session.version }); }
-    } finally { await session.close(); }
+      else {
+        try { await runScenarios({ cdp: session.cdp, browserName: b.name, version: session.version, baseUrl: stack.baseUrl, scenarios: chosen, viewports, report, filesDir, auth, diag, progress, screenshotsDir: opt.screenshots ? path.resolve(opt.screenshots) : undefined }); }
+        catch (e) { if (!(e instanceof CdpSessionLost)) throw e; reportSessionLost(e, b.name, session, diag); } // G4: fail-fast: a matriz deste navegador para; o que já foi medido fica; o resto vira "não executado" na cobertura
+        ran.push({ name: b.name, version: session.version });
+      }
+    } finally { heartbeat?.stop(); await session.close(); }
   }
 
   // 4) cobertura: toda combinação esperada precisa aparecer no relatório (executada ou explicitamente reportada)
@@ -169,6 +178,28 @@ async function main() {
     }
   }
   return { ran, diag };
+}
+
+/**
+ * G4: a sessão CDP do navegador foi comprovadamente perdida. Não é aprovação nem "ambiente" por decreto: registra a causa operacional com as evidências (processo, endpoint, aba nova,
+ * pilha, cauda do stderr higienizada), grava o diagnóstico, marca a execução como ENV (código 3) e deixa a cobertura apontar cada célula que não foi executada.
+ */
+function reportSessionLost(e, browserName, session, diag) {
+  const where = progress ? progress.describe() : "nenhuma célula concluída";
+  const v = e.evidence ?? {}; const ev = v.evidence ?? {};
+  console.log(`SESSÃO CDP PERDIDA [${browserName}]: ${e.reason} — ${e.detail}`);
+  console.log(`  progresso: ${where}`);
+  console.log(`  veredito do diagnóstico independente: ${v.kind ?? "(sem veredito)"}${v.causa ? ` — ${v.causa}` : ""}`);
+  if (ev.process) console.log(`  processo Chrome: pid=${ev.process.pid} vivo=${ev.process.alive} saída=${JSON.stringify(ev.process.saiu ?? { code: ev.process.exitCode, signal: ev.process.signalCode })}`);
+  if (ev.browserHttp) console.log(`  endpoint de depuração: ${ev.browserHttp.ok ? "responde" : `sem resposta (${ev.browserHttp.error})`} · alvo browser: ${ev.browserWs?.ok ? "responde" : `sem resposta (${ev.browserWs?.error})`} · página (conexão nova): ${ev.pageSecondConn?.ok ? "responde" : `sem resposta (${ev.pageSecondConn?.error})`} · aba nova: ${ev.freshTarget?.ok ? "funciona" : "não funciona"}`);
+  if (ev.stack) console.log(`  pilha: web=${ev.stack.web?.ok} api=${ev.stack.api?.ok}`);
+  if (Array.isArray(ev.processosOs)) console.log(`  processos do Chrome (CPU/estado): ${ev.processosOs.map((p) => `${p.type}:${p.state}:${p.cpuPct}%`).join(" ")}`);
+  const tail = ev.stderr?.cauda ?? session.stderr?.text(); if (tail?.length) console.log(`  stderr do Chrome (últimas ${Math.min(tail.length, 15)} linhas, higienizado):\n${tail.slice(-15).map((l) => `    ${l}`).join("\n")}`);
+  const snap = progress?.snapshot();
+  const payload = { quando: new Date().toISOString(), navegador: browserName, versao: session.version, motivo: e.reason, detalhe: e.detail, progresso: snap ?? null, saudeCdp: session.cdp.health(), veredito: v.kind ?? null, causa: v.causa ?? null, evidencia: ev, stderrCauda: session.stderr?.text() ?? null };
+  diag?.event("sessao-cdp-perdida", { navegador: browserName, motivo: e.reason, veredito: v.kind ?? null, celulasConcluidas: snap?.done ?? null, ultima: snap?.last ?? null });
+  diag?.json("cdp-session-lost.json", payload);
+  report.addEnv(`sessão CDP do ${browserName} perdida (${e.reason}${v.kind && v.kind !== e.reason ? `; diagnóstico: ${v.kind}` : ""}) após ${where}. A cobertura ficou INCOMPLETA: cada célula não executada consta como UNMEASURABLE; nada foi aprovado por reinício.`);
 }
 
 /** Autoteste: injeta CSS ruim SÓ no navegador (produção intacta) e exige que o detector acuse; e exige MISSING/UNMEASURABLE nas sentinelas. */
