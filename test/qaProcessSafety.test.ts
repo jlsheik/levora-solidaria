@@ -199,9 +199,11 @@ describe("sinais e falhas de inicialização", () => {
   it("14) falha na inicialização do navegador: o perfil exclusivo é removido, nada fica rodando e o erro sobe", async () => {
     const before = new Set(listProcesses()!.map((p: any) => p.pid)); const registered: any[] = []; const profiles: string[] = []; const gone: string[] = [];
     await expect(launchBrowser(process.execPath, { onSpawn: (pid: number, kind: string, extra: any) => registered.push({ pid, kind, extra }), onProfile: (d: string) => profiles.push(d), onProfileGone: (d: string) => gone.push(d) })).rejects.toThrow(/encerrou ao iniciar/);
-    expect(registered).toHaveLength(1); expect(registered[0].extra.profile).toBe(profiles[0]);
-    expect(existsSync(profiles[0])).toBe(false); expect(gone).toEqual(profiles);
-    expect(await waitGone(registered[0].pid)).toBe(true); expect(before.has(registered[0].pid)).toBe(false);
+    // G7: falha de ARRANQUE tem UMA nova tentativa com perfil novo; cada tentativa registra seu processo e seu perfil, e TODOS são limpos (nada fica rodando).
+    expect(registered).toHaveLength(2); expect(profiles).toHaveLength(2); expect(profiles[0]).not.toBe(profiles[1]);
+    registered.forEach((r, i) => expect(r.extra.profile).toBe(profiles[i]));
+    for (const d of profiles) expect(existsSync(d)).toBe(false); expect(gone).toEqual(profiles);
+    for (const r of registered) { expect(await waitGone(r.pid)).toBe(true); expect(before.has(r.pid)).toBe(false); }
   }, 60000);
   it("planRecovery é puro: sem registro = nada; com execução viva = busy", () => {
     expect(planRecovery(null, { table: [] })).toEqual({ busy: false, children: [], profiles: [], database: null, containers: [] });
