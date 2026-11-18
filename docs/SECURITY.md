@@ -328,3 +328,11 @@ Listado honestamente, sem fingir cobertura:
   README "Estado conhecido / lacunas"), então essa classe de risco não se
   aplica hoje. Vai precisar de atenção quando um conector de descoberta
   automática (WhatsApp, e-mail, scraping) for construído.
+
+## Auditoria de dependências no CI (G7, 2026-11-17)
+
+O CI roda **dois** gates: `npm audit --omit=dev --audit-level=moderate` (produção, integral e obrigatório) e `node scripts/audit-gate.mjs` (audit **completo** com a exceção nominal abaixo).
+
+**Exceção temporária** `GHSA-fc5q-39xc-vjpf` (ReDoS em `picomatch <= 4.0.7`, severidade alta; arquivo `scripts/audit-exceptions.json`): cadeia `picomatch → fdir/tinyglobby → vite → vitest/@vitest/coverage-v8` e `@rollup/pluginutils → vite-plugin-svgr`, **somente desenvolvimento** (`dev: true` no lockfile; produção = 0 alertas). Não existe versão corrigida (4.0.7 é a última); as correções sugeridas pelo npm são downgrades major (vitest 3.1.4). Os únicos globs que chegam ao `picomatch` são os estáticos de `vitest.config.ts`; quem controla essa configuração já executa código arbitrário no CI. Dono da decisão: proprietário do repositório; decidida em 2026-11-17; **vence em 2026-12-17**; encerra quando existir versão corrigida (atualizar o lockfile e remover a exceção).
+
+O gate reprova: qualquer outro alerta moderate+, outro advisory na mesma cadeia, pacote/versão fora do escopo, nó que não seja dev no lockfile, exceção vencida/malformada, relatório ausente, inválido, inconsistente ou falha de comunicação. O alerta excepcionalizado é impresso no log. **Risco residual:** exploração teórica do `picomatch` por quem já controla configuração ou código do CI; nenhum efeito no runtime distribuído.

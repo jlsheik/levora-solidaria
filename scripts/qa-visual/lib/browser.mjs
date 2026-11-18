@@ -6,7 +6,7 @@ import { killTree } from "./procowner.mjs";
 import { TailBuffer, diagnoseChrome, procSnapshot } from "./chromeprobe.mjs";
 import { summarizeEvents } from "./diagnostics.mjs";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import os, { tmpdir } from "node:os";
 import path from "node:path";
 
 /** Caminhos candidatos por navegador/plataforma (puro, testado). Se QA_EDGE_PATH / QA_CHROME_PATH estiver definida, ela é o ÚNICO candidato. */
@@ -139,7 +139,8 @@ export class Cdp {
 export const RENDER_FLAGS = Object.freeze(["--disable-lcd-text", "--font-render-hinting=none", "--force-color-profile=srgb"]);
 
 /** Abre o navegador e devolve { cdp, version, close }. Lança se não conseguir (o chamador classifica como ENV). */
-async function launchOnce(exe, { onSpawn, onProfile, onProfileGone, extraArgs = [] } = {}) {
+async function launchOnce(exe, { onSpawn, onProfile, onProfileGone, extraArgs = [], startupMs = 15000 } = {}) {
+  const t0 = Date.now();
   const profile = mkdtempSync(path.join(tmpdir(), "levora-qa-profile-"));
   onProfile?.(profile);
   // `QA_BROWSER_NO_SANDBOX=1`: SÓ para runners descartáveis cujo kernel proíbe o sandbox de usuário (ex.: AppArmor no Ubuntu). Nunca é o padrão.
@@ -151,6 +152,7 @@ async function launchOnce(exe, { onSpawn, onProfile, onProfileGone, extraArgs = 
   const args = [...noSandbox, "--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--disable-extensions", "--disable-background-networking", "--window-size=1280,900", "--enable-logging=stderr", "--log-level=2", ...extraArgs, ...RENDER_FLAGS, "about:blank"];
   const child = spawn(exe, args, { stdio: ["ignore", "ignore", "pipe"], windowsHide: true, detached: process.platform !== "win32", env: { ...process.env, BREAKPAD_DUMP_LOCATION: crashDir, CHROME_HEADLESS: "1" } }); // G4: stderr em cauda limitada (era "ignore"); sempre drenado
   const stderr = new TailBuffer(8192); child.stderr.on("data", (b) => stderr.push(b)); child.stderr.on("error", () => {});
+  let spawnErr = null; child.on("error", (err) => { spawnErr = err; }); // G7: sem tratador, um executável inexistente/sem permissão (ENOENT/EACCES) derrubava o processo do qa:visual com stack em vez de virar ENV
   let exitInfo = null; child.on("exit", (code, signal) => { exitInfo = { code, signal, at: new Date().toISOString() }; });
   onSpawn?.(child.pid, "browser", { profile }); // perfil EXCLUSIVO desta execução: é parte da identidade do processo
   const cleanup = async () => {
@@ -160,9 +162,10 @@ async function launchOnce(exe, { onSpawn, onProfile, onProfileGone, extraArgs = 
   try {
     let port; let tries = 0;
     while (!port) {
+      if (spawnErr) throw new Error(`não foi possível iniciar o navegador (${spawnErr.code ?? spawnErr.message}): ${exe}`); // não é falha de arranque transitória: não repete
       if (child.exitCode !== null) throw startupError(`o navegador encerrou ao iniciar (código ${child.exitCode})`);
       try { port = Number(readFileSync(path.join(profile, "DevToolsActivePort"), "utf8").split(/\r?\n/)[0]); } catch { /* ainda não escreveu */ }
-      if (!port) { if (++tries > 100) throw startupError("o navegador não abriu a porta de depuração a tempo"); await sleep(150); }
+      if (!port) { if (++tries > Math.max(1, Math.ceil(startupMs / 150))) throw startupError("o navegador não abriu a porta de depuração a tempo"); await sleep(150); }
     }
     const info = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
     let page; for (let i = 0; i < 40 && !page; i++) { const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); page = list.find((t) => t.type === "page"); if (!page) await sleep(150); }
@@ -185,7 +188,14 @@ async function launchOnce(exe, { onSpawn, onProfile, onProfileGone, extraArgs = 
     };
   } catch (e) {
     // G6: a falha de ARRANQUE passava sem nenhuma pista (run 44181731270: "não abriu a porta" e nada mais). Anexa o estado do processo e a cauda higienizada do stderr do Chrome.
-    if (e.startup) { const t = (() => { try { return stderr.text(12); } catch { return []; } })(); e.message += ` [pid ${child.pid}; ${child.exitCode === null ? "ainda vivo" : `saiu com ${child.exitCode}${child.signalCode ? `/${child.signalCode}` : ""}`}; stderr ${stderr.total} bytes${t.length ? `: ${t.join(" | ")}` : ""}]`; }
+    if (e.startup) { // G7: o que dá para provar sobre o arranque falho, sem segredo: tempo, estado do processo, contenção (carga/memória livre) e a cauda higienizada do stderr
+      const t = (() => { try { return stderr.text(12); } catch { return []; } })();
+      const vivo = child.exitCode === null && !child.signalCode;
+      const mem = (() => { try { return `${Math.round(os.freemem() / 1048576)}/${Math.round(os.totalmem() / 1048576)} MB livres`; } catch { return "n/d"; } })();
+      const carga = (() => { try { return os.loadavg()[0].toFixed(2); } catch { return "n/d"; } })();
+      e.launch = { pid: child.pid, vivo, codigo: child.exitCode, sinal: child.signalCode, stderrBytes: stderr.total, decorridoMs: Date.now() - t0, perfilCriado: existsSync(profile), crashDirCriado: existsSync(crashDir), portaEscrita: existsSync(path.join(profile, "DevToolsActivePort")), carga1min: carga, memoria: mem };
+      e.message += ` [pid ${child.pid}; ${vivo ? "ainda vivo no prazo" : `saiu com ${child.exitCode}${child.signalCode ? `/${child.signalCode}` : ""}`}; ${Date.now() - t0} ms; perfil ${e.launch.perfilCriado ? "criado" : "AUSENTE"}; porta ${e.launch.portaEscrita ? "escrita" : "não escrita"}; carga ${carga}; memória ${mem}; stderr ${stderr.total} bytes${t.length ? `: ${t.join(" | ")}` : ""}]`;
+    }
     await cleanup();
     throw e;
   }
@@ -195,10 +205,14 @@ const startupError = (msg) => Object.assign(new Error(msg), { startup: true });
 
 /** Abre o navegador. Falha de ARRANQUE (antes de existir sessão CDP: sem porta, saída precoce, sem aba) tem UMA nova tentativa com perfil novo: ainda não há célula, teste nem
  *  estado a perder, e nada é reduzido ou aprovado por isso. Qualquer outra falha (incluindo perda de sessão depois) NÃO é repetida. */
-export async function launchBrowser(exe, opts = {}) {
-  try { return await launchOnce(exe, opts); } catch (e) {
-    if (!e.startup) throw e;
-    console.log(`qa:visual: falha de arranque do navegador (tentativa 1 de 2): ${e.message}`);
-    try { return await launchOnce(exe, opts); } catch (e2) { e2.message = `${e2.message} (após 1 nova tentativa; 1ª falha: ${e.message.slice(0, 400)})`; throw e2; }
+export async function launchBrowser(exe, opts = {}, launch = launchOnce) {
+  const nova = [];
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    try { const b = await launch(exe, opts); if (tentativa === 2) b.arranque = { tentativas: 2, primeiraFalha: nova[0] }; return b; } catch (e) {
+      if (!e.startup) throw e; // só falha de ARRANQUE (sem sessão CDP, sem célula) é repetida; o `launch` já encerrou o processo e apagou o perfil da tentativa
+      nova.push(e.message);
+      console.log(`qa:visual: falha de arranque do navegador (tentativa ${tentativa} de 2): ${e.message}`);
+      if (tentativa === 2) { e.message = `${e.message} (AMBAS as tentativas falharam; 1ª: ${nova[0].slice(0, 500)})`; e.tentativas = nova; throw e; }
+    }
   }
 }

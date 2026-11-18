@@ -144,7 +144,7 @@ describe("workflow .github/workflows/ci.yml", () => {
   const job = wf.jobs["qa-browser"];
   it("preserva o job `test` existente com todos os gates", () => {
     const t = stepsText(wf.jobs.test);
-    for (const needle of ["npm run typecheck", "npm test", "npm run build", "npm run build:server", "npm audit --audit-level=moderate", "\"node-version\":\"22\""]) expect(t, needle).toContain(needle);
+    for (const needle of ["npm run typecheck", "npm test", "npm run build", "npm run build:server", "npm audit --omit=dev --audit-level=moderate", "node scripts/audit-gate.mjs", "\"node-version\":\"22\""]) expect(t, needle).toContain(needle);
     expect(wf.jobs.test.env.DATABASE_URL).toContain("levora_solidaria_test");
   });
   it("o job de QA é independente do `test` (sem needs/continue-on-error): ambos precisam passar", () => {

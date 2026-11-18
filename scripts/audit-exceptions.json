@@ -1,0 +1,19 @@
+{
+  "_comentario": "G7: UMA exceção temporária e nominal do `npm audit`. Nada aqui desliga a auditoria de dependências de desenvolvimento: qualquer outro alerta, outro advisory na mesma cadeia, versão/pacote fora do escopo, alerta em produção ou a exceção vencida REPROVAM (scripts/audit-gate.mjs, test/auditGate.test.ts).",
+  "exceptions": [
+    {
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "source": 1247710,
+      "package": "picomatch",
+      "affectedRange": "<=4.0.7",
+      "installedVersions": ["4.0.7"],
+      "scope": "dev",
+      "chain": ["picomatch", "fdir", "tinyglobby", "vite", "vitest", "@vitest/coverage-v8", "@rollup/pluginutils", "vite-plugin-svgr"],
+      "justification": "ReDoS em picomatch por extglobs repetidos de ramo único: exige um PADRÃO de glob hostil. Na árvore só há dev-tools (vite/vitest/tinyglobby) alimentadas com globs ESTÁTICOS de vitest.config.ts; ninguém externo escolhe padrões. Quem controla essa configuração (ou o código de um PR) já executa código arbitrário no CI, então não há ganho de ataque. Nenhum pacote da cadeia está em `dependencies` nem no runtime distribuído (`npm audit --omit=dev` = 0; lockfile `dev: true`). Não existe versão corrigida (4.0.7 é a última publicada); as 'correções' sugeridas pelo npm são downgrades major (vitest 3.1.4), inseguras para a suíte.",
+      "owner": "jlsheik (proprietário do repositório); decisão registrada na instrução G7 de 2026-11-17",
+      "decidedAt": "2026-11-17",
+      "expires": "2026-12-17",
+      "closeWhen": "Existir versão do picomatch posterior a 4.0.7 que corrija o advisory: atualizar o lockfile e REMOVER esta exceção (o gate avisa quando ela deixa de ser usada)."
+    }
+  ]
+}

@@ -111,8 +111,15 @@ jobs:
       # Esta política teria bloqueado a própria vulnerabilidade corrigida
       # na Fase 49 (react-router, severidade moderate) se ela tivesse sido
       # introduzida depois deste gate existir. Ver docs/SECURITY.md.
+      # G7: o gate de PRODUÇÃO continua integral e obrigatório (não é substituto do audit completo).
       - name: Dependency audit (fails on moderate+ severity)
-        run: npm audit --audit-level=moderate
+        run: npm audit --omit=dev --audit-level=moderate
+
+      # G7: o audit COMPLETO continua sendo executado. A ÚNICA exceção é nominal e temporária (GHSA-fc5q-39xc-vjpf / picomatch <= 4.0.7, só dev, sem versão corrigida;
+      # scripts/audit-exceptions.json, vence em 2026-12-17). Qualquer outro alerta moderate+, a exceção vencida, relatório ausente/inválido ou falha de rede REPROVAM,
+      # e o alerta excepcionalizado é impresso no log. Ver docs/SECURITY.md.
+      - name: Dependency audit - full, with the documented exception
+        run: node scripts/audit-gate.mjs
 
   # Fase 94 — QA de NAVEGADOR em modo reduzido (camada ADICIONAL: não substitui nem enfraquece o job `test`; os dois são independentes e ambos
   # precisam passar para o workflow ficar verde). Ver docs/QA_VISUAL.md ("Execução reduzida no CI"). Comparado com a matriz completa local:
