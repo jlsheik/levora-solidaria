@@ -8,6 +8,7 @@ import { describe, it, expect } from "vitest";
 import { sql } from "kysely";
 import { db } from "../src/helpers/db";
 import { runMatchingSweep } from "../src/helpers/runMatchingSweep";
+import { withScheduledTaskLock } from "../src/helpers/scheduledTaskLock";
 import { expireReservations } from "../src/helpers/expireReservations";
 import { expireOpportunities } from "../src/helpers/expireOpportunities";
 import { runMatchingForOpportunity } from "../src/helpers/opportunityMatching";
@@ -131,18 +132,35 @@ describe("sweep de matching: fila justa e auditoria sem crescimento", () => {
     expect(await auditCount("matching.executado", id)).toBe(2);
   });
 
-  it("dois sweeps simultâneos: um só corpo executa e não há atribuição duplicada", async () => {
+  it("dois sweeps disparados juntos: nunca há atribuição duplicada, quer se sobreponham no tempo, quer rodem em sequência (invariante, não temporização)", async () => {
     const w = await world();
     await makeNeed(w.org.id, w.owner.userId);
     const opps: number[] = [];
     for (let i = 0; i < 4; i++) opps.push(await makeOpp(w, "Doação de cobertores de inverno"));
     await Promise.all([runMatchingSweep(), runMatchingSweep()]);
+    // M41: se a segunda chamada só começa DEPOIS de a primeira terminar (carga da máquina), as duas execuções são legítimas e sequenciais; o que nunca pode acontecer é duplicar.
+    // A exclusão mútua propriamente dita é provada de forma determinística no teste seguinte.
     const runs = await db.selectFrom("backgroundTaskRuns").select("id").where("taskName", "=", "runMatchingSweep").execute();
-    expect(runs).toHaveLength(1); // a segunda chamada encontrou a trava consultiva e não executou
+    expect(runs.length).toBeGreaterThanOrEqual(1); expect(runs.length).toBeLessThanOrEqual(2);
     for (const id of opps) {
       const a = await db.selectFrom("opportunityAllocations").select("id").where("opportunityRegistryId", "=", id).execute();
       expect(a.length, `oportunidade ${id}`).toBe(1);
     }
+  });
+
+  it("exclusão mútua do sweep (determinística): com o lock da tarefa já detido, o sweep NÃO executa e não registra execução; liberado o lock, executa uma única vez sem duplicar", async () => {
+    const w = await world();
+    await makeNeed(w.org.id, w.owner.userId);
+    const opps: number[] = [];
+    for (let i = 0; i < 4; i++) opps.push(await makeOpp(w, "Doação de cobertores de inverno"));
+    const held = await withScheduledTaskLock("runMatchingSweep", async () => {
+      await runMatchingSweep(); // outra execução tenta enquanto o lock está detido nesta conexão
+      return (await db.selectFrom("backgroundTaskRuns").select("id").where("taskName", "=", "runMatchingSweep").execute()).length;
+    });
+    expect(held.ran).toBe(true); expect(held.result).toBe(0); // a segunda chamada encontrou a trava e não executou
+    await runMatchingSweep();
+    expect(await db.selectFrom("backgroundTaskRuns").select("id").where("taskName", "=", "runMatchingSweep").execute()).toHaveLength(1);
+    for (const id of opps) expect((await db.selectFrom("opportunityAllocations").select("id").where("opportunityRegistryId", "=", id).execute()).length, `oportunidade ${id}`).toBe(1);
   });
 
   it("matching direto concorrente com o sweep para a mesma oferta não duplica a atribuição (trava da oportunidade + filtro de organizações já atribuídas)", async () => {

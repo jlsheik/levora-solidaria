@@ -420,7 +420,7 @@ export async function correctOfferUnit(input: { organizationId: number | null; c
       await trx.updateTable("opportunityRegistry").set({ unit: checked.label, updatedAt: new Date() }).where("id", "=", registry.id).execute();
     } else {
       previousUnit = chain.donation!.unit;
-      await trx.updateTable("donationOpportunities").set({ unit: checked.label, updatedAt: new Date() }).where("id", "=", chain.donation!.id).where("organizationId", "=", c.organizationId).execute();
+      await trx.updateTable("donationOpportunities").set({ unit: checked.label, updatedAt: new Date(), version: sql`version + 1` }).where("id", "=", chain.donation!.id).where("organizationId", "=", c.organizationId).execute();
     }
     await trx
       .updateTable("unitRegularizationCases")

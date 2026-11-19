@@ -25,6 +25,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { API_SECURITY_HEADERS } from "../src/helpers/securityHeaders.js";
 import { closeDbPool } from "../src/helpers/db.js";
 import { checkWriteRequest } from "../src/helpers/csrfGuard.js";
+import { installSafeConsoleError, logEvent, newOperationId, safeErrorCode } from "../src/helpers/opLog.js";
+import { checkReadiness } from "../src/helpers/readiness.js";
+import { flushPasswordResetWork } from "../src/helpers/passwordReset.js";
+import { checkProxyTrust } from "../src/helpers/proxyTrust.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENDPOINTS_DIR = path.resolve(__dirname, "../src/endpoints");
@@ -60,13 +64,19 @@ function discoverEndpoints(dir: string, baseDir: string = dir): DiscoveredEndpoi
   return found;
 }
 
-async function buildExpressHandler(absPath: string) {
+async function buildExpressHandler(absPath: string, route: string) {
   const mod = await import(pathToFileURL(absPath).href);
   const handle = mod.handle as (request: Request) => Promise<Response>;
   if (typeof handle !== "function") {
     throw new Error(`${absPath} não exporta uma função "handle" — verifique a portagem do arquivo`);
   }
   return async (req: ExpressRequest, res: ExpressResponse) => {
+    // M46: um ID por requisição (também devolvido ao cliente) e uma linha de log estruturada por chamada: rota registrada (nunca a URL com query/ids), método, status HTTP e duração.
+    // Nunca registra corpo, cabeçalhos, cookies, usuário ou organização.
+    const operationId = newOperationId();
+    const startedAt = Date.now();
+    res.setHeader("x-request-id", operationId);
+    let errorCode: string | null = null;
     try {
       const url = new URL(req.originalUrl, `${req.protocol}://${req.get("host")}`);
       const headers = new Headers();
@@ -116,8 +126,18 @@ async function buildExpressHandler(absPath: string) {
       const bodyBuffer = Buffer.from(await webResponse.arrayBuffer());
       res.send(bodyBuffer);
     } catch (error) {
-      console.error(`Erro no endpoint ${req.method} ${req.originalUrl}:`, error);
+      errorCode = safeErrorCode(error);
       res.status(500).json({ message: "Erro interno do servidor" });
+    } finally {
+      const httpStatus = res.statusCode;
+      logEvent({
+        event: "http_request",
+        status: httpStatus >= 500 ? "falha" : "ok",
+        operationId,
+        durationMs: Date.now() - startedAt,
+        errorCode: httpStatus >= 500 ? (errorCode ?? "HTTP_5XX") : null,
+        context: { route, method: req.method, httpStatus },
+      });
     }
   };
 }
@@ -182,7 +202,7 @@ export async function buildApp(): Promise<express.Express> {
   console.log(`Descobertos ${endpoints.length} endpoints em src/endpoints/`);
 
   for (const ep of endpoints) {
-    const handler = await buildExpressHandler(ep.absPath);
+    const handler = await buildExpressHandler(ep.absPath, ep.route);
     const routePath = `${API_VERSION_PREFIX}/${ep.route}`;
     if (ep.method === "GET") {
       app.get(routePath, wrapRawBody(handler));
@@ -197,6 +217,12 @@ export async function buildApp(): Promise<express.Express> {
   // processo está de pé.
   app.get("/_api/__health", (_req, res) => {
     res.json({ status: "ok", endpoints: endpoints.length, apiVersion: "v1" });
+  });
+
+  // M46 — prontidão: 200 só se o banco responde E o schema tem todas as migrations do código; 503 caso contrário. Saída grosseira (sem detalhes internos).
+  app.get("/_api/__ready", async (_req, res) => {
+    const result = await checkReadiness();
+    res.status(result.ready ? 200 : 503).json({ status: result.ready ? "ready" : "not_ready", checks: result.checks });
   });
 
   // Fase 50: sem isto, uma rota não encontrada cairia no handler padrão do
@@ -236,6 +262,7 @@ export async function buildApp(): Promise<express.Express> {
 const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 10_000;
 
 async function main() {
+  installSafeConsoleError();
   const app = await buildApp();
 
   const server = app.listen(PORT, () => {
@@ -244,6 +271,11 @@ async function main() {
 
   const { startScheduler } = await import("../src/helpers/scheduler.js");
   startScheduler();
+  logEvent({ event: "server_start", status: "ok", context: { port: PORT } });
+  const proxyTrust = checkProxyTrust();
+  if (proxyTrust !== "ok") logEvent({ event: "proxy_trust", status: "ignorado", context: { reason: proxyTrust } });
+  // Apenas diagnóstico no log (não impede o processo de subir): um schema incompatível aparece aqui e em /_api/__ready.
+  void checkReadiness().then((r) => logEvent({ event: "startup_readiness", status: r.ready ? "ok" : "falha", context: { ...r.checks } }));
 
   let shuttingDown = false;
   async function shutdown(signal: string) {
@@ -258,6 +290,9 @@ async function main() {
     forceExit.unref();
 
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    // F2: o envio da recuperação de senha roda DEPOIS da resposta HTTP; termina o que está em andamento (precisa do banco) antes de fechar o pool.
+    // Limitado pelo temporizador de encerramento acima; se o processo cair antes, o token fica ativo sem e-mail e a pessoa pode pedir de novo após o cooldown.
+    await flushPasswordResetWork();
     await closeDbPool();
     clearTimeout(forceExit);
     console.log("Encerrado graciosamente.");
@@ -289,7 +324,7 @@ function wrapRawBody(handler: (req: ExpressRequest, res: ExpressResponse) => Pro
 const isEntrypoint = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
 if (isEntrypoint) {
   main().catch((error) => {
-    console.error("Falha ao iniciar o servidor:", error);
+    logEvent({ event: "server_start", status: "falha", errorCode: safeErrorCode(error) });
     process.exit(1);
   });
 }

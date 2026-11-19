@@ -1,6 +1,10 @@
 # Especificação — agentes da Levora Solidária (custo mínimo)
 
-**Status: ESPECIFICAÇÃO PARA APROVAÇÃO. Nenhum código foi escrito.**
+**Status: Fase 1 (plataforma) IMPLEMENTADA — ver `docs/AGENTES_PLATAFORMA.md`.
+As demais fases continuam só especificação; nenhum agente existe ainda.**
+Desvios da Fase 1 em relação ao texto abaixo: não foi criada a tabela
+`policy_rules` (regras em código, só os limites são configuráveis) e o
+endpoint/tela para editar limites ficou para o painel de agentes.
 Substitui, como plano de trabalho, a lista de agentes "inexistentes" de
 `docs/AI_AGENTS.md`, sem alterar o master prompt (que continua sendo o
 contrato). Fontes: master prompt seções 2–5, 17–22, 34–36, 40–45, 53,

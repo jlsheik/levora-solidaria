@@ -9,9 +9,11 @@
  * O saldo é recalculado SOB a trava do item (nunca o saldo da tela); o limite de risco usa o saldo imediatamente anterior, na unidade canônica do item. Nada aqui converte unidade.
  */
 import { createHash } from "node:crypto";
+import { publishStockTransactionCreated } from "./domainEventPublishers.js";
 import { sql, type Transaction } from "kysely";
 import type { DB } from "./schema.js";
 import { recordAuditLogEntry } from "./auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "./journeyCorrelation.js";
 import { getItemStockBalance } from "./stockBalance.js";
 import { roundQuantity } from "./quantityRules.js";
 import { classifyUnit, unitsEquivalent } from "./unitVocabulary.js";
@@ -229,6 +231,9 @@ export async function executeDestinationExit(trx: Transaction<DB>, input: Destin
     .returning(["id"])
     .execute();
 
+  // M35: a saída física também é um lançamento do ledger e precisa chegar à Sentinela (contrato v2; mesma transação; qualquer falha adiante reverte o evento junto).
+  await publishStockTransactionCreated(trx, { organizationId: input.organizationId, transactionId: String(tx.id), itemId: input.itemId, type: "saida", delta: -input.quantity, source: "destinacao_saida", actorUserId: actors.creatorUserId });
+
   const [destination] = await trx
     .insertInto("stockDestinations")
     .values({
@@ -277,6 +282,8 @@ export async function auditExecutedExit(
       organizationId: input.organizationId,
       actorUserId: actors.actorUserId,
       action: "inventario.saida_registrada",
+      outcome: "concluida",
+      correlationId: await needCorrelation(trx, input.needId ?? null),
       entityType: "inventory_item",
       entityId: String(input.itemId),
       metadata: { delta: -input.quantity, itemName: prepared.item.name, motivo: "destinacao", destinacaoId: executed.destinationId },
@@ -288,6 +295,8 @@ export async function auditExecutedExit(
       organizationId: input.organizationId,
       actorUserId: actors.actorUserId,
       action: "destinacao.registrada",
+      outcome: "concluida", // saída + destinação + pedido + auditoria na MESMA transação
+      correlationId: await needCorrelation(trx, input.needId ?? null),
       entityType: "stock_destination",
       entityId: executed.destinationId,
       metadata: {

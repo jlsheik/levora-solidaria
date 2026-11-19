@@ -2,6 +2,7 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "../helpers/journeyCorrelation.js";
 import { computeAttendanceProgress, getNeedAttendance } from "../helpers/needAttendance.js";
 import { schema, type OutputType } from "./need-closure_POST.schema.js";
 import superjson from "superjson";
@@ -71,6 +72,8 @@ export async function handle(request: Request) {
             organizationId: input.organizationId,
             actorUserId: user.id,
             action: "necessidade.encerrada",
+            outcome: "concluida",
+            correlationId: await needCorrelation(trx, need.id),
             entityType: "need",
             entityId: String(need.id),
             metadata: { titulo: need.title, motivo: input.reasonCode, descricao: input.reasonText ?? null, solicitado: progress.requested, atendido: progress.attended, naoAtendido: progress.remaining, nenhumMovimentoDeEstoque: true },
@@ -93,6 +96,8 @@ export async function handle(request: Request) {
           organizationId: input.organizationId,
           actorUserId: user.id,
           action: "necessidade.reaberta",
+          outcome: "concluida",
+          correlationId: await needCorrelation(trx, need.id),
           entityType: "need",
           entityId: String(need.id),
           metadata: { titulo: need.title, encerramentoCorrigidoId: String(active.id), motivo: input.reasonText, atendidoAtual: progress.attended, restante: progress.remaining },

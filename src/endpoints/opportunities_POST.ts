@@ -2,6 +2,8 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { newCorrelationId } from "../helpers/correlation.js";
+import { publishOpportunityCreated } from "../helpers/domainEventPublishers.js";
 import { schema } from "./opportunities_POST.schema.js";
 import superjson from "superjson";
 import { buildErrorResponse } from "../helpers/errorResponse.js";
@@ -29,6 +31,8 @@ export async function handle(request: Request) {
       }
     }
 
+    // M39: a jornada nasce AQUI. A correlação é gerada no servidor (o corpo da requisição nunca a define) e viaja: oportunidade → evento → execução → exceção → auditoria.
+    const correlationId = newCorrelationId();
     const opportunity = await db.transaction().execute(async (trx) => {
       const [created] = await trx
         .insertInto("donationOpportunities")
@@ -43,6 +47,7 @@ export async function handle(request: Request) {
           donorContact: input.donorContact || null,
           linkedNeedId: input.linkedNeedId || null,
           createdByUserId: user.id,
+          correlationId,
         })
         .returning(["id", "title", "status", "createdAt"])
         .execute();
@@ -52,6 +57,8 @@ export async function handle(request: Request) {
           organizationId: input.organizationId,
           actorUserId: user.id,
           action: "oportunidade.registrada",
+          outcome: "concluida", // gravado na MESMA transação do cadastro: se algo adiante falhar, o registro some junto (rollback)
+          correlationId,
           entityType: "donation_opportunity",
           entityId: String(created.id),
           metadata: {
@@ -64,6 +71,8 @@ export async function handle(request: Request) {
         },
         trx
       );
+
+      await publishOpportunityCreated(trx, { organizationId: input.organizationId, opportunityId: created.id, category: input.category?.trim() || null, quantityOffered: input.quantityOffered ?? null, unit: input.unit || null, linkedNeed: input.linkedNeedId !== undefined, actorUserId: user.id, correlationId });
 
       return created;
     });

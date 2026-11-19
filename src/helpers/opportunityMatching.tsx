@@ -1,5 +1,7 @@
 import { db } from "./db.js";
 import { recordAuditLogEntry } from "./auditLog.js";
+import { newCorrelationId } from "./correlation.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "./journeyCorrelation.js";
 import { flootAi, FlootAiOutOfCreditsError, AiTimeoutError } from "./aiClient.js";
 import { getNeedFulfillmentBalance, getNeedFulfillmentBalanceBatch, computeNeedProgress } from "./needFulfillment.js";
 import { getNeedAttendance, getNeedAttendanceBatch, remainingToAttend } from "./needAttendance.js";
@@ -148,9 +150,57 @@ export function matchSignature(
   return createHash("sha256").update(payload).digest("hex");
 }
 
+/** Origem da execução (M42). `indeterminada`: chamador que não informou (nunca se adivinha a origem). */
+export type MatchOrigin = "varredura" | "manual" | "mudanca_de_estado" | "reabertura" | "expiracao" | "indeterminada";
+
+/** Código SEGURO de erro: nunca a mensagem (pode conter dados); só o SQLSTATE do banco, quando existe, ou um código genérico. */
+export function safeMatchErrorCode(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && /^[0-9A-Z]{5}$/.test(code) ? `pg_${code.toLowerCase()}` : "erro_interno";
+}
+
+/**
+ * Executa o matching de UMA oferta do Registro Central. M42: toda execução que AVALIA deixa um registro (`matching_runs`), inclusive a que não achou correspondência; uma execução
+ * que FALHA (a transação do negócio é revertida) deixa, numa transação própria, um registro `falhou` — nunca "concluída sem resultado". Tentativas ignoradas (oferta inexistente,
+ * inelegível ou sem quantidade livre) não avaliaram nada e continuam sem registro.
+ */
 export async function runMatchingForOpportunity(
   opportunityRegistryId: number,
-  triggeredByUserId: number | null
+  triggeredByUserId: number | null,
+  origin?: MatchOrigin
+): Promise<MatchRunResult> {
+  const resolvedOrigin: MatchOrigin = origin ?? (triggeredByUserId === null ? "indeterminada" : "manual");
+  try {
+    return await runMatchingInTransaction(opportunityRegistryId, triggeredByUserId, resolvedOrigin);
+  } catch (error) {
+    await recordFailedMatchingRun(opportunityRegistryId, triggeredByUserId, resolvedOrigin, error);
+    throw error;
+  }
+}
+
+async function recordFailedMatchingRun(opportunityRegistryId: number, triggeredByUserId: number | null, origin: MatchOrigin, error: unknown): Promise<void> {
+  try {
+    const correlationId = newCorrelationId();
+    const errorCode = safeMatchErrorCode(error);
+    await db.transaction().execute(async (trx) => {
+      const exists = await trx.selectFrom("opportunityRegistry").select("id").where("id", "=", opportunityRegistryId).executeTakeFirst();
+      if (!exists) return;
+      await trx.insertInto("matchingRuns").values({ correlationId, opportunityRegistryId, origin, triggeredByUserId, status: "falhou", errorCode, algorithmVersion: ALGORITHM_VERSION, finishedAt: sql<Date>`now()` }).execute();
+      await recordAuditLogEntry(
+        { organizationId: null, actorUserId: triggeredByUserId, action: "matching.falhou", outcome: "falhou", correlationId, entityType: "opportunity_registry", entityId: String(opportunityRegistryId), metadata: { origem: origin, codigoDeErro: errorCode, algoritmo: ALGORITHM_VERSION } },
+        trx
+      );
+    });
+  } catch (inner) {
+    // Melhor esforço: a falha ORIGINAL é a que importa e é relançada; se nem o registro da falha for possível (banco indisponível), nada é afirmado.
+    console.error("Não foi possível registrar a execução de matching que falhou:", inner);
+  }
+}
+
+async function runMatchingInTransaction(
+  opportunityRegistryId: number,
+  triggeredByUserId: number | null,
+  origin: MatchOrigin
 ): Promise<MatchRunResult> {
   return db.transaction().execute(async (trx) => {
     const opportunity = await trx
@@ -321,6 +371,8 @@ export async function runMatchingForOpportunity(
     const opportunityText = [opportunity.title, opportunity.category, opportunity.description].filter(Boolean).join(" — ");
 
     const evaluated: CandidateEvaluation[] = [];
+    // M42: relação de CADA necessidade considerada nesta execução (elegível e de organização não excluída), para o histórico por necessidade.
+    const consideredNeeds = new Map<number, { organizationId: number; relation: "sem_relacao" | "avaliada" | "avaliada_sem_registro" }>();
     const weakKeyword: { needId: number; text: string }[] = [];
     const byNeedId = new Map<number, (typeof eligibleCandidates)[number]>();
 
@@ -348,7 +400,7 @@ export async function runMatchingForOpportunity(
           ? `avaliado por IA: ${ai.reason}`
           : "sem correspondência por palavra-chave nem IA";
 
-      if (categoriaScore === 0) continue; // sem relação nenhuma, nem candidato
+      if (categoriaScore === 0) { consideredNeeds.set(c.needId, { organizationId: c.organizationId, relation: "sem_relacao" }); continue; } // sem relação nenhuma, nem candidato
 
       // Fase 43 (ALGORITHM_VERSION 1.4): o alvo de quantidade passa a ser o
       // que REALMENTE falta pela rede (requiredRemaining), não mais o
@@ -498,6 +550,7 @@ export async function runMatchingForOpportunity(
       const rawWeightedSum = Object.values(criteria).reduce((sum, c2) => sum + (c2.score ?? 0) * c2.weight, 0);
       const finalScore = applicableWeight > 0 ? Math.round((rawWeightedSum / applicableWeight) * 100) / 100 : 0;
 
+      consideredNeeds.set(c.needId, { organizationId: c.organizationId, relation: "avaliada_sem_registro" }); // vira 'avaliada' quando a avaliação é gravada abaixo
       evaluated.push({
         organizationId: c.organizationId,
         organizationName: c.organizationName,
@@ -543,6 +596,10 @@ export async function runMatchingForOpportunity(
         .executeTakeFirst();
       const previousSignature = (previous?.metadata as { assinatura?: unknown } | null | undefined)?.assinatura;
       if (previousSignature === signature) {
+        // M42: a repetição automática idêntica não grava avaliações nem auditoria (Fase 95), mas a execução anterior registra que foi reconfirmada (só se ela existe: histórico anterior não é fabricado).
+        await trx.updateTable("matchingRuns").set({ repeatCount: sql<number>`repeat_count + 1`, lastRepeatedAt: sql<Date>`now()` })
+          .where("id", "=", (eb) => eb.selectFrom("matchingRuns").select("id").where("opportunityRegistryId", "=", opportunityRegistryId).where("status", "!=", "falhou").orderBy("id", "desc").limit(1))
+          .where("signature", "=", signature).execute();
         return {
           skipped: false,
           unchanged: true,
@@ -551,6 +608,15 @@ export async function runMatchingForOpportunity(
         };
       }
     }
+
+    // M42: o registro da execução nasce AQUI (mesma transação das avaliações): se algo falhar adiante, ele some junto e a falha é registrada à parte. `em_andamento` só existe dentro
+    // da transação; nunca é confirmado como estado final.
+    const runCorrelationId = newCorrelationId();
+    const run = await trx.insertInto("matchingRuns")
+      .values({ correlationId: runCorrelationId, opportunityRegistryId, origin, triggeredByUserId, status: "em_andamento", algorithmVersion: ALGORITHM_VERSION, signature })
+      .returning("id").executeTakeFirstOrThrow();
+    const runId = run.id;
+    const markRecorded = (needId: number) => { const n = consideredNeeds.get(needId); if (n) n.relation = "avaliada"; };
 
     const allocationsCreated: MatchRunResult["allocationsCreated"] = [];
     const discarded: MatchRunResult["discarded"] = [];
@@ -574,8 +640,10 @@ export async function runMatchingForOpportunity(
             algorithmVersion: ALGORITHM_VERSION,
             aiModelUsed: cand.aiModelUsed,
             decision: "descartado",
+            matchingRunId: runId,
           })
           .execute();
+        markRecorded(cand.needId);
         continue;
       }
 
@@ -601,8 +669,10 @@ export async function runMatchingForOpportunity(
             algorithmVersion: ALGORITHM_VERSION,
             aiModelUsed: cand.aiModelUsed,
             decision: "elegivel_sem_quantidade",
+            matchingRunId: runId,
           })
           .execute();
+        markRecorded(cand.needId);
         continue;
       }
 
@@ -650,17 +720,22 @@ export async function runMatchingForOpportunity(
           aiModelUsed: cand.aiModelUsed,
           decision: isHighConfidence ? "atribuido_automatico" : "proposto",
           allocationId: allocation.id,
+          matchingRunId: runId,
         })
         .execute();
+      markRecorded(cand.needId);
 
       await recordAuditLogEntry(
         {
           organizationId: cand.organizationId,
           actorUserId: triggeredByUserId,
           action: isHighConfidence ? "atribuicao.automatica_alta_confianca" : "atribuicao.proposta_automatica",
+          // alta confiança: a atribuição já está feita (concluída); proposta: aguarda decisão humana (pendente)
+          outcome: isHighConfidence ? "concluida" : "pendente",
+          correlationId: await needCorrelation(trx, cand.needId),
           entityType: "opportunity_allocation",
           entityId: String(allocation.id),
-          metadata: { opportunityRegistryId, score: cand.finalScore, needId: cand.needId, quantityAllocated: quantityToAllocate },
+          metadata: { opportunityRegistryId, score: cand.finalScore, needId: cand.needId, quantityAllocated: quantityToAllocate, origem: "matching" }, // M41: origem explícita (a avaliação do motor está em match_evaluations)
         },
         trx
       );
@@ -678,14 +753,25 @@ export async function runMatchingForOpportunity(
       await trx.updateTable("opportunityRegistry").set({ status: "reservada", updatedAt: new Date() }).where("id", "=", opportunityRegistryId).execute();
     }
 
+    // M42: fecha a execução com o que o motor REALMENTE calculou (nada inventado) e registra quais necessidades foram consideradas e com qual relação.
+    const consideredCount = consideredNeeds.size;
+    await trx.updateTable("matchingRuns")
+      .set({ status: allocationsCreated.length > 0 ? "concluida_com_correspondencia" : "concluida_sem_correspondencia", candidatesConsidered: consideredCount, candidatesRelated: evaluated.length, validMatches: allocationsCreated.length, finishedAt: sql<Date>`now()` })
+      .where("id", "=", runId).execute();
+    if (consideredCount > 0) {
+      await trx.insertInto("matchingRunNeeds").values([...consideredNeeds.entries()].map(([needId, v]) => ({ runId, needId, organizationId: v.organizationId, relation: v.relation }))).execute();
+    }
+
     await recordAuditLogEntry(
       {
         organizationId: null,
         actorUserId: triggeredByUserId,
         action: "matching.executado",
+        outcome: "concluida", // a execução CONCLUIU; com ou sem correspondência está em `resultado` (explícito, nunca deduzido do nome da ação)
+        correlationId: runCorrelationId,
         entityType: "opportunity_registry",
         entityId: String(opportunityRegistryId),
-        metadata: { candidatosAvaliados: evaluated.length, atribuicoesCriadas: allocationsCreated.length, descartados: discarded.length, algoritmo: ALGORITHM_VERSION, assinatura: signature, ...(refusingOrgIds.size > 0 ? { organizacoesExcluidasPorRecusa: [...refusingOrgIds].sort((a, b) => a - b) } : {}), ...(pausedOrgIds.size > 0 ? { organizacoesEmPausaPorExpiracao: [...pausedOrgIds].sort((a, b) => a - b) } : {}) },
+        metadata: { execucaoId: String(runId), origem: origin, resultado: allocationsCreated.length > 0 ? "com_correspondencia" : "sem_correspondencia", candidatosConsiderados: consideredCount, candidatosRelacionados: evaluated.length, candidatosAvaliados: evaluated.length, atribuicoesCriadas: allocationsCreated.length, descartados: discarded.length, algoritmo: ALGORITHM_VERSION, assinatura: signature, ...(refusingOrgIds.size > 0 ? { organizacoesExcluidasPorRecusa: [...refusingOrgIds].sort((a, b) => a - b) } : {}), ...(pausedOrgIds.size > 0 ? { organizacoesEmPausaPorExpiracao: [...pausedOrgIds].sort((a, b) => a - b) } : {}) },
       },
       trx
     );

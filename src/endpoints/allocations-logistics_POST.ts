@@ -2,6 +2,7 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "../helpers/journeyCorrelation.js";
 import { runMatchingForOpportunity } from "../helpers/opportunityMatching.js";
 import { reopenOpportunityIfNoActiveAllocations } from "../helpers/reopenOpportunity.js";
 import { concludeOpportunityIfAllTerminalAndReceived } from "../helpers/concludeOpportunity.js";
@@ -111,6 +112,8 @@ export async function handle(request: Request) {
           organizationId: input.organizationId,
           actorUserId: user.id,
           action: `logistica.${input.eventType}`,
+          outcome: "concluida",
+          correlationId: await allocationCorrelation(trx, input.allocationId),
           entityType: "opportunity_allocation",
           entityId: String(input.allocationId),
           metadata: { statusAnterior: allocation.status, statusNovo: nextStatus },
@@ -124,6 +127,7 @@ export async function handle(request: Request) {
             organizationId: null,
             actorUserId: user.id,
             action: "descoberta_central.concluida",
+            outcome: "concluida",
             entityType: "opportunity_registry",
             entityId: String(concludedOpportunityId),
             metadata: {},
@@ -155,7 +159,7 @@ export async function handle(request: Request) {
     }
 
     if (result.reopenOpportunityId) {
-      await runMatchingForOpportunity(result.reopenOpportunityId, user.id);
+      await runMatchingForOpportunity(result.reopenOpportunityId, user.id, "reabertura");
     }
 
     return new Response(superjson.stringify({ allocation: { id: input.allocationId, status: result.status } }), {

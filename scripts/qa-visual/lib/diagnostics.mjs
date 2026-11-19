@@ -72,6 +72,8 @@ export class Diagnostics {
   event(kind, data = {}) { appendFileSync(path.join(this.dir, "events.jsonl"), `${q({ at: new Date().toISOString(), kind, ...data })}\n`); }
   /** Linha por célula: quanto tempo cada fase levou. Serve de linha de base para comparar o que passa com o que falha. */
   cell(row) { this.cells++; appendFileSync(path.join(this.dir, "timings.jsonl"), `${q({ at: new Date().toISOString(), ...row, rssMb: Math.round(process.memoryUsage().rss / 1048576) })}\n`); }
+  /** Grava um arquivo JSON de diagnóstico (G4: evidência da perda de sessão CDP). Nunca lança. */
+  json(name, obj) { try { writeFileSync(path.join(this.dir, name), JSON.stringify(obj, null, 1)); return true; } catch { return false; } }
   serverLog(label, text0) { const text = redact(text0); appendFileSync(path.join(this.dir, "server.log"), `${new Date().toISOString()} [${label}] ${String(text).replace(/\r?\n$/, "")}\n`); }
   /** Chamado em cada MISSING/UNMEASURABLE de passo ou presença. Nunca lança: o diagnóstico não pode alterar o resultado. */
   async capture(ctx, sc, state, why, cellInfo) {

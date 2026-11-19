@@ -2,6 +2,8 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { recordAuditLogEntry } from "../helpers/auditLog.js";
+import { newCorrelationId } from "../helpers/correlation.js";
+import { publishStockTransactionCreated } from "../helpers/domainEventPublishers.js";
 import { createApprovalRequest } from "../helpers/approvals.js";
 import { getItemStockBalance } from "../helpers/stockBalance.js";
 import { schema } from "./stock-transactions_POST.schema.js";
@@ -24,6 +26,7 @@ export async function handle(request: Request) {
 
     await requirePermission(user.id, input.organizationId, "inventario.lance");
 
+    const correlationId = newCorrelationId(); // M39: origem da jornada do lançamento (gerada no servidor)
     const result = await db.transaction().execute(async (trx) => {
       // Trava a linha do item para serializar lançamentos concorrentes do
       // mesmo item e evitar condição de corrida no cálculo de saldo.
@@ -71,6 +74,8 @@ export async function handle(request: Request) {
             organizationId: input.organizationId,
             actorUserId: user.id,
             action: "inventario.ajuste_pendente_aprovacao",
+            outcome: "pendente", // o ajuste só vale após a decisão humana; o desfecho final é registrado à parte
+            correlationId,
             entityType: "inventory_item",
             entityId: String(input.itemId),
             metadata: { delta, reason: input.reason, itemName: item.name, approvalRequestId: approval.id },
@@ -99,12 +104,17 @@ export async function handle(request: Request) {
           organizationId: input.organizationId,
           actorUserId: user.id,
           action: input.type === "entrada" ? "inventario.entrada_registrada" : "inventario.ajuste_registrado",
+          outcome: "concluida", // mesma transação do lançamento: rollback leva o registro junto
+          correlationId,
           entityType: "inventory_item",
           entityId: String(input.itemId),
           metadata: { delta, reason: input.reason, itemName: item.name },
         },
         trx
       );
+
+      // M35: contrato v2 (saldo APÓS o lançamento, ator, origem, se o item já teve saída); mesma transação, depois do último passo que pode falhar.
+      await publishStockTransactionCreated(trx, { organizationId: input.organizationId, transactionId: String(tx.id), itemId: input.itemId, type: input.type, delta, source: "lancamento_manual", actorUserId: user.id, correlationId });
 
       return { type: "success" as const, tx, newStock };
     });

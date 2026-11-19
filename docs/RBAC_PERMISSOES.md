@@ -27,7 +27,15 @@ aprovacoes.leia       aprovacoes.decida
 auditoria.leia
 relatorios.leia
 organizacao.gerencie
+propriedade.gerencie    (só proprietário — Fase 73)
+automacao.leia          automacao.gerencie   (Fase 74)
 ```
+
+`automacao.leia` / `automacao.gerencie` (Fase 74): ver e tratar alertas de
+integridade, decidir exceções das regras de proteção e pausar a automação da
+própria organização. Só `proprietario` e `administrador` (menor privilégio:
+operador e voluntário não veem alertas nem decidem exceções). A pausa/emergência
+**global** não é uma permissão de organização: exige a **equipe da plataforma** (tabela `platform_access`: proprietário ou administrador da plataforma, via `requirePlatformAdmin`); `users.role` não é usado.
 
 Fase 99K: a conciliação de comprovantes (`GET /destination-proofs-reconciliation`, somente leitura) exige `organizacao.gerencie`. Fase 99J (`docs/DESTINACAO_COMPROVANTES_99J.md`): anexar comprovante a destinação = `inventario.lance` (quem registrou, com o próprio arquivo) ou `organizacao.gerencie`; remover a referência = `organizacao.gerencie`; baixar `comprovante_destinacao` = `inventario.lance` + vínculo vigente; nenhuma permissão nova. Fase 99G (`docs/DESTINACAO_CORRECOES_99G.md`): reverter destinação (estorno documental, devolução física, correção de quantidade) exige `inventario.lance` **e** `organizacao.gerencie`; corrigir dados descritivos exige `inventario.lance` (apenas registros próprios, ou proprietário/administrador); listar destinações exige `inventario.lance`; nenhuma permissão nova. `necessidades.gerencie` também autoriza encerrar/reabrir necessidade (`POST /need-closure`, Fase 99F, `docs/ATENDIMENTO_NECESSIDADE_99F.md`); autorizar EXCEDENTE sobre o que falta da necessidade exige `organizacao.gerencie` (proprietário/administrador) — nenhuma permissão nova. `inventario.lance` autoriza o registro de saída com destinação (Fase 99E, `docs/DESTINACAO_REGISTRO_99E.md`); `organizacao.gerencie` também autoriza data retroativa (> 7 dias) nesse registro e `aprovacoes.decida` decide as saídas de alto risco (sem permissão nova). `organizacao.gerencie` (Fase 99C: também valida conferências, encerra casos e corrige a unidade da doação local na regularização de unidades — `docs/UNIDADES_REGULARIZACAO_99C.md`; a fila de pendências e a conferência usam `logistica.gerencie`; nenhuma permissão nova) (Fase 99B: também autoriza, só para leitura, o diagnóstico de unidades — `GET unit-inventory`, `docs/UNIDADES_INVENTARIO_99B.md`; nenhuma permissão nova) (Fase 21): edita capacidade por categoria, área de
 atendimento e configuração de logística da própria organização (dados que

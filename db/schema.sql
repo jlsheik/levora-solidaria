@@ -1099,6 +1099,165 @@ ALTER TABLE oauth_attempts ADD CONSTRAINT oauth_attempts_provider_check CHECK (p
 ALTER TABLE user_identities ADD COLUMN provider_metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE user_identities ADD CONSTRAINT user_identities_provider_metadata_object CHECK (jsonb_typeof(provider_metadata) = 'object');
 
+-- Fase 74 — plataforma de agentes (espelho de db/migrations/0014_agent_platform.sql)
+-- ============================================================
+-- Fase 74 (Fase 1 de docs/AGENTES_ESPECIFICACAO.md) — plataforma de agentes.
+-- Nenhum agente existe ainda: esta migration cria só a fundação (agente como
+-- principal não humano, barramento de eventos, limites de política,
+-- controles de pausa/emergência, alertas de integridade e fila de exceções).
+--
+-- Regra herdada do incidente da Fase 66/need_fulfillments: nenhuma FK nova
+-- usa ON DELETE CASCADE/SET NULL contra tabelas append-only, porque o
+-- trigger audit_log_block_mutation bloquearia a ação referencial.
+
+-- ---------------------------------------------------------------
+-- Agente como principal não humano
+-- ---------------------------------------------------------------
+CREATE TABLE agent_principals (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  -- NULL = agente global (opera em qualquer organização, sempre explícita
+  -- no pedido); preenchido = agente restrito àquela organização.
+  organization_id INTEGER REFERENCES organizations(id),
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX idx_agent_principals_scope ON agent_principals (name, COALESCE(organization_id, 0));
+CREATE TRIGGER agent_principals_set_updated_at BEFORE UPDATE ON agent_principals FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ---------------------------------------------------------------
+-- audit_log: quem agiu (usuário, agente ou sistema)
+-- ---------------------------------------------------------------
+CREATE TYPE audit_actor_type AS ENUM ('user', 'agent', 'system');
+ALTER TABLE audit_log
+  ADD COLUMN actor_type audit_actor_type NOT NULL DEFAULT 'user',
+  ADD COLUMN actor_agent_principal_id INTEGER REFERENCES agent_principals(id);
+CREATE INDEX idx_audit_log_agent ON audit_log(actor_agent_principal_id) WHERE actor_agent_principal_id IS NOT NULL;
+
+-- ---------------------------------------------------------------
+-- Barramento de eventos (outbox no Postgres)
+-- ---------------------------------------------------------------
+CREATE TABLE domain_events (
+  id BIGSERIAL PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  organization_id INTEGER REFERENCES organizations(id),
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  -- Só fatos mínimos e ids; nunca dado pessoal.
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TRIGGER domain_events_no_update BEFORE UPDATE ON domain_events FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+CREATE TRIGGER domain_events_no_delete BEFORE DELETE ON domain_events FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+CREATE INDEX idx_domain_events_type ON domain_events(event_type, id);
+
+CREATE TABLE domain_event_consumptions (
+  event_id BIGINT NOT NULL REFERENCES domain_events(id),
+  consumer TEXT NOT NULL,
+  outcome TEXT NOT NULL DEFAULT 'ok' CHECK (outcome IN ('ok', 'erro')),
+  attempts INTEGER NOT NULL DEFAULT 1,
+  error TEXT,
+  processed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (event_id, consumer)
+);
+
+-- ---------------------------------------------------------------
+-- Limites de política (seção 79 do master prompt)
+-- ---------------------------------------------------------------
+CREATE TABLE policy_limits (
+  id SERIAL PRIMARY KEY,
+  -- NULL = limite global; preenchido = restrição da organização, que só
+  -- pode ser mais restritiva que o global (validado na aplicação).
+  organization_id INTEGER REFERENCES organizations(id),
+  key TEXT NOT NULL,
+  value JSONB NOT NULL,
+  updated_by_user_id INTEGER REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX idx_policy_limits_scope ON policy_limits (COALESCE(organization_id, 0), key);
+
+-- ---------------------------------------------------------------
+-- Pausar automação / modo emergência (seções 91-92)
+-- ---------------------------------------------------------------
+CREATE TABLE automation_controls (
+  id SERIAL PRIMARY KEY,
+  -- NULL = global.
+  organization_id INTEGER REFERENCES organizations(id),
+  paused BOOLEAN NOT NULL DEFAULT false,
+  emergency BOOLEAN NOT NULL DEFAULT false,
+  reason TEXT,
+  changed_by_user_id INTEGER REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (NOT emergency OR paused)
+);
+CREATE UNIQUE INDEX idx_automation_controls_scope ON automation_controls (COALESCE(organization_id, 0));
+
+-- ---------------------------------------------------------------
+-- Centro de alertas de integridade (seção 42)
+-- ---------------------------------------------------------------
+CREATE TYPE integrity_alert_level AS ENUM ('alto_risco', 'operacional', 'seguranca');
+CREATE TYPE integrity_alert_status AS ENUM ('aberto', 'reconhecido', 'resolvido', 'descartado');
+
+CREATE TABLE integrity_alerts (
+  id BIGSERIAL PRIMARY KEY,
+  organization_id INTEGER REFERENCES organizations(id),
+  level integrity_alert_level NOT NULL,
+  category TEXT NOT NULL,
+  title TEXT NOT NULL,
+  detail JSONB NOT NULL DEFAULT '{}'::jsonb,
+  entity_type TEXT,
+  entity_id TEXT,
+  -- Evita alerta duplicado enquanto o anterior ainda está aberto/reconhecido.
+  dedupe_key TEXT,
+  status integrity_alert_status NOT NULL DEFAULT 'aberto',
+  created_by_agent_principal_id INTEGER REFERENCES agent_principals(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  acknowledged_by_user_id INTEGER REFERENCES users(id),
+  acknowledged_at TIMESTAMPTZ,
+  resolved_by_user_id INTEGER REFERENCES users(id),
+  resolved_at TIMESTAMPTZ,
+  resolution_note TEXT
+);
+CREATE UNIQUE INDEX idx_integrity_alerts_dedupe_open
+  ON integrity_alerts (COALESCE(organization_id, 0), dedupe_key)
+  WHERE dedupe_key IS NOT NULL AND status IN ('aberto', 'reconhecido');
+CREATE INDEX idx_integrity_alerts_org_status ON integrity_alerts(organization_id, status, created_at DESC);
+
+-- ---------------------------------------------------------------
+-- Fila de exceções (seção 45): a automação parou por uma regra de proteção
+-- ---------------------------------------------------------------
+CREATE TYPE exception_status AS ENUM ('pendente', 'aprovada', 'rejeitada');
+
+CREATE TABLE exception_queue (
+  id BIGSERIAL PRIMARY KEY,
+  organization_id INTEGER REFERENCES organizations(id),
+  agent_principal_id INTEGER NOT NULL REFERENCES agent_principals(id),
+  tool_name TEXT NOT NULL,
+  rule_code TEXT NOT NULL,
+  -- 1 = revisão simples; 2 = dupla autorização (duas pessoas diferentes).
+  approvals_required INTEGER NOT NULL DEFAULT 1 CHECK (approvals_required IN (1, 2)),
+  request JSONB NOT NULL,
+  request_hash TEXT NOT NULL,
+  status exception_status NOT NULL DEFAULT 'pendente',
+  -- Preenchido quando o agente reexecuta a ação já aprovada (uso único).
+  consumed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_exception_queue_org_status ON exception_queue(organization_id, status, created_at DESC);
+
+CREATE TABLE exception_decisions (
+  exception_id BIGINT NOT NULL REFERENCES exception_queue(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  decision TEXT NOT NULL CHECK (decision IN ('aprovar', 'rejeitar')),
+  notes TEXT,
+  decided_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (exception_id, user_id)
+);
+CREATE TRIGGER exception_decisions_no_update BEFORE UPDATE ON exception_decisions FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+CREATE TRIGGER exception_decisions_no_delete BEFORE DELETE ON exception_decisions FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+
 COMMIT;
 
 -- ============================================================
@@ -1692,3 +1851,283 @@ ALTER TABLE files ADD COLUMN scan_lease_until TIMESTAMPTZ;
 ALTER TABLE files ADD COLUMN scan_exhausted_at TIMESTAMPTZ;
 ALTER TABLE files ADD COLUMN scan_last_reason TEXT;
 CREATE INDEX idx_files_scan_queue ON files(scan_next_attempt_at NULLS FIRST, id) WHERE scan_status IN ('pendente', 'indisponivel') AND scan_exhausted_at IS NULL;
+
+-- M34 (0033): motor de eventos dos agentes (simulado) — ver db/migrations/0033_agent_event_engine.sql
+CREATE TABLE agent_event_runs (
+  id BIGSERIAL PRIMARY KEY,
+  event_id BIGINT NOT NULL REFERENCES domain_events(id),
+  agent_principal_id INTEGER NOT NULL REFERENCES agent_principals(id),
+  -- NULL só para evento malformado sem organização (fica 'ignorado'); a tela da organização nunca o enxerga.
+  organization_id INTEGER REFERENCES organizations(id),
+  event_type TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('recebido', 'validado', 'ignorado', 'bloqueado_politica', 'aguardando_aprovacao', 'rejeitado', 'autorizado_simulacao', 'simulacao_concluida', 'falha', 'dados_insuficientes')),
+  reason_code TEXT,
+  reason TEXT,
+  rule_code TEXT,
+  exception_id BIGINT REFERENCES exception_queue(id),
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  simulated BOOLEAN NOT NULL DEFAULT true CHECK (simulated),
+  detail JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT agent_event_runs_event_agent_key UNIQUE (event_id, agent_principal_id)
+);
+CREATE INDEX idx_agent_event_runs_org_status ON agent_event_runs (organization_id, status, id DESC);
+CREATE INDEX idx_agent_event_runs_exception ON agent_event_runs (exception_id) WHERE exception_id IS NOT NULL;
+CREATE TRIGGER agent_event_runs_set_updated_at BEFORE UPDATE ON agent_event_runs FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE agent_event_run_history (
+  id BIGSERIAL PRIMARY KEY,
+  run_id BIGINT NOT NULL REFERENCES agent_event_runs(id),
+  from_status TEXT,
+  to_status TEXT NOT NULL,
+  reason_code TEXT,
+  actor_type audit_actor_type NOT NULL DEFAULT 'agent',
+  actor_user_id INTEGER REFERENCES users(id),
+  exception_id BIGINT REFERENCES exception_queue(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_agent_event_run_history_run ON agent_event_run_history (run_id, id);
+CREATE TRIGGER agent_event_run_history_no_update BEFORE UPDATE ON agent_event_run_history FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+CREATE TRIGGER agent_event_run_history_no_delete BEFORE DELETE ON agent_event_run_history FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+
+-- M36 (0035): reavaliação controlada — ver db/migrations/0035_agent_event_reevaluations.sql
+CREATE TABLE agent_event_reevaluations (
+  id BIGSERIAL PRIMARY KEY,
+  run_id BIGINT NOT NULL REFERENCES agent_event_runs(id),
+  organization_id INTEGER NOT NULL REFERENCES organizations(id),
+  requested_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  reason TEXT CONSTRAINT agent_event_reevaluations_reason_chk CHECK (reason IS NULL OR char_length(reason) <= 300),
+  supplement JSONB NOT NULL DEFAULT '{}'::jsonb,
+  previous_status TEXT NOT NULL,
+  previous_decision TEXT,
+  previous_explanation JSONB,
+  outcome TEXT NOT NULL CONSTRAINT agent_event_reevaluations_outcome_chk CHECK (outcome IN ('iniciada', 'concluida', 'ainda_insuficiente', 'bloqueada')),
+  new_status TEXT,
+  new_decision TEXT,
+  correlation_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at TIMESTAMPTZ
+);
+CREATE INDEX idx_agent_event_reevaluations_run ON agent_event_reevaluations (run_id, id);
+CREATE INDEX idx_agent_event_reevaluations_org ON agent_event_reevaluations (organization_id, created_at DESC);
+
+CREATE OR REPLACE FUNCTION agent_event_reevaluations_guard() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'agent_event_reevaluations é append-only: DELETE não é permitido';
+  END IF;
+  IF OLD.outcome <> 'iniciada' OR OLD.finished_at IS NOT NULL THEN
+    RAISE EXCEPTION 'agent_event_reevaluations: a linha já tem resultado final e não pode mais ser alterada';
+  END IF;
+  IF NEW.run_id <> OLD.run_id OR NEW.organization_id <> OLD.organization_id OR NEW.requested_by_user_id <> OLD.requested_by_user_id OR NEW.correlation_id <> OLD.correlation_id
+     OR NEW.previous_status <> OLD.previous_status OR NEW.previous_decision IS DISTINCT FROM OLD.previous_decision OR NEW.previous_explanation IS DISTINCT FROM OLD.previous_explanation
+     OR NEW.supplement IS DISTINCT FROM OLD.supplement OR NEW.created_at <> OLD.created_at THEN
+    RAISE EXCEPTION 'agent_event_reevaluations: só o resultado final (outcome, new_status, new_decision, finished_at) pode ser preenchido';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER agent_event_reevaluations_no_delete BEFORE DELETE ON agent_event_reevaluations FOR EACH ROW EXECUTE FUNCTION agent_event_reevaluations_guard();
+CREATE TRIGGER agent_event_reevaluations_guard_update BEFORE UPDATE ON agent_event_reevaluations FOR EACH ROW EXECUTE FUNCTION agent_event_reevaluations_guard();
+
+-- M37 (0036): versão da oportunidade e histórico do recurso — ver db/migrations/0036_opportunity_version_and_changes.sql
+ALTER TABLE donation_opportunities ADD COLUMN version INTEGER NOT NULL DEFAULT 1 CONSTRAINT donation_opportunities_version_chk CHECK (version >= 1);
+
+CREATE TABLE opportunity_changes (
+  id BIGSERIAL PRIMARY KEY,
+  opportunity_id INTEGER NOT NULL REFERENCES donation_opportunities(id),
+  organization_id INTEGER NOT NULL REFERENCES organizations(id),
+  field TEXT NOT NULL CONSTRAINT opportunity_changes_field_chk CHECK (field IN ('category')),
+  previous_value TEXT,
+  new_value TEXT,
+  version_before INTEGER NOT NULL CHECK (version_before >= 1),
+  version_after INTEGER NOT NULL CHECK (version_after > version_before),
+  changed_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  correlation_id TEXT NOT NULL,
+  reason TEXT CONSTRAINT opportunity_changes_reason_chk CHECK (reason IS NULL OR char_length(reason) <= 300),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_opportunity_changes_opportunity ON opportunity_changes (opportunity_id, id);
+CREATE TRIGGER opportunity_changes_no_update BEFORE UPDATE ON opportunity_changes FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+CREATE TRIGGER opportunity_changes_no_delete BEFORE DELETE ON opportunity_changes FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+
+-- M38 (0037): verificações da cadeia de auditoria + índices — ver db/migrations/0037_audit_chain_verifications.sql
+CREATE TABLE audit_chain_verifications (
+  id BIGSERIAL PRIMARY KEY,
+  scope TEXT NOT NULL CONSTRAINT audit_chain_verifications_scope_chk CHECK (scope IN ('global_chain')),
+  requested_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  status TEXT NOT NULL DEFAULT 'em_andamento' CONSTRAINT audit_chain_verifications_status_chk CHECK (status IN ('em_andamento', 'integra', 'inconsistencia', 'incompleta', 'falha_tecnica')),
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at TIMESTAMPTZ,
+  -- Abrangência: a verificação cobre os eventos com id <= este valor, lido no INÍCIO. Eventos gravados depois não fazem parte do resultado.
+  max_audit_id_at_start BIGINT,
+  total_events INTEGER CONSTRAINT audit_chain_verifications_total_chk CHECK (total_events IS NULL OR total_events >= 0),
+  verified_events INTEGER CONSTRAINT audit_chain_verifications_verified_chk CHECK (verified_events IS NULL OR verified_events >= 0),
+  -- Eventos sem hash (anteriores à migração 0003): NÃO verificáveis. Entram como limitação de cobertura, nunca como verificados.
+  unhashed_events INTEGER CONSTRAINT audit_chain_verifications_unhashed_chk CHECK (unhashed_events IS NULL OR unhashed_events >= 0),
+  divergence_count INTEGER CONSTRAINT audit_chain_verifications_divergence_chk CHECK (divergence_count IS NULL OR divergence_count >= 0),
+  -- Até 100 itens {id, reason}; o total real está em divergence_count. Sem hashes.
+  divergences JSONB NOT NULL DEFAULT '[]'::jsonb,
+  error_kind TEXT CONSTRAINT audit_chain_verifications_error_kind_chk CHECK (error_kind IS NULL OR char_length(error_kind) <= 60),
+  duration_ms INTEGER CONSTRAINT audit_chain_verifications_duration_chk CHECK (duration_ms IS NULL OR duration_ms >= 0),
+  CONSTRAINT audit_chain_verifications_final_chk CHECK ((status = 'em_andamento') = (finished_at IS NULL)),
+  CONSTRAINT audit_chain_verifications_result_chk CHECK (
+    status NOT IN ('integra', 'inconsistencia') OR (total_events IS NOT NULL AND verified_events IS NOT NULL AND unhashed_events IS NOT NULL AND divergence_count IS NOT NULL)
+  ),
+  CONSTRAINT audit_chain_verifications_integra_chk CHECK (status <> 'integra' OR divergence_count = 0),
+  CONSTRAINT audit_chain_verifications_inconsistencia_chk CHECK (status <> 'inconsistencia' OR divergence_count > 0)
+);
+CREATE UNIQUE INDEX uq_audit_chain_verifications_running ON audit_chain_verifications (scope) WHERE status = 'em_andamento';
+CREATE INDEX idx_audit_chain_verifications_scope ON audit_chain_verifications (scope, id DESC);
+
+CREATE OR REPLACE FUNCTION audit_chain_verifications_guard() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'audit_chain_verifications é append-only: remoção recusada' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  -- UPDATE: só a transição única de em_andamento para um estado final, sem trocar a identidade da linha.
+  IF OLD.status <> 'em_andamento' THEN
+    RAISE EXCEPTION 'audit_chain_verifications: verificação concluída é imutável' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  IF NEW.id <> OLD.id OR NEW.scope <> OLD.scope OR NEW.requested_by_user_id <> OLD.requested_by_user_id OR NEW.started_at <> OLD.started_at THEN
+    RAISE EXCEPTION 'audit_chain_verifications: identidade da verificação é imutável' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  -- Enquanto em andamento só a abrangência (max_audit_id_at_start) pode ser preenchida; qualquer resultado exige a transição para um estado final.
+  IF NEW.status = 'em_andamento' AND (NEW.finished_at IS NOT NULL OR NEW.total_events IS NOT NULL OR NEW.verified_events IS NOT NULL OR NEW.unhashed_events IS NOT NULL OR NEW.divergence_count IS NOT NULL OR NEW.divergences <> '[]'::jsonb OR NEW.error_kind IS NOT NULL OR NEW.duration_ms IS NOT NULL) THEN
+    RAISE EXCEPTION 'audit_chain_verifications: resultado só pode ser gravado junto da transição para um estado final' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER audit_chain_verifications_guard_update BEFORE UPDATE ON audit_chain_verifications FOR EACH ROW EXECUTE FUNCTION audit_chain_verifications_guard();
+CREATE TRIGGER audit_chain_verifications_guard_delete BEFORE DELETE ON audit_chain_verifications FOR EACH ROW EXECUTE FUNCTION audit_chain_verifications_guard();
+
+-- Paginação por cursor (id) dentro da organização e busca por identificador de correlação (presente nos metadados dos eventos M36/M37). Somente índices.
+CREATE INDEX idx_audit_log_org_id ON audit_log (organization_id, id DESC);
+CREATE INDEX idx_audit_log_correlation ON audit_log ((metadata ->> 'correlacao')) WHERE metadata ? 'correlacao';
+
+-- M39 (0038): resultado explícito, correlação persistida e comprovantes — ver db/migrations/0038_audit_outcome_correlation_receipts.sql
+ALTER TABLE audit_log
+  ADD COLUMN record_version SMALLINT NOT NULL DEFAULT 1,
+  ADD COLUMN outcome TEXT,
+  ADD COLUMN correlation_id TEXT;
+ALTER TABLE audit_log ADD CONSTRAINT audit_log_outcome_chk CHECK (outcome IS NULL OR outcome IN ('concluida', 'recusada', 'falhou', 'pendente'));
+ALTER TABLE audit_log ADD CONSTRAINT audit_log_correlation_chk CHECK (correlation_id IS NULL OR correlation_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
+ALTER TABLE audit_log ADD CONSTRAINT audit_log_record_version_chk CHECK (
+  (record_version = 1 AND outcome IS NULL AND correlation_id IS NULL)
+  OR (record_version = 2 AND (outcome IS NOT NULL OR correlation_id IS NOT NULL))
+);
+CREATE INDEX idx_audit_log_correlation_id ON audit_log (correlation_id) WHERE correlation_id IS NOT NULL;
+CREATE INDEX idx_audit_log_org_outcome ON audit_log (organization_id, outcome, id DESC) WHERE outcome IS NOT NULL;
+
+ALTER TABLE domain_events ADD COLUMN correlation_id TEXT CONSTRAINT domain_events_correlation_chk CHECK (correlation_id IS NULL OR correlation_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
+ALTER TABLE agent_event_runs ADD COLUMN correlation_id TEXT CONSTRAINT agent_event_runs_correlation_chk CHECK (correlation_id IS NULL OR correlation_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
+ALTER TABLE exception_queue ADD COLUMN correlation_id TEXT CONSTRAINT exception_queue_correlation_chk CHECK (correlation_id IS NULL OR correlation_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
+ALTER TABLE donation_opportunities ADD COLUMN correlation_id TEXT CONSTRAINT donation_opportunities_correlation_chk CHECK (correlation_id IS NULL OR correlation_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
+CREATE INDEX idx_domain_events_correlation ON domain_events (correlation_id) WHERE correlation_id IS NOT NULL;
+CREATE INDEX idx_agent_event_runs_correlation ON agent_event_runs (correlation_id) WHERE correlation_id IS NOT NULL;
+CREATE INDEX idx_donation_opportunities_correlation ON donation_opportunities (correlation_id) WHERE correlation_id IS NOT NULL;
+
+-- Comprovante local do estado da cadeia (ver docs/AUDITORIA_CENTRAL.md §Comprovantes). `canonical` é o texto determinístico exportado; `receipt_digest` = SHA-256 do corpo canônico SEM este campo.
+CREATE TABLE audit_chain_receipts (
+  id BIGSERIAL PRIMARY KEY,
+  scope TEXT NOT NULL CONSTRAINT audit_chain_receipts_scope_chk CHECK (scope IN ('global_chain')),
+  format_version INTEGER NOT NULL CONSTRAINT audit_chain_receipts_format_chk CHECK (format_version = 1),
+  algorithm TEXT NOT NULL CONSTRAINT audit_chain_receipts_algorithm_chk CHECK (algorithm = 'sha256'),
+  verification_id BIGINT NOT NULL REFERENCES audit_chain_verifications(id),
+  last_event_id BIGINT NOT NULL CONSTRAINT audit_chain_receipts_last_chk CHECK (last_event_id >= 1),
+  event_count BIGINT NOT NULL CONSTRAINT audit_chain_receipts_count_chk CHECK (event_count >= 1),
+  head_hash TEXT NOT NULL CONSTRAINT audit_chain_receipts_head_chk CHECK (head_hash ~ '^[0-9a-f]{64}$'),
+  receipt_digest TEXT NOT NULL CONSTRAINT audit_chain_receipts_digest_chk CHECK (receipt_digest ~ '^[0-9a-f]{64}$'),
+  canonical TEXT NOT NULL,
+  created_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  captured_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT audit_chain_receipts_digest_key UNIQUE (receipt_digest)
+);
+CREATE INDEX idx_audit_chain_receipts_scope ON audit_chain_receipts (scope, id DESC);
+CREATE TRIGGER audit_chain_receipts_no_update BEFORE UPDATE ON audit_chain_receipts FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+CREATE TRIGGER audit_chain_receipts_no_delete BEFORE DELETE ON audit_chain_receipts FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+
+-- Resultado de cada comparação (inclusive de comprovantes malformados ou de outro escopo, cujo `receipt_id` fica nulo). Só códigos, ids e contagens — nunca hashes nem conteúdo de auditoria.
+CREATE TABLE audit_chain_receipt_comparisons (
+  id BIGSERIAL PRIMARY KEY,
+  receipt_id BIGINT REFERENCES audit_chain_receipts(id),
+  receipt_digest TEXT CONSTRAINT audit_chain_receipt_comparisons_digest_chk CHECK (receipt_digest IS NULL OR receipt_digest ~ '^[0-9a-f]{64}$'),
+  status TEXT NOT NULL CONSTRAINT audit_chain_receipt_comparisons_status_chk CHECK (status IN ('conferido', 'divergencia', 'malformado', 'nao_suportado', 'escopo_diferente')),
+  reason_code TEXT CONSTRAINT audit_chain_receipt_comparisons_reason_chk CHECK (reason_code IS NULL OR char_length(reason_code) <= 60),
+  compared_up_to_event_id BIGINT,
+  events_since_receipt BIGINT CONSTRAINT audit_chain_receipt_comparisons_since_chk CHECK (events_since_receipt IS NULL OR events_since_receipt >= 0),
+  compared_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  compared_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT audit_chain_receipt_comparisons_conferido_chk CHECK (status <> 'conferido' OR reason_code IS NULL),
+  CONSTRAINT audit_chain_receipt_comparisons_divergencia_chk CHECK (status <> 'divergencia' OR reason_code IS NOT NULL)
+);
+CREATE INDEX idx_audit_chain_receipt_comparisons_receipt ON audit_chain_receipt_comparisons (receipt_id, id DESC);
+CREATE TRIGGER audit_chain_receipt_comparisons_no_update BEFORE UPDATE ON audit_chain_receipt_comparisons FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+CREATE TRIGGER audit_chain_receipt_comparisons_no_delete BEFORE DELETE ON audit_chain_receipt_comparisons FOR EACH ROW EXECUTE FUNCTION audit_log_block_mutation();
+
+-- M40 (0039): correlação persistida da jornada da necessidade — ver db/migrations/0039_need_journey_correlation.sql
+ALTER TABLE needs ADD COLUMN correlation_id TEXT CONSTRAINT needs_correlation_chk CHECK (correlation_id IS NULL OR correlation_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
+CREATE INDEX idx_needs_correlation ON needs (correlation_id) WHERE correlation_id IS NOT NULL;
+
+-- M42 (0040): histórico de execuções do matching e vínculo das avaliações — ver db/migrations/0040_matching_runs.sql
+CREATE TABLE matching_runs (
+  id BIGSERIAL PRIMARY KEY,
+  correlation_id TEXT NOT NULL CONSTRAINT matching_runs_correlation_chk CHECK (correlation_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
+  opportunity_registry_id INTEGER NOT NULL REFERENCES opportunity_registry(id) ON DELETE CASCADE,
+  origin TEXT NOT NULL CONSTRAINT matching_runs_origin_chk CHECK (origin IN ('varredura', 'manual', 'mudanca_de_estado', 'reabertura', 'expiracao', 'indeterminada')),
+  triggered_by_user_id INTEGER REFERENCES users(id),
+  status TEXT NOT NULL CONSTRAINT matching_runs_status_chk CHECK (status IN ('em_andamento', 'concluida_com_correspondencia', 'concluida_sem_correspondencia', 'falhou')),
+  candidates_considered INTEGER CONSTRAINT matching_runs_considered_chk CHECK (candidates_considered IS NULL OR candidates_considered >= 0),
+  candidates_related INTEGER CONSTRAINT matching_runs_related_chk CHECK (candidates_related IS NULL OR candidates_related >= 0),
+  valid_matches INTEGER CONSTRAINT matching_runs_valid_chk CHECK (valid_matches IS NULL OR valid_matches >= 0),
+  error_code TEXT CONSTRAINT matching_runs_error_code_chk CHECK (error_code IS NULL OR error_code ~ '^[a-z0-9_:]{1,60}$'),
+  algorithm_version TEXT NOT NULL,
+  signature TEXT,
+  repeat_count INTEGER NOT NULL DEFAULT 0 CONSTRAINT matching_runs_repeat_chk CHECK (repeat_count >= 0),
+  last_repeated_at TIMESTAMPTZ,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at TIMESTAMPTZ,
+  -- coerência entre estado e dados: nada de "concluída" sem contagens, nem "falhou" sem código, nem "com correspondência" sem correspondência
+  CONSTRAINT matching_runs_state_chk CHECK (
+    (status = 'em_andamento' AND finished_at IS NULL)
+    OR (status = 'falhou' AND finished_at IS NOT NULL AND error_code IS NOT NULL AND valid_matches IS NULL)
+    OR (status = 'concluida_sem_correspondencia' AND finished_at IS NOT NULL AND candidates_considered IS NOT NULL AND candidates_related IS NOT NULL AND valid_matches = 0)
+    OR (status = 'concluida_com_correspondencia' AND finished_at IS NOT NULL AND candidates_considered IS NOT NULL AND candidates_related IS NOT NULL AND valid_matches > 0)
+  )
+);
+CREATE INDEX idx_matching_runs_opportunity ON matching_runs (opportunity_registry_id, id DESC);
+CREATE UNIQUE INDEX idx_matching_runs_correlation ON matching_runs (correlation_id);
+
+CREATE TABLE matching_run_needs (
+  run_id BIGINT NOT NULL REFERENCES matching_runs(id) ON DELETE CASCADE,
+  need_id INTEGER NOT NULL,
+  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  relation TEXT NOT NULL CONSTRAINT matching_run_needs_relation_chk CHECK (relation IN ('sem_relacao', 'avaliada', 'avaliada_sem_registro')),
+  PRIMARY KEY (run_id, need_id),
+  -- a necessidade registrada pertence SEMPRE à organização registrada (mesma garantia estrutural das atribuições)
+  CONSTRAINT matching_run_needs_need_org_fkey FOREIGN KEY (need_id, organization_id) REFERENCES needs (id, organization_id) ON DELETE CASCADE
+);
+CREATE INDEX idx_matching_run_needs_need ON matching_run_needs (need_id, run_id DESC);
+
+ALTER TABLE match_evaluations ADD COLUMN matching_run_id BIGINT REFERENCES matching_runs(id) ON DELETE SET NULL;
+CREATE INDEX idx_match_evaluations_run ON match_evaluations (matching_run_id) WHERE matching_run_id IS NOT NULL;
+
+-- F1 (0041): recuperação de senha por e-mail — ver db/migrations/0041_password_reset_tokens.sql
+CREATE TABLE password_reset_tokens (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash BYTEA NOT NULL CONSTRAINT password_reset_tokens_hash_uniq UNIQUE,
+  pepper_version SMALLINT NOT NULL CONSTRAINT password_reset_tokens_pepper_chk CHECK (pepper_version > 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  invalidated_at TIMESTAMPTZ,
+  attempts INTEGER NOT NULL DEFAULT 0 CONSTRAINT password_reset_tokens_attempts_chk CHECK (attempts >= 0),
+  max_attempts SMALLINT NOT NULL DEFAULT 5 CONSTRAINT password_reset_tokens_max_attempts_chk CHECK (max_attempts BETWEEN 1 AND 20),
+  CONSTRAINT password_reset_tokens_expiry_chk CHECK (expires_at > created_at),
+  CONSTRAINT password_reset_tokens_final_state_chk CHECK (NOT (used_at IS NOT NULL AND invalidated_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX idx_password_reset_tokens_one_active ON password_reset_tokens (user_id) WHERE used_at IS NULL AND invalidated_at IS NULL;
+CREATE INDEX idx_password_reset_tokens_retention ON password_reset_tokens (created_at);

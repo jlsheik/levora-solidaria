@@ -42,6 +42,8 @@ const SCHEDULED_TASK_LOCK_IDS: Record<string, number> = {
   expireAssignmentDeadlines: 6,
   // Hardening pós-99K — reanálise automática dos arquivos retidos.
   retryFileScans: 7,
+  // M34 — motor de eventos dos agentes (simulação).
+  processAgentEvents: 8,
 };
 
 export interface ScheduledTaskLockResult<T> {

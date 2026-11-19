@@ -126,7 +126,7 @@ async function runExpireReservations() {
 
     for (const oppId of toRematch) {
       try {
-        await runMatchingForOpportunity(oppId, null);
+        await runMatchingForOpportunity(oppId, null, "expiracao");
       } catch (err) {
         // A oportunidade já está `aguardando_destinacao` (transação confirmada): o sweep periódico a avaliará depois.
         failures.push({ opportunityId: oppId, message: `rematch: ${err instanceof Error ? err.message : String(err)}` });

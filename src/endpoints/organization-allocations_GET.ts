@@ -38,6 +38,8 @@ export async function handle(request: Request) {
         "opportunityRegistry.locationCity as opportunityLocationCity",
         "opportunityRegistry.locationState as opportunityLocationState",
         "sources.name as sourceName",
+        // M40: a necessidade da atribuição — a escolhida explicitamente OU a da avaliação de matching que a criou (as duas fontes nunca coexistem) — para a navegação até a jornada.
+        sql<number | null>`COALESCE(opportunity_allocations.need_id, (SELECT m.need_id FROM match_evaluations m WHERE m.allocation_id = opportunity_allocations.id ORDER BY m.id LIMIT 1))`.as("needId"),
         // Fase 99C: recebimento físico pendente de regularização de unidade (caso ativo desta atribuição), sem consulta extra por linha.
         sql<number | null>`(SELECT c.id FROM unit_regularization_cases c WHERE c.allocation_id = opportunity_allocations.id AND c.status IN ('aberto', 'conferido') LIMIT 1)`.as("pendingRegularizationCaseId"),
       ])

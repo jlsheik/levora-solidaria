@@ -203,6 +203,7 @@ export function DestinationDialog({ organizationId, item, canAuthorizeLate, onCl
           <div id="dest-problems" aria-live="polite">
             {problems.length > 0 && <ul className={styles.problems}>{problems.map((p) => <li key={p}>{p}</li>)}</ul>}
           </div>
+          {mutation.isPaused && <p className={styles.approval} role="status">Sem conexão com o servidor. A saída ficou na fila e será enviada sozinha quando a conexão voltar; não é preciso clicar de novo (a mesma solicitação nunca cria duas saídas).</p>}
           {error && <p className={styles.error} role="alert">{error} Você pode tentar de novo: a mesma solicitação nunca cria duas saídas.</p>}
 
           <DialogFooter>

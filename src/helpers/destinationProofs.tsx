@@ -7,6 +7,7 @@
 import { sql, type Kysely, type Transaction } from "kysely";
 import type { DB } from "./schema.js";
 import { recordAuditLogEntry } from "./auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "./journeyCorrelation.js";
 import { isReleasable } from "./fileScanner.js";
 
 export const PROOF_PURPOSE = "comprovante_destinacao";
@@ -105,6 +106,8 @@ export async function auditProof(trx: Transaction<DB>, organizationId: number, a
       organizationId,
       actorUserId,
       action: applied.action === "anexado" ? "destinacao.comprovante_anexado" : "destinacao.comprovante_removido",
+      outcome: "concluida",
+      correlationId: await destinationCorrelation(trx, applied.destinationId),
       entityType: "stock_destination",
       entityId: applied.destinationId,
       metadata: { eventoId: applied.eventId, arquivoId: applied.file.id, nomeArquivo: applied.file.name, tipo: applied.file.contentType, tamanhoBytes: applied.file.sizeBytes, motivo: reason.trim(), nenhumMovimentoDeEstoque: true, objetoArmazenadoPreservado: true, chaveIdempotencia: idempotencyKey },

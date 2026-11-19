@@ -148,7 +148,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await MAIN?.end({ timeout: 2 }).catch(() => undefined);
   if (admin) { for (const n of created) await admin.unsafe(`DROP DATABASE IF EXISTS "${n}" WITH (FORCE)`).catch(() => undefined); await admin.end({ timeout: 2 }).catch(() => undefined); }
-});
+  // M49: o cleanup remove varios bancos temporarios; sob a carga da suite integral (muitos workers e I/O) levou mais de 30 s (padrao do hook) numa rodada integral (M49), enquanto o arquivo isolado termina em ~33 s. Mesmo orcamento do beforeAll deste arquivo; nao afeta nenhuma asserção.
+}, 240000);
 
 // ---------------------------------------------------------------------------------------------- testes
 describe("o estado anterior é realista e o instantâneo é fiel", () => {

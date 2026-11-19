@@ -5,8 +5,10 @@ import type { DB, Json } from "./schema.js";
 import { normalize } from "./opportunityMatching.js";
 import { computeNeedProgress, getNeedFulfillmentBalance } from "./needFulfillment.js";
 import { recordAuditLogEntry } from "./auditLog.js";
+import { needCorrelation, allocationCorrelation, destinationCorrelation } from "./journeyCorrelation.js";
 import { createApprovalRequest } from "./approvals.js";
 import { getItemStockBalance } from "./stockBalance.js";
+import { publishStockTransactionCreated } from "./domainEventPublishers.js";
 import superjson from "superjson";
 import { unitsEquivalent } from "./unitVocabulary.js";
 
@@ -453,6 +455,8 @@ export async function executeLedgerPlan(trx: Transaction<DB>, plan: LedgerOperat
     itemBalanceAfter = await getItemStockBalance(trx, plan.stock.itemId);
     // Nunca negativo (o plano já validou sob o lock; esta é a trava final, desfaz tudo).
     if (itemBalanceAfter < 0) throw new Error("estoque ficaria negativo");
+    // M36: estorno/correção do recebimento → evento v2 ligado à ATRIBUIÇÃO original (nunca uma entrada nova); publicado só depois da trava final, na mesma transação.
+    await publishStockTransactionCreated(trx, { organizationId: plan.organizationId, transactionId: stockTransactionId, itemId: plan.stock.itemId, type: "ajuste", delta: plan.stock.delta, source: plan.operacao === "estorno" ? "estorno_recebimento" : "correcao_recebimento", actorUserId: createdByUserId, reversesAllocationId: plan.allocationId });
   }
 
   let reversalFulfillmentId: string | null = null;
@@ -654,6 +658,8 @@ export async function submitLedgerOperation(
         organizationId: params.organizationId,
         actorUserId: params.actorUserId,
         action: "atribuicao.recebimento_pendente_aprovacao",
+        outcome: "pendente",
+        correlationId: await allocationCorrelation(trx, params.allocationId),
         entityType: "opportunity_allocation",
         entityId: String(params.allocationId),
         metadata: { approvalRequestId: approval.id, operacao: plan.operacao, allocationId: params.allocationId, alvoFulfillmentId: plan.targetRowId, motivo: params.reason },
@@ -670,6 +676,8 @@ export async function submitLedgerOperation(
       organizationId: params.organizationId,
       actorUserId: params.actorUserId,
       action: audit.action,
+      outcome: "concluida",
+      correlationId: await allocationCorrelation(trx, params.allocationId),
       entityType: "opportunity_allocation",
       entityId: String(params.allocationId),
       metadata: audit.metadata,

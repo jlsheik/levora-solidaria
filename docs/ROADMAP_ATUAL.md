@@ -36,6 +36,8 @@ DOCUMENTAÇÃO DESATUALIZADA**.
 | Oportunidades por organização (modelo local) | `opportunities_*`, Fase 3 | — |
 | Prestação de contas | `impact-report_GET` e tela `prestacao-contas`, presentes desde o import inicial; Fase 41 corrigiu o link de navegação; Fase 69 o overflow mobile | — |
 | Auditoria imutável com hash-chain e verificação periódica | `audit_log` + triggers, `verifyAuditChain*`, Fases 1, 53 | — |
+| M39: resultado explícito e correlação persistida na auditoria; comprovante local e comparação (garantia B); protótipo de privilégios mínimos do banco (migration 0038, `db/prototypes/leastPrivilege.ts`) | `docs/AUDITORIA_CENTRAL.md` §7 | Âncora independente (garantia C), papéis em produção, instrumentar o restante dos fluxos com resultado |
+| Central de Auditoria, rastreabilidade de decisões e verificação da cadeia pela interface (M38) | `docs/AUDITORIA_CENTRAL.md`, migration 0037, `/organizacoes/:id/auditoria` | Âncora independente da cadeia, separação de privilégios do banco, campo de resultado na trilha (decisões do proprietário) |
 | Agendador (5 tarefas) com advisory lock e pools separados | `scheduler.tsx`, `scheduled-jobs.json`, Fases 12, 26, 62, 63; execução real do cron observada na Fase 69 | — |
 | Upload/download de arquivos (disco local; S3 pronto, inativo) | `files-*`, `storageAdapter.tsx`, Fase 11 | — |
 | Rate limiting pontual (em memória, processo único) | `rateLimit.tsx`, `docs/RATE_LIMITING.md`, Fases 13, 52 | — |
@@ -43,6 +45,7 @@ DOCUMENTAÇÃO DESATUALIZADA**.
 | Hardening HTTP, headers, erros classificados, timeout de IA | Fases 50, 64, 65 | — |
 | Build de produção, CI com gates, backup/restore testado | Fases 54, 57–59, 66; `.github/workflows/ci.yml` | — |
 | Staging zero-custo, seed sintético e qualificação do túnel | Fases 61, 62, 68–70; `docs/STAGING_*.md` | Teste por segunda rede: seção 6 |
+| Plataforma de agentes (fundação, sem agentes) — Fase 74 | Principal não humano, autor na auditoria, eventos (outbox), limites e regras de política, pausa/emergência, alertas, fila de exceções, camada de ferramentas; `docs/AGENTES_PLATAFORMA.md`; `test/agentPlatform.test.ts`, `agentEndpoints.test.ts` | Camada A de agentes (Fase 2 de `AGENTES_ESPECIFICACAO.md`) |
 | Frontend (11 rotas), responsivo 375/390/768 | `src/pages/*`; Fase 69 | — |
 
 ## 2. PARCIAL
@@ -64,8 +67,10 @@ papel, desativar membro e sair da organização, com a invariante "sempre ao
 menos um proprietário ativo" garantida sob lock da organização, nova
 permissão `propriedade.gerencie` (só proprietário), aceite de convite que não
 sobrescreve membro ativo (A2) e exclusão de conta com a regra de proprietário
-único dentro da transação (A1). **PRÓXIMO**: plataforma de agentes, ver
-`docs/AGENTES_ESPECIFICACAO.md` (Fase 1 daquela especificação).
+único dentro da transação (A1). **Fase 74** entregou a fundação da plataforma de agentes
+(`docs/AGENTES_PLATAFORMA.md`). **PRÓXIMO**: Camada A de agentes
+(Fase 2 de `docs/AGENTES_ESPECIFICACAO.md`); antes dela, decidir D5 (estorno
+do ledger), que define o que a Sentinela de Integridade vigia.
 
 ## 4. DECISÃO DE PRODUTO PENDENTE
 
@@ -492,3 +497,12 @@ Edição de quantidade, unidade, item e status das necessidades; edição de ite
 **Trilha de hardening pós-99K (branch `fase-99l-production-readiness`, encadeada sobre a 99K / PR #16; não é uma fase formal da Fase 99; nada integrado).** Detalhes: `docs/ANTIMALWARE_ARQUIVOS.md`, `docs/DECISAO_RETENCAO_COMPROVANTES.md`, `docs/RISCOS_PRE_PRODUCAO_POS_99K.md`.
 - **Migration `0024_file_scan_status`:** estado da análise antimalware em `files`; estados finais imutáveis; o gatilho de comprovante exige arquivo aprovado. Cliente real do protocolo `clamd`, modo obrigatório (sempre em produção; falha fechada), reanálise (`POST /files-rescan`), conciliação ampliada (`retidosPorAnalise`), interface com o estado da análise.
 - **Não resolvido:** scanner real testado localmente em 16/10/2026 com ClamAV 1.5.4/EICAR; `test/fileScan.test.ts` passou 19/19 com o scanner real nas bases carregadas 28151 e 28155. O serviço definitivo ainda não está provisionado; faltam validação de rede privada, atualização e idade das assinaturas, monitoramento, fila/reprocessamento, S3 e carga. A política de retenção/exclusão/anonimização continua pendente de decisão jurídica/operacional (nenhum prazo inventado, nenhuma exclusão automática). Os PRs encadeados ainda não têm checks oficiais do GitHub. **Produção continua NÃO liberada.**
+
+**M40 (jornada principal do produto) — worktree `m32/dev`; nada integrado.** Detalhes: `docs/JORNADA_PRODUTO.md`
+- Jornada por necessidade (lista e detalhe), migration `0039_need_journey_correlation`, correlação gerada no servidor e resultado explícito nos fluxos tocados; testes `productJourney` (17) e `uiJourney` (6) e jornada em Chrome/Edge reais. Parcial: só os fluxos listados registram resultado/correlação; decisões de política seguem pendentes.
+
+**M41 (jornada unificada de ofertas e necessidades) — worktree `m32/dev`; nada integrado.** Detalhes: `docs/JORNADA_PRODUTO.md`
+- Ofertas sem necessidade na jornada, origem da atribuição (matching × manual × não verificável), busca/filtros/paginação no servidor, `matchingReliability` determinístico. Vincular depois permanece bloqueado por regra de negócio pendente.
+
+**M42 (histórico de execuções do matching e preparo de integração) — worktree `m32/dev`; nada integrado.** Detalhes: `docs/JORNADA_PRODUTO.md`
+- Migration `0040_matching_runs`; execução sem correspondência e falha técnica registradas; estados do matching por necessidade na jornada; busca sem acentos; avaliação de oferta não atribuída deixa de ser identificada à organização. Vinculação posterior continua sem regra de negócio (análise de opções em `m42-evidence/integracao`).

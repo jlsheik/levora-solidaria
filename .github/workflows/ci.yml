@@ -17,8 +17,12 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # Observado nos runs remotos: ~7,5 a ~10 min. 30 min dá margem de ~3x sem deixar um job travado ocupar o runner por 6 h (padrão do GitHub).
-    timeout-minutes: 30
+    # G2 (medido nos logs dos runs remotos): o passo "Run tests" levou ~11 a ~16 min nas execuções verdes de out/2026 (suíte menor), 23,3 min na árvore do
+    # PR #30 (3012 testes) e, na árvore cumulativa #30+#31+#32 (3158 testes), 178 de 190 arquivos tinham terminado aos 29,2 min quando o limite antigo de 30 min
+    # (que inclui preparar o serviço, instalar, typecheck, build e build:server) cortou o job: estimativa de término do job ≈ 31,5 min. Os arquivos rodam em série
+    # (fileParallelism: false), 95 % do tempo é de testes e não houve espera relevante de banco (74 checkpoints forçados somaram 7–18 s). 45 min = ~1,4x a
+    # estimativa, sem deixar um job travado ocupar o runner por 6 h (padrão do GitHub); o passo "Run tests" tem prazo próprio abaixo.
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -61,6 +65,7 @@ jobs:
         run: npm run typecheck
 
       - name: Run tests
+        timeout-minutes: 40
         run: npm test
 
       # Fase 54: build do cliente (tsc + vite build) — confirmado
@@ -106,8 +111,15 @@ jobs:
       # Esta política teria bloqueado a própria vulnerabilidade corrigida
       # na Fase 49 (react-router, severidade moderate) se ela tivesse sido
       # introduzida depois deste gate existir. Ver docs/SECURITY.md.
+      # G7: o gate de PRODUÇÃO continua integral e obrigatório (não é substituto do audit completo).
       - name: Dependency audit (fails on moderate+ severity)
-        run: npm audit --audit-level=moderate
+        run: npm audit --omit=dev --audit-level=moderate
+
+      # G7: o audit COMPLETO continua sendo executado. A ÚNICA exceção é nominal e temporária (GHSA-fc5q-39xc-vjpf / picomatch <= 4.0.7, só dev, sem versão corrigida;
+      # scripts/audit-exceptions.json, vence em 2026-12-17). Qualquer outro alerta moderate+, a exceção vencida, relatório ausente/inválido ou falha de rede REPROVAM,
+      # e o alerta excepcionalizado é impresso no log. Ver docs/SECURITY.md.
+      - name: Dependency audit - full, with the documented exception
+        run: node scripts/audit-gate.mjs
 
   # Fase 94 — QA de NAVEGADOR em modo reduzido (camada ADICIONAL: não substitui nem enfraquece o job `test`; os dois são independentes e ambos
   # precisam passar para o workflow ficar verde). Ver docs/QA_VISUAL.md ("Execução reduzida no CI"). Comparado com a matriz completa local:
@@ -173,12 +185,17 @@ jobs:
           docker pull nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
           docker pull alpine/openssl:3.5.9@sha256:e8a2319d15637db5296c0ff540bb028cfabc480b22fcdd4a020582393d32673f
 
+      # G2: `--max-minutes 25` é o prazo do PRÓPRIO script (menor que o do passo): se algo ficar sem progresso, ele mesmo diz em que célula estava, grava o
+      # relatório parcial (reprova com código 3, nunca aprova) e encerra. `--diagnostics` grava o tempo de cada célula e o log do servidor (publicados abaixo);
+      # o script também imprime uma linha de progresso por minuto. Normal medido: ~14,5 min no ubuntu-24.04 (28/10/2026). O prazo do passo é só a rede de segurança.
       - name: qa:visual (reduced profile, Chrome only)
-        run: npm run qa:visual -- --browser chrome --profile ci --out reports/qa-visual.json
+        timeout-minutes: 28
+        run: npm run qa:visual -- --browser chrome --profile ci --out reports/qa-visual.json --diagnostics reports/qa-visual-diagnostics --max-minutes 25
 
       # `!cancelled()`: uma falha do qa:visual não esconde o resultado do qa:security (o job falha de qualquer forma).
       - name: qa:security (all parts, Chrome only)
         if: ${{ !cancelled() }}
+        timeout-minutes: 12
         run: npm run qa:security -- --browser chrome --out reports/qa-security.json
 
       # Relê os relatórios: falha se algo obrigatório não rodou, se o Node/navegador não for o esperado ou se o relatório parecer conter segredo.
@@ -213,5 +230,6 @@ jobs:
             reports/qa-visual.json
             reports/qa-security.json
             reports/summary.md
+            reports/qa-visual-diagnostics/
           retention-days: 14
           if-no-files-found: warn

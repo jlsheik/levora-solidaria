@@ -13,6 +13,10 @@ import platformActivatePageLayout from "./pages/plataforma.ativar.pageLayout";
 
 import LoginPage from "./pages/login";
 import loginPageLayout from "./pages/login.pageLayout";
+import RecoverPasswordPage from "./pages/recuperar-senha";
+import recoverPasswordPageLayout from "./pages/recuperar-senha.pageLayout";
+import ResetPasswordPage from "./pages/redefinir-senha";
+import resetPasswordPageLayout from "./pages/redefinir-senha.pageLayout";
 
 import AcceptInvitePage from "./pages/convites.$token";
 import acceptInvitePageLayout from "./pages/convites.$token.pageLayout";
@@ -43,6 +47,12 @@ import OrganizationUnitsPage from "./pages/organizacoes.$organizationId.unidades
 import organizationUnitsPageLayout from "./pages/organizacoes.$organizationId.unidades.pageLayout";
 import OrganizationRegularizationPage from "./pages/organizacoes.$organizationId.regularizacao";
 import organizationRegularizationPageLayout from "./pages/organizacoes.$organizationId.regularizacao.pageLayout";
+import OrganizationAutomationPage from "./pages/organizacoes.$organizationId.automacao";
+import OrganizationAuditPage from "./pages/organizacoes.$organizationId.auditoria";
+import OrganizationJourneyPage from "./pages/organizacoes.$organizationId.jornada";
+import organizationJourneyPageLayout from "./pages/organizacoes.$organizationId.jornada.pageLayout";
+import organizationAuditPageLayout from "./pages/organizacoes.$organizationId.auditoria.pageLayout";
+import organizationAutomationPageLayout from "./pages/organizacoes.$organizationId.automacao.pageLayout";
 
 import PlatformPage from "./pages/plataforma";
 import platformPageLayout from "./pages/plataforma.pageLayout";
@@ -80,6 +90,14 @@ const router = createBrowserRouter([
       {
         path: "/login",
         element: <>{withPageLayout(loginPageLayout, LoginPage)}</>,
+      },
+      {
+        path: "/recuperar-senha",
+        element: <>{withPageLayout(recoverPasswordPageLayout, RecoverPasswordPage)}</>,
+      },
+      {
+        path: "/redefinir-senha",
+        element: <>{withPageLayout(resetPasswordPageLayout, ResetPasswordPage)}</>,
       },
       {
         path: "/convites/:token",
@@ -124,6 +142,18 @@ const router = createBrowserRouter([
       {
         path: "/organizacoes/:organizationId/regularizacao",
         element: <>{withPageLayout(organizationRegularizationPageLayout, OrganizationRegularizationPage)}</>,
+      },
+      {
+        path: "/organizacoes/:organizationId/automacao",
+        element: <>{withPageLayout(organizationAutomationPageLayout, OrganizationAutomationPage)}</>,
+      },
+      {
+        path: "/organizacoes/:organizationId/jornada",
+        element: <>{withPageLayout(organizationJourneyPageLayout, OrganizationJourneyPage)}</>,
+      },
+      {
+        path: "/organizacoes/:organizationId/auditoria",
+        element: <>{withPageLayout(organizationAuditPageLayout, OrganizationAuditPage)}</>,
       },
       {
         path: "/conta",

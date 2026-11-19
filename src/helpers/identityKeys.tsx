@@ -43,7 +43,7 @@ function currentVersion(prefix: string): number {
 
 // ---- pepper (HMAC) -------------------------------------------------------------------------------------------------
 
-export type PepperContext = "recovery:v1:" | "bootstrap:v1:" | "challenge:v1:" | "access-code:v1:" | "oauth-state:v1:" | "oauth-nonce:v1:" | "oauth-binding:v1:";
+export type PepperContext = "recovery:v1:" | "bootstrap:v1:" | "challenge:v1:" | "access-code:v1:" | "oauth-state:v1:" | "oauth-nonce:v1:" | "oauth-binding:v1:" | "password-reset:v1:";
 
 function pepperFor(version: number): Buffer {
   const raw = process.env[`IDENTITY_CODE_PEPPER_V${version}`];
@@ -71,6 +71,22 @@ function mfaKeyFor(keyId: number): Buffer {
 }
 
 export const currentMfaKeyId = () => currentVersion("MFA_ENCRYPTION_KEY");
+
+/**
+ * Verifica, sem expor valores, se as chaves de identidade exigidas por contas protegidas por MFA e por códigos de acesso existem e são válidas
+ * (pepper ≥ 32 bytes; chave de cifra do TOTP com 32 bytes). Usado pela prontidão (M49): sem isto, uma implantação sem chaves só falhava
+ * (HTTP 500 genérico) no primeiro login de uma conta protegida.
+ */
+export function identityKeysConfigured(): boolean {
+  try {
+    pepperFor(currentVersion("IDENTITY_CODE_PEPPER"));
+    mfaKeyFor(currentVersion("MFA_ENCRYPTION_KEY"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 
 /**
  * Formato armazenado (coluna BYTEA): `iv(12) || tag(16) || ciphertext`. `keyId` vai em coluna própria (`secret_key_id`).

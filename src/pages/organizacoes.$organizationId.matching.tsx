@@ -96,6 +96,7 @@ export default function OrganizationMatchingSettingsPage() {
         <Link to={`/organizacoes/${organizationId}`} className={styles.tabNavItem}>
           Visão geral
         </Link>
+        <Link to={`/organizacoes/${organizationId}/jornada`} className={styles.tabNavItem}>Jornada</Link>
         <Link to={`/organizacoes/${organizationId}/inventario`} className={styles.tabNavItem}>
           Inventário
         </Link>

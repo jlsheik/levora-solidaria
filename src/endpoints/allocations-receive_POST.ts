@@ -2,6 +2,8 @@ import { db } from "../helpers/db.js";
 import { getServerUserSession } from "../helpers/getServerUserSession.js";
 import { requirePermission } from "../helpers/organizationAccess.js";
 import { postAllocationReceipt } from "../helpers/receiptPosting.js";
+import { publishAllocationReceived } from "../helpers/domainEventPublishers.js";
+import { newCorrelationId } from "../helpers/correlation.js";
 import { checkOfferUnitAgainstItem } from "../helpers/unitVocabulary.js";
 import { closeAsCorrectedIfNowCompatible, findActiveCase, openCase } from "../helpers/unitRegularization.js";
 import { schema } from "./allocations-receive_POST.schema.js";
@@ -90,6 +92,22 @@ export async function handle(request: Request) {
         userId: user.id,
         notes: input.notes ?? null,
         proofUrl,
+      });
+
+      // Fase 74 (plataforma de agentes): fato mínimo na MESMA transação do recebimento (só ids e números; nenhum dado pessoal). A conclusão da oferta já foi decidida por postAllocationReceipt.
+      const registryAfter = await trx.selectFrom("opportunityRegistry").select("status").where("id", "=", allocation.opportunityRegistryId).executeTakeFirst();
+      await publishAllocationReceived(trx, {
+        organizationId: input.organizationId,
+        allocationId: input.allocationId,
+        itemId: input.itemId,
+        quantityReceived: Number(input.quantityReceived),
+        quantityAllocated: Number(allocation.quantityAllocated),
+        offerUnit: registry?.unit ?? null,
+        itemUnit: item.unit,
+        stockTransactionId: String(posted.stockTransactionId),
+        opportunityConcluded: registryAfter?.status === "concluida",
+        actorUserId: user.id,
+        correlationId: newCorrelationId(), // M39: o evento é a origem da jornada do recebimento
       });
 
       return {

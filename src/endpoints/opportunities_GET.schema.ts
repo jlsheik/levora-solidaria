@@ -6,7 +6,25 @@ export const schema = z.object({
   organizationId: z.coerce.number().int().positive(),
 });
 
+/** M37 — situação da avaliação do Risk Engine para esta oportunidade; só vai para quem pode ler a automação (proprietário/administrador). Nada aqui é execução real. */
+export type OpportunityAssessment = {
+  runId: string;
+  status: string;
+  completeness: "completa" | "parcial" | "insuficiente" | null;
+  decision: string | null;
+  /** Pode pedir nova análise agora (há dado novo verificável e nada bloqueia)? */
+  reevaluation: "elegivel" | "ainda_insuficiente" | "indisponivel" | "nao_aplicavel" | null;
+  blockCode: string | null;
+  categoryConsidered: string | null;
+};
+
+export type CategorySuggestion = { value: string; source: "oportunidades" | "estoque" | "politica" };
+
 export type OutputType = {
+  /** Categorias já usadas na organização ou com regra na política (nada inventado). */
+  categorySuggestions?: CategorySuggestion[];
+  /** O usuário pode ler a avaliação do agente e pedir nova análise (permissões de automação). */
+  canSeeAssessment?: boolean;
   opportunities: Array<{
     id: number;
     title: string;
@@ -21,6 +39,10 @@ export type OutputType = {
     status: OpportunityStatus;
     createdByDisplayName: string;
     createdAt: string;
+    /** M37: versão do registro (controle otimista da edição) e se ESTE usuário pode corrigir a categoria agora. */
+    version?: number;
+    canEditCategory?: boolean;
+    assessment?: OpportunityAssessment | null;
   }>;
 };
 
